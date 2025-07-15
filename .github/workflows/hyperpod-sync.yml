@@ -1,0 +1,49 @@
+name: Sync AWS SageMaker HyperPod S3 Bucket Content
+
+on:
+  workflow_dispatch:  # Manual trigger
+  schedule:
+    - cron: '*/5 * * * *'  # Runs every 5 minutes
+
+jobs:
+  sync-s3-content:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Setup AWS CLI
+        run: |
+          pip install --upgrade awscli
+          aws --version
+
+      - name: Sync S3 bucket content to repo
+        run: |
+          echo "Starting sync from s3://aws-sagemaker-hyperpod-cluster-setup-us-east-2-prod"
+          mkdir -p ./s3-content
+          aws s3 sync s3://aws-sagemaker-hyperpod-cluster-setup-us-east-2-prod ./s3-content --no-sign-request --delete
+          echo "S3 sync completed"
+          ls -la ./s3-content
+
+      - name: Check for changes
+        id: git-check
+        run: |
+          git add -A
+          git status
+          git diff --staged --quiet || echo "changes=true" >> $GITHUB_OUTPUT
+
+      - name: Commit and push if changes
+        if: steps.git-check.outputs.changes == 'true'
+        run: |
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+          git commit -m "Update AWS SageMaker HyperPod content from S3 bucket ($(date +'%Y-%m-%d %H:%M:%S'))"
+          git push
+          echo "Changes committed and pushed"
+      
+      - name: No changes
+        if: steps.git-check.outputs.changes != 'true'
+        run: echo "No changes detected in S3 bucket content"
