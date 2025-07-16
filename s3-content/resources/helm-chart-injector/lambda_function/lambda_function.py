@@ -126,6 +126,7 @@ def on_create():
             'NAMESPACE',
             'RELEASE_NAME',
             'CLUSTER_NAME',
+            'CREATE_FSX',
             'AWS_REGION'
         ]
         
@@ -147,6 +148,7 @@ def on_create():
         # Add required Helm repositories
         subprocess.run(['helm', 'repo', 'add', 'nvidia', 'https://nvidia.github.io/k8s-device-plugin'], check=True)
         subprocess.run(['helm', 'repo', 'add', 'eks', 'https://aws.github.io/eks-charts/'], check=True)
+        subprocess.run(['helm', 'repo', 'add', 'aws-fsx-csi-driver', 'https://kubernetes-sigs.github.io/aws-fsx-csi-driver'], check=True)
         subprocess.run(['helm', 'repo', 'update'], check=True)
 
         # Clone the GitHub repository
@@ -169,6 +171,13 @@ def on_create():
             '--set', os.environ['OPERATORS']
         ]
         subprocess.run(install_cmd, check=True)
+
+        # Install AWS FSx CSI Driver using Helm only if CREATE_FSX is true
+        if os.environ['CREATE_FSX'].lower() == 'true':
+            subprocess.run(['helm', 'upgrade', '--install', 
+                        'aws-fsx-csi-driver', 'aws-fsx-csi-driver/aws-fsx-csi-driver',
+                        '--namespace', 'kube-system',
+                        '--set', 'controller.serviceAccount.create=false'], check=True)
 
         # Clean up cloned repository
         subprocess.run(['rm', '-rf', '/tmp/helm-charts'], check=True)
@@ -197,7 +206,8 @@ def on_update():
             'CHART_PATH',
             'RELEASE_NAME',
             'CLUSTER_NAME',
-            'AWS_REGION'
+            'AWS_REGION',
+            'CREATE_FSX'
         ]
         
         for var in required_env_vars:
@@ -218,6 +228,7 @@ def on_update():
         # Add required Helm repositories
         subprocess.run(['helm', 'repo', 'add', 'nvidia', 'https://nvidia.github.io/k8s-device-plugin'], check=True)
         subprocess.run(['helm', 'repo', 'add', 'eks', 'https://aws.github.io/eks-charts/'], check=True)
+        subprocess.run(['helm', 'repo', 'add', 'aws-fsx-csi-driver', 'https://kubernetes-sigs.github.io/aws-fsx-csi-driver'], check=True)
         subprocess.run(['helm', 'repo', 'update'], check=True)
 
         # Clone the updated chart
@@ -238,6 +249,13 @@ def on_update():
             f"/tmp/helm-charts/{os.environ['CHART_PATH']}"
         ]
         subprocess.run(upgrade_cmd, check=True)
+        
+        # Update AWS FSx CSI Driver using Helm only if CREATE_FSX is true
+        if os.environ['CREATE_FSX'].lower() == 'true':
+            subprocess.run(['helm', 'upgrade', '--install', 
+                        'aws-fsx-csi-driver', 'aws-fsx-csi-driver/aws-fsx-csi-driver',
+                        '--namespace', 'kube-system',
+                        '--set', 'controller.serviceAccount.create=false'], check=True)
 
         # Clean up
         subprocess.run(['rm', '-rf', '/tmp/helm-charts'], check=True)

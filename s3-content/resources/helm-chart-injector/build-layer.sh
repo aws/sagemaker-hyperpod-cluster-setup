@@ -13,18 +13,11 @@ mkdir -p helm-lambda-layer/python/libexec/git-core
 KUBECTL_VERSION="v1.31.2"
 HELM_VERSION="v3.15.3"
 AUTH_VERSION="0.6.11"
-EKSCTL_VERSION="0.195.0"
 
 # Download and install kubectl (compressed version)
 curl -LO "https://dl.k8s.io/release/${KUBECTL_VERSION}/bin/linux/amd64/kubectl"
 chmod +x kubectl
 mv kubectl helm-lambda-layer/python/bin/
-
-# Download and install eksctl
-curl -sLO "https://github.com/eksctl-io/eksctl/releases/download/v${EKSCTL_VERSION}/eksctl_Linux_amd64.tar.gz"
-tar -xzf eksctl_Linux_amd64.tar.gz -C /tmp && rm eksctl_Linux_amd64.tar.gz
-mv /tmp/eksctl helm-lambda-layer/python/bin/
-chmod +x helm-lambda-layer/python/bin/eksctl
 
 # Download and install Helm (using minimal tarball)
 curl -LO "https://get.helm.sh/helm-${HELM_VERSION}-linux-amd64.tar.gz"
