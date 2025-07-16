@@ -108,47 +108,52 @@ def write_kubeconfig(cluster_name, region):
         raise
 
 
-def on_create():
+def install_fsx_csi_driver():
     """
-    Handle Create request to clone and install a Helm chart
+    Install AWS FSx CSI Driver using Helm
     """
     try:
-        # Initialize response data
-        response_data = {
-            "Status": "SUCCESS",
-            "Reason": "Helm chart installed successfully"
-        }
+        print("Installing AWS FSx CSI Driver...")
+        
+        # Add FSx CSI driver repository
+        subprocess.run(['helm', 'repo', 'add', 'aws-fsx-csi-driver', 'https://kubernetes-sigs.github.io/aws-fsx-csi-driver'], check=True)
+        subprocess.run(['helm', 'repo', 'update'], check=True)
+        
+        # Install FSx CSI driver
+        subprocess.run(['helm', 'upgrade', '--install', 
+                    'aws-fsx-csi-driver', 'aws-fsx-csi-driver/aws-fsx-csi-driver',
+                    '--namespace', 'kube-system',
+                    '--set', 'controller.serviceAccount.create=false'], check=True)
+        
+        print("AWS FSx CSI Driver installed successfully")
+        
+    except subprocess.CalledProcessError as e:
+        raise Exception(f"Failed to install FSx CSI driver: {e.cmd}. Return code: {e.returncode}")
 
+
+def install_helm_chart():
+    """
+    Install custom Helm chart from GitHub repository
+    """
+    try:
+        print("Installing custom Helm chart...")
+        
         # Ensure required environment variables are set
         required_env_vars = [
             'GITHUB_REPO_URL',
             'CHART_PATH',
             'NAMESPACE',
             'RELEASE_NAME',
-            'CLUSTER_NAME',
-            'CREATE_FSX',
-            'AWS_REGION'
+            'OPERATORS'
         ]
         
         for var in required_env_vars:
             if var not in os.environ:
                 raise ValueError(f"Missing required environment variable: {var}")
-            
-         # Set HELM_CACHE_HOME and HELM_CONFIG_HOME
-        os.environ['HELM_CACHE_HOME'] = '/tmp/.helm/cache'
-        os.environ['HELM_CONFIG_HOME'] = '/tmp/.helm/config'
         
-        # Create directories
-        os.makedirs('/tmp/.helm/cache', exist_ok=True)
-        os.makedirs('/tmp/.helm/config', exist_ok=True)
-
-        # Configure kubectl using boto3
-        write_kubeconfig(os.environ['CLUSTER_NAME'], os.environ['AWS_REGION'])
-
         # Add required Helm repositories
         subprocess.run(['helm', 'repo', 'add', 'nvidia', 'https://nvidia.github.io/k8s-device-plugin'], check=True)
         subprocess.run(['helm', 'repo', 'add', 'eks', 'https://aws.github.io/eks-charts/'], check=True)
-        subprocess.run(['helm', 'repo', 'add', 'aws-fsx-csi-driver', 'https://kubernetes-sigs.github.io/aws-fsx-csi-driver'], check=True)
         subprocess.run(['helm', 'repo', 'update'], check=True)
 
         # Clone the GitHub repository
@@ -172,42 +177,31 @@ def on_create():
         ]
         subprocess.run(install_cmd, check=True)
 
-        # Install AWS FSx CSI Driver using Helm only if CREATE_FSX is true
-        if os.environ['CREATE_FSX'].lower() == 'true':
-            subprocess.run(['helm', 'upgrade', '--install', 
-                        'aws-fsx-csi-driver', 'aws-fsx-csi-driver/aws-fsx-csi-driver',
-                        '--namespace', 'kube-system',
-                        '--set', 'controller.serviceAccount.create=false'], check=True)
-
         # Clean up cloned repository
         subprocess.run(['rm', '-rf', '/tmp/helm-charts'], check=True)
-
-        return response_data
-
+        
+        print("Custom Helm chart installed successfully")
+        
     except subprocess.CalledProcessError as e:
-        raise Exception(f"Command failed: {e.cmd}. Return code: {e.returncode}")
-    except Exception as e:
-        raise Exception(f"Failed to install Helm chart: {str(e)}")
+        raise Exception(f"Failed to install Helm chart: {e.cmd}. Return code: {e.returncode}")
 
 
-def on_update():
+def on_create():
     """
-    Handle Update request to upgrade an existing Helm release
+    Handle Create request to install Helm charts
     """
     try:
+        # Initialize response data
         response_data = {
             "Status": "SUCCESS",
-            "Reason": "Helm chart updated successfully"
+            "Reason": "Helm charts installed successfully"
         }
 
-        # Verify required environment variables
+        # Ensure required environment variables are set
         required_env_vars = [
-            'GITHUB_REPO_URL',
-            'CHART_PATH',
-            'RELEASE_NAME',
             'CLUSTER_NAME',
-            'AWS_REGION',
-            'CREATE_FSX'
+            'CREATE_FSX',
+            'AWS_REGION'
         ]
         
         for var in required_env_vars:
@@ -225,10 +219,48 @@ def on_update():
         # Configure kubectl using boto3
         write_kubeconfig(os.environ['CLUSTER_NAME'], os.environ['AWS_REGION'])
 
+        # Install FSx CSI Driver if requested
+        if os.environ['CREATE_FSX'].lower() == 'true':
+            install_fsx_csi_driver()
+            response_data["FSxCSIDriverInstalled"] = True
+        else:
+            response_data["FSxCSIDriverInstalled"] = False
+
+        # Install custom Helm chart if not FSx-only mode
+        if os.environ['CREATE_FSX'].lower() != 'true':
+            install_helm_chart()
+            response_data["CustomChartInstalled"] = True
+        else:
+            response_data["CustomChartInstalled"] = False
+
+        return response_data
+
+    except subprocess.CalledProcessError as e:
+        raise Exception(f"Command failed: {e.cmd}. Return code: {e.returncode}")
+    except Exception as e:
+        raise Exception(f"Failed to install Helm charts: {str(e)}")
+
+def update_helm_chart():
+    """
+    Update custom Helm chart from GitHub repository
+    """
+    try:
+        print("Updating custom Helm chart...")
+        
+        # Ensure required environment variables are set
+        required_env_vars = [
+            'GITHUB_REPO_URL',
+            'CHART_PATH',
+            'RELEASE_NAME'
+        ]
+        
+        for var in required_env_vars:
+            if var not in os.environ:
+                raise ValueError(f"Missing required environment variable: {var}")
+
         # Add required Helm repositories
         subprocess.run(['helm', 'repo', 'add', 'nvidia', 'https://nvidia.github.io/k8s-device-plugin'], check=True)
         subprocess.run(['helm', 'repo', 'add', 'eks', 'https://aws.github.io/eks-charts/'], check=True)
-        subprocess.run(['helm', 'repo', 'add', 'aws-fsx-csi-driver', 'https://kubernetes-sigs.github.io/aws-fsx-csi-driver'], check=True)
         subprocess.run(['helm', 'repo', 'update'], check=True)
 
         # Clone the updated chart
@@ -249,39 +281,84 @@ def on_update():
             f"/tmp/helm-charts/{os.environ['CHART_PATH']}"
         ]
         subprocess.run(upgrade_cmd, check=True)
-        
-        # Update AWS FSx CSI Driver using Helm only if CREATE_FSX is true
-        if os.environ['CREATE_FSX'].lower() == 'true':
-            subprocess.run(['helm', 'upgrade', '--install', 
-                        'aws-fsx-csi-driver', 'aws-fsx-csi-driver/aws-fsx-csi-driver',
-                        '--namespace', 'kube-system',
-                        '--set', 'controller.serviceAccount.create=false'], check=True)
 
         # Clean up
         subprocess.run(['rm', '-rf', '/tmp/helm-charts'], check=True)
+        
+        print("Custom Helm chart updated successfully")
+        
+    except subprocess.CalledProcessError as e:
+        raise Exception(f"Failed to update Helm chart: {e.cmd}. Return code: {e.returncode}")
+
+
+def on_update():
+    """
+    Handle Update request to upgrade existing Helm releases
+    """
+    try:
+        response_data = {
+            "Status": "SUCCESS",
+            "Reason": "Helm charts updated successfully"
+        }
+
+        # Verify required environment variables
+        required_env_vars = [
+            'CLUSTER_NAME',
+            'AWS_REGION',
+            'CREATE_FSX'
+        ]
+        
+        for var in required_env_vars:
+            if var not in os.environ:
+                raise ValueError(f"Missing required environment variable: {var}")
+            
+        # Set HELM_CACHE_HOME and HELM_CONFIG_HOME
+        os.environ['HELM_CACHE_HOME'] = '/tmp/.helm/cache'
+        os.environ['HELM_CONFIG_HOME'] = '/tmp/.helm/config'
+        
+        # Create directories
+        os.makedirs('/tmp/.helm/cache', exist_ok=True)
+        os.makedirs('/tmp/.helm/config', exist_ok=True)
+
+        # Configure kubectl using boto3
+        write_kubeconfig(os.environ['CLUSTER_NAME'], os.environ['AWS_REGION'])
+
+        # Update FSx CSI Driver if requested
+        if os.environ['CREATE_FSX'].lower() == 'true':
+            install_fsx_csi_driver()  # This function handles both install and upgrade
+            response_data["FSxCSIDriverUpdated"] = True
+        else:
+            response_data["FSxCSIDriverUpdated"] = False
+
+        # Update custom Helm chart if not FSx-only mode
+        if os.environ['CREATE_FSX'].lower() != 'true':
+            update_helm_chart()
+            response_data["CustomChartUpdated"] = True
+        else:
+            response_data["CustomChartUpdated"] = False
 
         return response_data
 
     except subprocess.CalledProcessError as e:
         raise Exception(f"Command failed: {e.cmd}. Return code: {e.returncode}")
     except Exception as e:
-        raise Exception(f"Failed to update Helm chart: {str(e)}")
+        raise Exception(f"Failed to update Helm charts: {str(e)}")
 
 def on_delete():
     """
-    Handle Delete request to uninstall a Helm release
+    Handle Delete request to uninstall Helm releases
     """
     try:
         response_data = {
             "Status": "SUCCESS",
-            "Reason": "Helm chart uninstalled successfully"
+            "Reason": "Helm charts uninstalled successfully"
         }
 
         # Verify required environment variables
         required_env_vars = [
-            'RELEASE_NAME',
             'CLUSTER_NAME',
-            'AWS_REGION'
+            'AWS_REGION',
+            'CREATE_FSX'
         ]
         
         for var in required_env_vars:
@@ -291,12 +368,31 @@ def on_delete():
         # Configure kubectl using boto3
         write_kubeconfig(os.environ['CLUSTER_NAME'], os.environ['AWS_REGION'])
 
-        # Uninstall the release
-        uninstall_cmd = [
-            'helm', 'uninstall',
-            os.environ['RELEASE_NAME']
-        ]
-        subprocess.run(uninstall_cmd, check=True)
+        # Uninstall custom Helm chart if it was installed
+        if os.environ['CREATE_FSX'].lower() != 'true' and 'RELEASE_NAME' in os.environ:
+            try:
+                print(f"Uninstalling custom Helm chart: {os.environ['RELEASE_NAME']}")
+                uninstall_cmd = [
+                    'helm', 'uninstall',
+                    os.environ['RELEASE_NAME']
+                ]
+                subprocess.run(uninstall_cmd, check=True)
+                print("Custom Helm chart uninstalled successfully")
+                response_data["CustomChartUninstalled"] = True
+            except subprocess.CalledProcessError as e:
+                print(f"Warning: Failed to uninstall custom chart: {e}")
+                response_data["CustomChartUninstalled"] = False
+
+        # Uninstall FSx CSI Driver if it was installed
+        if os.environ['CREATE_FSX'].lower() == 'true':
+            try:
+                print("Uninstalling AWS FSx CSI Driver")
+                subprocess.run(['helm', 'uninstall', 'aws-fsx-csi-driver', '--namespace', 'kube-system'], check=True)
+                print("AWS FSx CSI Driver uninstalled successfully")
+                response_data["FSxCSIDriverUninstalled"] = True
+            except subprocess.CalledProcessError as e:
+                print(f"Warning: Failed to uninstall FSx CSI driver: {e}")
+                response_data["FSxCSIDriverUninstalled"] = False
 
         return response_data
 

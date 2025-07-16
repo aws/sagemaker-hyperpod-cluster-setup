@@ -7,7 +7,7 @@ import yaml
 
 def lambda_handler(event, context):
     """
-    Handle CloudFormation custom resource requests for managing Helm Charts
+    Handle CloudFormation custom resource requests for managing FSx for Lustre file systems
     """
     try: 
         request_type = event['RequestType']
@@ -108,6 +108,332 @@ def write_kubeconfig(cluster_name, region):
         raise
 
 
+def create_dynamic_fsx_resources(response_data):
+    """
+    Create Kubernetes resources for dynamic FSx provisioning
+    """
+    try:
+        print("FSX_FILE_SYSTEM_ID is empty. Proceeding with dynamic provisioning...")
+        
+        # Dynamic Provisioning 
+        print("Creating FSx for Lustre StorageClass...")
+        
+        # Create StorageClass YAML content
+        storage_class_content = f"""apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: fsx-sc
+provisioner: fsx.csi.aws.com
+parameters:
+  subnetId: {os.environ['PRIVATE_SUBNET_ID']}
+  securityGroupIds: {os.environ['SECURITY_GROUP_ID']}
+  deploymentType: PERSISTENT_2
+  automaticBackupRetentionDays: "0"
+  copyTagsToBackups: "true"
+  perUnitStorageThroughput: "{os.environ['PER_UNIT_STORAGE_THROUGHPUT']}"
+  dataCompressionType: "{os.environ['DATA_COMPRESSION_TYPE']}"
+  fileSystemTypeVersion: "{os.environ['FILE_SYSTEM_TYPE_VERSION']}"
+mountOptions:
+  - flock
+"""
+        
+        # Write StorageClass YAML to a temporary file
+        storage_class_path = '/tmp/storageclass.yaml'
+        with open(storage_class_path, 'w') as f:
+            f.write(storage_class_content)
+            
+        # Apply the StorageClass using kubectl
+        print("Applying StorageClass to the cluster...")
+        subprocess.run(['kubectl', 'apply', '-f', storage_class_path], check=True)
+        
+        # Verify StorageClass creation
+        print("Verifying StorageClass creation...")
+        result = subprocess.run(['kubectl', 'get', 'storageclass', 'fsx-sc', '-o', 'yaml'], 
+                              check=True, capture_output=True, text=True)
+        print(f"StorageClass verification:\n{result.stdout}")
+        
+        # Add StorageClass name to response data
+        response_data["StorageClassName"] = "fsx-sc"
+        
+        # Create a sample PersistentVolumeClaim using the StorageClass
+        print("Creating a sample PersistentVolumeClaim...")
+        
+        # Get storage capacity and ensure it's properly formatted
+        storage_capacity = os.environ['STORAGE_CAPACITY']
+        
+        pvc_content = f"""apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: fsx-claim
+  namespace: default
+spec:
+  accessModes:
+    - ReadWriteMany
+  storageClassName: fsx-sc
+  resources:
+    requests:
+      storage: {storage_capacity}Gi
+"""
+        
+        # Write PVC YAML to a temporary file
+        pvc_path = '/tmp/pvc.yaml'
+        with open(pvc_path, 'w') as f:
+            f.write(pvc_content)
+            
+        # Apply the PVC using kubectl
+        print("Applying PersistentVolumeClaim to the cluster...")
+        subprocess.run(['kubectl', 'apply', '-f', pvc_path], check=True)
+        
+        # Add PVC information to response data
+        response_data["PersistentVolumeClaimName"] = "fsx-claim"
+        response_data["PVCNamespace"] = "default"
+        
+        print("This PVC will kick off the dynamic provisioning of an FSx for Lustre file system based on the specifications provided in the storage class.")
+        
+        # View the status of the PVC
+        print("\nChecking PVC status:")
+        pvc_status = subprocess.run(['kubectl', 'describe', 'pvc', 'fsx-claim'], 
+                                  check=True, capture_output=True, text=True)
+        print(pvc_status.stdout)
+        
+        # Check if the PVC is in Pending or Bound state
+        print("\nChecking PVC phase:")
+        try:
+            pvc_phase = subprocess.run(['kubectl', 'get', 'pvc', 'fsx-claim', '-n', 'default', '-ojsonpath={.status.phase}'],
+                                     check=True, capture_output=True, text=True)
+            print(f"PVC Status: {pvc_phase.stdout}")
+            response_data["PVCStatus"] = pvc_phase.stdout
+        except subprocess.CalledProcessError as e:
+            print(f"Warning: Failed to get PVC phase: {e}")
+            response_data["PVCStatus"] = "Unknown"
+        
+        # Try to get volume info if PVC is bound (this might fail initially as provisioning takes time)
+        if response_data.get("PVCStatus") == "Bound":
+            try:
+                # Get the PV name first
+                pv_name = subprocess.run(['kubectl', 'get', 'pvc', 'fsx-claim', '-n', 'default', '-ojsonpath={.spec.volumeName}'],
+                                       check=True, capture_output=True, text=True)
+                
+                # Get the FSx volume ID
+                volume_id = subprocess.run(['kubectl', 'get', 'pv', pv_name.stdout, '-ojsonpath={.spec.csi.volumeHandle}'],
+                                        check=True, capture_output=True, text=True)
+                
+                print(f"\nFSx Volume ID: {volume_id.stdout}")
+                response_data["FSxVolumeId"] = volume_id.stdout
+            except subprocess.CalledProcessError as e:
+                print(f"Note: FSx volume ID not yet available. Provisioning may still be in progress: {e}")
+                response_data["FSxVolumeId"] = "Provisioning"
+        else:
+            print("\nNote: FSx provisioning may take up to 10 minutes. Check status later with:")
+            print("  kubectl describe pvc fsx-claim")
+            print("  kubectl get pvc fsx-claim -n default -ojsonpath={.status.phase}")
+            print("\nOnce bound, retrieve volume ID with:")
+            print("  kubectl get pv $(kubectl get pvc fsx-claim -n default -ojsonpath={.spec.volumeName}) -ojsonpath={.spec.csi.volumeHandle}")
+            
+    except Exception as e:
+        print(f"Error creating Kubernetes resources for dynamic FSx provisioning: {str(e)}")
+        raise
+
+
+def create_existing_fsx_resources(response_data):
+    """
+    Create Kubernetes resources for existing FSx file system
+    """
+    try:
+        fsx_file_system_id = os.environ['FSX_FILE_SYSTEM_ID']
+        subnet_id = os.environ['PRIVATE_SUBNET_ID']
+        security_group_id = os.environ['SECURITY_GROUP_ID']
+        storage_capacity = os.environ['STORAGE_CAPACITY']
+        aws_region = os.environ['AWS_REGION']
+        
+        # Create unique resource names to avoid conflicts
+        resource_suffix = fsx_file_system_id.replace('fs-', '')[:8]
+        sc_name = f"fsx-sc-{resource_suffix}"
+        pv_name = f"fsx-pv-{resource_suffix}"
+        pvc_name = f"fsx-claim-{resource_suffix}"
+        pod_name = f"fsx-app-{resource_suffix}"
+        
+        # Get FSx file system details using boto3
+        fsx_client = boto3.client('fsx', region_name=aws_region)
+        try:
+            fsx_response = fsx_client.describe_file_systems(FileSystemIds=[fsx_file_system_id])
+        except ClientError as e:
+            raise Exception(f"Failed to describe FSx file system {fsx_file_system_id}: {str(e)}")
+        
+        if not fsx_response['FileSystems']:
+            raise Exception(f"FSx file system {fsx_file_system_id} not found")
+            
+        fsx_details = fsx_response['FileSystems'][0]
+        
+        # Verify it's a Lustre file system
+        if fsx_details['FileSystemType'] != 'LUSTRE':
+            raise Exception(f"File system {fsx_file_system_id} is not a Lustre file system. Type: {fsx_details['FileSystemType']}")
+            
+        # Check file system state
+        if fsx_details['Lifecycle'] != 'AVAILABLE':
+            raise Exception(f"FSx file system {fsx_file_system_id} is not available. Current state: {fsx_details['Lifecycle']}")
+            
+        dns_name = fsx_details['DNSName']
+        mount_name = fsx_details['LustreConfiguration']['MountName']
+        
+        print(f"Found FSx file system: {fsx_file_system_id}")
+        print(f"DNS Name: {dns_name}")
+        print(f"Mount Name: {mount_name}")
+        
+        # 1. Create StorageClass for existing FSx
+        print("Creating StorageClass for existing FSx file system...")
+        storage_class_content = f"""apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: {sc_name}
+provisioner: fsx.csi.aws.com
+parameters:
+  fileSystemId: {fsx_file_system_id}
+  subnetId: {subnet_id}
+  securityGroupIds: {security_group_id}
+"""
+        
+        storage_class_path = '/tmp/storageclass.yaml'
+        with open(storage_class_path, 'w') as f:
+            f.write(storage_class_content)
+            
+        subprocess.run(['kubectl', 'apply', '-f', storage_class_path], check=True)
+        print("StorageClass created successfully")
+        
+        # 2. Create PersistentVolume for existing FSx
+        print("Creating PersistentVolume for existing FSx file system...")
+        pv_content = f"""apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: {pv_name}
+spec:
+  capacity:
+    storage: {storage_capacity}Gi
+  volumeMode: Filesystem
+  accessModes:
+    - ReadWriteMany
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: {sc_name}
+  csi:
+    driver: fsx.csi.aws.com
+    volumeHandle: {fsx_file_system_id}
+    volumeAttributes:
+      dnsname: {dns_name}
+      mountname: {mount_name}
+"""
+        
+        pv_path = '/tmp/pv.yaml'
+        with open(pv_path, 'w') as f:
+            f.write(pv_content)
+            
+        subprocess.run(['kubectl', 'apply', '-f', pv_path], check=True)
+        print("PersistentVolume created successfully")
+        
+        # 3. Create PersistentVolumeClaim
+        print("Creating PersistentVolumeClaim for existing FSx file system...")
+        pvc_content = f"""apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {pvc_name}
+spec:
+  accessModes:
+    - ReadWriteMany
+  storageClassName: {sc_name}
+  resources:
+    requests:
+      storage: {storage_capacity}Gi
+"""
+        
+        pvc_path = '/tmp/pvc.yaml'
+        with open(pvc_path, 'w') as f:
+            f.write(pvc_content)
+            
+        subprocess.run(['kubectl', 'apply', '-f', pvc_path], check=True)
+        print("PersistentVolumeClaim created successfully")
+        
+        # 4. Create Pod that uses the FSx volume
+        print("Creating Pod that mounts the FSx volume...")
+        pod_content = f"""apiVersion: v1
+kind: Pod
+metadata:
+  name: {pod_name}
+spec:
+  containers:
+  - name: app
+    image: ubuntu
+    command: ["/bin/sh"]
+    args: ["-c", "while true; do echo $(date -u) >> /data/out.txt; sleep 5; done"]
+    volumeMounts:
+    - name: persistent-storage
+      mountPath: /data
+  volumes:
+  - name: persistent-storage
+    persistentVolumeClaim:
+      claimName: {pvc_name}
+"""
+        
+        pod_path = '/tmp/pod.yaml'
+        with open(pod_path, 'w') as f:
+            f.write(pod_content)
+            
+        subprocess.run(['kubectl', 'apply', '-f', pod_path], check=True)
+        print("Sample Pod created successfully")
+        
+        # Verify resources were created
+        print("\nVerifying created resources...")
+        
+        # Check StorageClass
+        try:
+            result = subprocess.run(['kubectl', 'get', 'storageclass', sc_name], 
+                                  check=True, capture_output=True, text=True)
+            print(f"StorageClass status:\n{result.stdout}")
+        except subprocess.CalledProcessError as e:
+            print(f"Warning: Failed to verify StorageClass: {e}")
+            
+        # Check PV
+        try:
+            result = subprocess.run(['kubectl', 'get', 'pv', pv_name], 
+                                  check=True, capture_output=True, text=True)
+            print(f"PersistentVolume status:\n{result.stdout}")
+        except subprocess.CalledProcessError as e:
+            print(f"Warning: Failed to verify PersistentVolume: {e}")
+            
+        # Check PVC
+        try:
+            result = subprocess.run(['kubectl', 'get', 'pvc', pvc_name], 
+                                  check=True, capture_output=True, text=True)
+            print(f"PersistentVolumeClaim status:\n{result.stdout}")
+        except subprocess.CalledProcessError as e:
+            print(f"Warning: Failed to verify PersistentVolumeClaim: {e}")
+            
+        # Check Pod
+        try:
+            result = subprocess.run(['kubectl', 'get', 'pod', pod_name], 
+                                  check=True, capture_output=True, text=True)
+            print(f"Pod status:\n{result.stdout}")
+        except subprocess.CalledProcessError as e:
+            print(f"Warning: Failed to verify Pod: {e}")
+        
+        # Update response data
+        response_data.update({
+            "StorageClassName": sc_name,
+            "PersistentVolumeName": pv_name, 
+            "PersistentVolumeClaimName": pvc_name,
+            "PVCNamespace": "default",
+            "SamplePodName": pod_name,
+            "FSxDNSName": dns_name,
+            "FSxMountName": mount_name
+        })
+        
+        print("\nKubernetes resources for existing FSx file system created successfully!")
+        print(f"You can now use the PVC '{pvc_name}' in your applications to mount the FSx volume.")
+        print(f"The sample pod '{pod_name}' demonstrates how to use the volume.")
+        
+    except Exception as e:
+        print(f"Error creating Kubernetes resources for existing FSx: {str(e)}")
+        raise
+
+
 def on_create():
     """
     Handle Set Up an FSx for Lustre File System
@@ -138,14 +464,6 @@ def on_create():
         for var in required_env_vars:
             if var not in os.environ:
                 raise ValueError(f"Missing required environment variable: {var}")
-            
-         # Set HELM_CACHE_HOME and HELM_CONFIG_HOME
-        os.environ['HELM_CACHE_HOME'] = '/tmp/.helm/cache'
-        os.environ['HELM_CONFIG_HOME'] = '/tmp/.helm/config'
-        
-        # Create directories
-        os.makedirs('/tmp/.helm/cache', exist_ok=True)
-        os.makedirs('/tmp/.helm/config', exist_ok=True)
 
         # Configure kubectl using boto3
         write_kubeconfig(os.environ['CLUSTER_NAME'], os.environ['AWS_REGION'])
@@ -170,7 +488,26 @@ def on_create():
             print(f"Service account verification:\n{result.stdout}")
         except subprocess.CalledProcessError as e:
             print(f"Warning: Failed to verify service account: {e}")
+            
+        # Verify installation of the FSx for Lustre CSI driver
+        try:
+            result = subprocess.run(['kubectl', 'get', 'pods', '-n', 'kube-system', '-l', 'app.kubernetes.io/name=aws-fsx-csi-driver'], 
+                                   check=True, capture_output=True, text=True)
+            print(f"FSx for Lustre CSI driver verification:\n{result.stdout}")
+        except subprocess.CalledProcessError as e:
+            print(f"Warning: Failed to verify FSx for Lustre CSI driver installation: {e}")
 
+        # Choose between dynamic provisioning or existing FSx
+        if os.environ['FSX_FILE_SYSTEM_ID'] == '':
+            # Create Kubernetes resources for dynamic FSx provisioning
+            create_dynamic_fsx_resources(response_data)
+        else:
+            print(f"Using existing FSx for Lustre file system with ID: {os.environ['FSX_FILE_SYSTEM_ID']}")
+            response_data["FSxVolumeId"] = os.environ['FSX_FILE_SYSTEM_ID']
+            
+            # Create Kubernetes resources for existing FSx file system
+            create_existing_fsx_resources(response_data)
+        
         return response_data
 
     except subprocess.CalledProcessError as e:
@@ -181,7 +518,7 @@ def on_create():
 
 def on_update():
     """
-    Handle Update request to upgrade the AWS FSx CSI driver
+    Handle Update request to upgrade the AWS FSx CSI driver and update StorageClass
     """
     try:
         response_data = {
@@ -192,20 +529,18 @@ def on_update():
         # Verify required environment variables
         required_env_vars = [
             'CLUSTER_NAME',
-            'AWS_REGION'
+            'AWS_REGION',
+            'PRIVATE_SUBNET_ID',
+            'SECURITY_GROUP_ID',
+            'PER_UNIT_STORAGE_THROUGHPUT',
+            'DATA_COMPRESSION_TYPE',
+            'FILE_SYSTEM_TYPE_VERSION'
         ]
         
         for var in required_env_vars:
             if var not in os.environ:
                 raise ValueError(f"Missing required environment variable: {var}")
-            
-        # Set HELM_CACHE_HOME and HELM_CONFIG_HOME
-        os.environ['HELM_CACHE_HOME'] = '/tmp/.helm/cache'
-        os.environ['HELM_CONFIG_HOME'] = '/tmp/.helm/config'
         
-        # Create directories
-        os.makedirs('/tmp/.helm/cache', exist_ok=True)
-        os.makedirs('/tmp/.helm/config', exist_ok=True)
 
         # Configure kubectl using boto3
         write_kubeconfig(os.environ['CLUSTER_NAME'], os.environ['AWS_REGION'])
@@ -234,17 +569,26 @@ def on_update():
             print(f"Service account verification:\n{result.stdout}")
         except subprocess.CalledProcessError as e:
             print(f"Warning: Failed to verify service account: {e}")
-
-        # Add FSx CSI Driver Helm repository
-        subprocess.run(['helm', 'repo', 'add', 'aws-fsx-csi-driver', 'https://kubernetes-sigs.github.io/aws-fsx-csi-driver'], check=True)
-        subprocess.run(['helm', 'repo', 'update'], check=True)
-
-        # Update AWS FSx CSI Driver using Helm
-        subprocess.run(['helm', 'upgrade', '--install', 
-                        'aws-fsx-csi-driver', 'aws-fsx-csi-driver/aws-fsx-csi-driver',
-                        '--namespace', 'kube-system',
-                        '--set', 'controller.serviceAccount.create=false'], check=True)
-
+            
+        # Verify installation of the FSx for Lustre CSI driver
+        try:
+            result = subprocess.run(['kubectl', 'get', 'pods', '-n', 'kube-system', '-l', 'app.kubernetes.io/name=aws-fsx-csi-driver'], 
+                                   check=True, capture_output=True, text=True)
+            print(f"FSx for Lustre CSI driver verification:\n{result.stdout}")
+        except subprocess.CalledProcessError as e:
+            print(f"Warning: Failed to verify FSx for Lustre CSI driver installation: {e}")
+            
+        # Choose between dynamic provisioning or existing FSx for updates
+        if 'FSX_FILE_SYSTEM_ID' in os.environ and os.environ['FSX_FILE_SYSTEM_ID'] == '':
+            # Update StorageClass for dynamic provisioning
+            create_dynamic_fsx_resources(response_data)
+        else:
+            print(f"Using existing FSx for Lustre file system with ID: {os.environ.get('FSX_FILE_SYSTEM_ID', 'Not provided')}")
+            if 'FSX_FILE_SYSTEM_ID' in os.environ:
+                response_data["FSxVolumeId"] = os.environ['FSX_FILE_SYSTEM_ID']
+                # Update Kubernetes resources for existing FSx file system
+                create_existing_fsx_resources(response_data)
+            
         return response_data
 
     except subprocess.CalledProcessError as e:
@@ -275,19 +619,61 @@ def on_delete():
         # Configure kubectl using boto3
         write_kubeconfig(os.environ['CLUSTER_NAME'], os.environ['AWS_REGION'])
 
-        # Uninstall the AWS FSx CSI driver
+        # Delete Kubernetes resources (both for dynamic and existing FSx)
+        # For existing FSx, use unique names; for dynamic, use standard names
+        if 'FSX_FILE_SYSTEM_ID' in os.environ and os.environ['FSX_FILE_SYSTEM_ID'] != '':
+            # Existing FSx - use unique names
+            resource_suffix = os.environ['FSX_FILE_SYSTEM_ID'].replace('fs-', '')[:8]
+            pod_name = f"fsx-app-{resource_suffix}"
+            pvc_name = f"fsx-claim-{resource_suffix}"
+            pv_name = f"fsx-pv-{resource_suffix}"
+            sc_name = f"fsx-sc-{resource_suffix}"
+        else:
+            # Dynamic provisioning - use standard names
+            pod_name = "fsx-app"
+            pvc_name = "fsx-claim"
+            pv_name = "fsx-pv"
+            sc_name = "fsx-sc"
+            
         try:
-            subprocess.run(['helm', 'uninstall', 'aws-fsx-csi-driver', '--namespace', 'kube-system'], check=True)
+            print(f"Deleting sample Pod {pod_name}...")
+            subprocess.run(['kubectl', 'delete', 'pod', pod_name, '--ignore-not-found=true'], check=True)
+            print("Successfully deleted Pod")
         except subprocess.CalledProcessError as e:
-            print(f"Warning: Failed to uninstall FSx CSI driver: {e}")
-
+            print(f"Warning: Failed to delete Pod: {e}")
+            
+        try:
+            print(f"Deleting PersistentVolumeClaim {pvc_name}...")
+            subprocess.run(['kubectl', 'delete', 'pvc', pvc_name, '-n', 'default', '--ignore-not-found=true'], check=True)
+            print("Successfully deleted PVC")
+        except subprocess.CalledProcessError as e:
+            print(f"Warning: Failed to delete PVC: {e}")
+            
+        # Only delete PV for existing FSx (dynamic provisioning handles PV automatically)
+        if 'FSX_FILE_SYSTEM_ID' in os.environ and os.environ['FSX_FILE_SYSTEM_ID'] != '':
+            try:
+                print(f"Deleting PersistentVolume {pv_name}...")
+                subprocess.run(['kubectl', 'delete', 'pv', pv_name, '--ignore-not-found=true'], check=True)
+                print("Successfully deleted PV")
+            except subprocess.CalledProcessError as e:
+                print(f"Warning: Failed to delete PV: {e}")
+                
+        try:
+            print(f"Deleting StorageClass {sc_name}...")
+            subprocess.run(['kubectl', 'delete', 'storageclass', sc_name, '--ignore-not-found=true'], check=True)
+            print("Successfully deleted StorageClass")
+        except subprocess.CalledProcessError as e:
+            print(f"Warning: Failed to delete StorageClass: {e}")
+            
         # Delete the IAM service account
         try:
+            print("Deleting IAM service account...")
             subprocess.run(['eksctl', 'delete', 'iamserviceaccount',
                           '--name', 'fsx-csi-controller-sa',
                           '--namespace', 'kube-system',
                           '--cluster', os.environ['CLUSTER_NAME'],
                           '--region', os.environ['AWS_REGION']], check=True)
+            print("Successfully deleted IAM service account")
         except subprocess.CalledProcessError as e:
             print(f"Warning: Failed to delete service account: {e}")
 
