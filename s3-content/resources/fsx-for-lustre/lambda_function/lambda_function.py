@@ -108,6 +108,78 @@ def write_kubeconfig(cluster_name, region):
         raise
 
 
+def find_subnet_in_az(availability_zone, subnet_ids):
+    """
+    Find a subnet ID that is in the specified availability zone
+    
+    Args:
+        availability_zone: The availability zone to search for
+        subnet_ids: List of subnet IDs to search through
+        
+    Returns:
+        The subnet ID that is in the specified AZ, or None if not found
+    """
+    if not availability_zone or not subnet_ids:
+        return None
+        
+    try:
+        ec2 = boto3.client('ec2', region_name=os.environ['AWS_REGION'])
+        
+        # Split comma-separated subnet IDs if provided as a string
+        if isinstance(subnet_ids, str):
+            subnet_list = [s.strip() for s in subnet_ids.split(',')]
+        else:
+            subnet_list = subnet_ids
+            
+        # Describe all subnets in the list
+        response = ec2.describe_subnets(SubnetIds=subnet_list)
+        
+        # Find the subnet in the specified AZ
+        for subnet in response['Subnets']:
+            if subnet['AvailabilityZone'] == availability_zone:
+                print(f"Found subnet {subnet['SubnetId']} in availability zone {availability_zone}")
+                return subnet['SubnetId']
+                
+        print(f"No subnet found in availability zone {availability_zone}")
+        return None
+        
+    except Exception as e:
+        print(f"Error finding subnet in AZ {availability_zone}: {str(e)}")
+        return None
+
+
+def get_fsx_network_config(fsx_file_system_id, aws_region):
+    """
+    Get subnet ID and security group IDs from an existing FSx file system
+    
+    Args:
+        fsx_file_system_id: The FSx file system ID
+        aws_region: AWS region
+        
+    Returns:
+        Tuple of (subnet_id, security_group_ids)
+    """
+    try:
+        # Get FSx file system details using boto3
+        fsx_client = boto3.client('fsx', region_name=aws_region)
+        fsx_response = fsx_client.describe_file_systems(FileSystemIds=[fsx_file_system_id])
+        
+        if not fsx_response['FileSystems']:
+            raise Exception(f"FSx file system {fsx_file_system_id} not found")
+            
+        fsx_details = fsx_response['FileSystems'][0]
+        
+        # Get network information
+        subnet_id = fsx_details['SubnetIds'][0]  # Use first subnet if multiple
+        security_group_ids = ','.join(fsx_details['NetworkInterfaceIds'])
+        
+        return subnet_id, security_group_ids
+        
+    except Exception as e:
+        print(f"Error getting FSx network configuration: {str(e)}")
+        raise
+
+
 def create_dynamic_fsx_resources(response_data):
     """
     Create Kubernetes resources for dynamic FSx provisioning
@@ -118,6 +190,28 @@ def create_dynamic_fsx_resources(response_data):
         # Dynamic Provisioning 
         print("Creating FSx for Lustre StorageClass...")
         
+        # Determine the subnet ID to use based on FSX_SUBNETID or find in FSX_AVAILABILITY_ZONE
+        subnet_id = ""
+        
+        # First check if FSX_SUBNETID is provided and not empty
+        fsx_subnet_id = os.environ.get('FSX_SUBNETID', '').strip()
+        fsx_az = os.environ.get('FSX_AVAILABILITY_ZONE', '').strip()
+        private_subnets = os.environ.get('PRIVATE_SUBNET_IDS', '').strip()
+        
+        if fsx_subnet_id:
+            # Use explicitly provided subnet ID
+            subnet_id = fsx_subnet_id
+            print(f"Using provided FSX_SUBNETID: {subnet_id}")
+        elif fsx_az and private_subnets:
+            # Find a subnet in the provided availability zone
+            subnet_id = find_subnet_in_az(fsx_az, private_subnets)
+            if subnet_id:
+                print(f"Found subnet {subnet_id} in FSX_AVAILABILITY_ZONE {fsx_az}")
+            else:
+                print(f"Warning: No subnet found in FSX_AVAILABILITY_ZONE {fsx_az}. StorageClass creation may fail.")
+        else:
+            print("Warning: Neither FSX_SUBNETID nor both FSX_AVAILABILITY_ZONE and PRIVATE_SUBNET_IDS provided or they are empty. StorageClass creation may fail.")
+        
         # Create StorageClass YAML content
         storage_class_content = f"""apiVersion: storage.k8s.io/v1
 kind: StorageClass
@@ -125,7 +219,7 @@ metadata:
   name: fsx-sc
 provisioner: fsx.csi.aws.com
 parameters:
-  subnetId: {os.environ['PRIVATE_SUBNET_ID']}
+  subnetId: {subnet_id}
   securityGroupIds: {os.environ['SECURITY_GROUP_ID']}
   deploymentType: PERSISTENT_2
   automaticBackupRetentionDays: "0"
@@ -241,11 +335,11 @@ def create_existing_fsx_resources(response_data):
     """
     try:
         fsx_file_system_id = os.environ['FSX_FILE_SYSTEM_ID']
-        subnet_id = os.environ['PRIVATE_SUBNET_ID']
-        security_group_id = os.environ['SECURITY_GROUP_ID']
         storage_capacity = os.environ['STORAGE_CAPACITY']
         aws_region = os.environ['AWS_REGION']
         
+        # Get subnet ID and security group IDs from the existing FSx file system
+        subnet_id, security_group_ids = get_fsx_network_config(fsx_file_system_id, aws_region)
         # Create unique resource names to avoid conflicts
         resource_suffix = fsx_file_system_id.replace('fs-', '')[:8]
         sc_name = f"fsx-sc-{resource_suffix}"
@@ -290,7 +384,7 @@ provisioner: fsx.csi.aws.com
 parameters:
   fileSystemId: {fsx_file_system_id}
   subnetId: {subnet_id}
-  securityGroupIds: {security_group_id}
+  securityGroupIds: {security_group_ids}
 """
         
         storage_class_path = '/tmp/storageclass.yaml'
@@ -448,8 +542,6 @@ def on_create():
         # Ensure required environment variables are set
         required_env_vars = [
             'CLUSTER_NAME',
-            'PRIVATE_SUBNET_ID',
-            'SECURITY_GROUP_ID',
             'PER_UNIT_STORAGE_THROUGHPUT',
             'DATA_COMPRESSION_TYPE',
             'FILE_SYSTEM_TYPE_VERSION',
@@ -530,8 +622,6 @@ def on_update():
         required_env_vars = [
             'CLUSTER_NAME',
             'AWS_REGION',
-            'PRIVATE_SUBNET_ID',
-            'SECURITY_GROUP_ID',
             'PER_UNIT_STORAGE_THROUGHPUT',
             'DATA_COMPRESSION_TYPE',
             'FILE_SYSTEM_TYPE_VERSION'
@@ -595,6 +685,7 @@ def on_update():
         raise Exception(f"Command failed: {e.cmd}. Return code: {e.returncode}")
     except Exception as e:
         raise Exception(f"Failed to update AWS FSx CSI driver: {str(e)}")
+
 
 def on_delete():
     """
