@@ -24,7 +24,9 @@ jobs:
         run: |
           echo "Starting sync from s3://aws-sagemaker-hyperpod-cluster-setup-us-east-2-prod"
           mkdir -p ./s3-content
-          aws s3 sync s3://aws-sagemaker-hyperpod-cluster-setup-us-east-2-prod ./s3-content --no-sign-request --delete
+          aws s3 sync s3://aws-sagemaker-hyperpod-cluster-setup-us-east-2-prod/templates ./eks/cloudformation --no-sign-request --delete
+          aws s3 sync s3://aws-sagemaker-hyperpod-cluster-setup-us-east-2-prod/resources ./eks/cloudformation/resources --no-sign-request --delete
+          aws s3 sync s3://aws-sagemaker-hyperpod-cluster-setup-us-east-2-prod/templates-slurm ./slurm/cloudformation --no-sign-request --delete
           echo "S3 sync completed"
           ls -la ./s3-content
 
