@@ -1,10 +1,10 @@
-**SageMaker HyperPod cluster setup assets** 
+## SageMaker HyperPod cluster setup assets
 
 This repository contains the setup assets required to create Amazon SageMaker HyperPod clusters using either Slurm or Amazon EKS for orchestration. You can create all the resources needed for large-scale AI/ML workloads—including networking, storage, compute, and IAM permissions. 
 
 SageMaker HyperPod clusters are purpose-built for scalability and resilience, designed to accelerate large-scale distributed training and deployment of complex machine learning models like LLMs and diffusion models, as well as customization of Amazon Nova foundation models. 
 
-**Pre-requisites needed to setup a HyperPod cluster**
+## Pre-requisites needed to setup a HyperPod cluster
 
 The CloudFormation templates in this repository automate the provisioning of all necessary AWS resources along with your SageMaker HyperPod cluster. The templates are designed for flexibility, allowing you to either create a completely new stack of resources or integrate with your existing infrastructure by providing the IDs of existing components. The following resources will be managed by the templates: 
 
@@ -16,7 +16,7 @@ The CloudFormation templates in this repository automate the provisioning of all
 * IAM role - Allows the HyperPod cluster to run and communicate with the necessary AWS resources on your behalf.
 
 
-**Configure resources and deploy using CloudFormation**
+## Configure resources and deploy using CloudFormation
 
 You can configure resources and deploy using the CloudFormation templates for SageMaker HyperPod. Follow the steps mentioned in the AWS documentation to get started:
 
