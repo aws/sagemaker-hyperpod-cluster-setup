@@ -31,6 +31,7 @@ Metadata:
           - EksPrivateSubnetIds
           - NatGatewayIds
           - PrivateRouteTableIds
+          - EksPrivateRouteTableIds
           - CreateS3EndpointStack
       - Label:
           default: Orchestration
@@ -151,6 +152,8 @@ Metadata:
         default: NAT Gateway IDs
       PrivateRouteTableIds:
         default: Private Route Table IDs
+      EksPrivateRouteTableIds:
+        default: EKS Private Route Table IDs
       CreateS3EndpointStack:
         default: Create S3 Endpoint
       CreateEKSClusterStack:
@@ -268,6 +271,10 @@ Parameters:
     Type: String
     Default: rtb-1234567890abcdef0
     Description: Comma-separated list of private route table IDs.
+  EksPrivateRouteTableIds:
+    Type: String
+    Default: rtb-1234567890abcdef0
+    Description: Comma-separated list of EKS private route table IDs.
   S3BucketName:
     Type: String
     Default: s3-bucket
@@ -833,6 +840,13 @@ Resources:
                 - PrivateSubnetStack
                 - Outputs.PrivateRouteTableIds
             - Ref: PrivateRouteTableIds
+        EksPrivateRouteTableIds:
+          Fn::If:
+            - CreatePrivateSubnetStackCondition
+            - Fn::GetAtt:
+                - PrivateSubnetStack
+                - Outputs.EksPrivateRouteTableIds
+            - Ref: EksPrivateRouteTableIds
         ResourceNamePrefix:
           Ref: ResourceNamePrefix
     Metadata:
@@ -1188,30 +1202,30 @@ Resources:
     Metadata:
       aws:cdk:path: MainEksBasedCfnTemplate/FsxStack
     Condition: CreateFsxStackCondition
-  EksSubnetTagsStack:
+  PrivateSubnetTagsStack:
     Type: AWS::CloudFormation::Stack
     Properties:
       TemplateURL:
         Fn::If:
           - CustomBucketCondition
-          - Fn::Sub: https://${CustomBucketName}.s3.${AWS::Region}.amazonaws.com/templates/eks-subnet-tagging-template.yaml
+          - Fn::Sub: https://${CustomBucketName}.s3.${AWS::Region}.amazonaws.com/templates/private-subnet-tagging-template.yaml
           - Fn::Sub: >-
-              https://aws-sagemaker-hyperpod-cluster-setup-${AWS::Region}-${Stage}.s3.${AWS::Region}.amazonaws.com/templates/eks-subnet-tagging-template.yaml
+              https://aws-sagemaker-hyperpod-cluster-setup-${AWS::Region}-${Stage}.s3.${AWS::Region}.amazonaws.com/templates/private-subnet-tagging-template.yaml
       Parameters:
         CustomResourceS3Bucket:
           Fn::If:
             - CustomBucketCondition
             - Ref: CustomBucketName
             - Fn::Sub: aws-sagemaker-hyperpod-cluster-setup-${AWS::Region}-${Stage}
-        EksPrivateSubnetIds:
+        PrivateSubnetIds:
           Fn::If:
             - CreatePrivateSubnetStackCondition
             - Fn::GetAtt:
                 - PrivateSubnetStack
-                - Outputs.EksPrivateSubnetIds
-            - Ref: EksPrivateSubnetIds
+                - Outputs.PrivateSubnetIds
+            - Ref: PrivateSubnetIds
     Metadata:
-      aws:cdk:path: MainEksBasedCfnTemplate/EksSubnetTagsStack
+      aws:cdk:path: MainEksBasedCfnTemplate/PrivateSubnetTagsStack
     Condition: EnableHPInferenceFeatureCondition
   InferenceOperatorMainStack:
     Type: AWS::CloudFormation::Stack

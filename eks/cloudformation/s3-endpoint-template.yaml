@@ -7,7 +7,11 @@ Parameters:
   PrivateRouteTableIds:
     Type: CommaDelimitedList
     Default: rtb-1234567890abcdef0
-    Description: The Id of your private route table.
+    Description: The Id of your private route tables.
+  EksPrivateRouteTableIds:
+    Type: CommaDelimitedList
+    Default: rtb-1234567890abcdef1
+    Description: The Id of your Eks private route tables.
   ResourceNamePrefix:
     Type: String
     Default: sagemaker-hyperpod-eks
@@ -17,7 +21,16 @@ Resources:
     Type: AWS::EC2::VPCEndpoint
     Properties:
       RouteTableIds:
-        Ref: PrivateRouteTableIds
+        Fn::Split:
+          - ','
+          - Fn::Join:
+              - ','
+              - - Fn::Join:
+                    - ','
+                    - Ref: PrivateRouteTableIds
+                - Fn::Join:
+                    - ','
+                    - Ref: EksPrivateRouteTableIds
       ServiceName:
         Fn::Join:
           - ''

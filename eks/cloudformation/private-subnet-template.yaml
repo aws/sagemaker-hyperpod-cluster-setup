@@ -164,6 +164,27 @@ Resources:
     Metadata:
       aws:cdk:path: PrivateSubnetCfnTemplate/PrivateSubnet1RouteTableAssociation
     Condition: HasAZ1
+  EksPrivateRouteTable1:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      Tags:
+        - Key: aws-sagemaker-hyperpod-prerequiste
+          Value:
+            Fn::Sub: ${ResourceNamePrefix}-EKS-Private-RT-1
+      VpcId:
+        Ref: VpcId
+    Metadata:
+      aws:cdk:path: PrivateSubnetCfnTemplate/EksPrivateRouteTable1
+  PrivateEksSubnet1RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId:
+        Ref: EksPrivateRouteTable1
+      SubnetId:
+        Ref: EksPrivateSubnet1
+    Metadata:
+      aws:cdk:path: PrivateSubnetCfnTemplate/PrivateEksSubnet1RouteTableAssociation
+    Condition: HasAZ1
   DefaultPrivateRoute1:
     Type: AWS::EC2::Route
     Properties:
@@ -278,6 +299,27 @@ Resources:
         Ref: PrivateSubnet2
     Metadata:
       aws:cdk:path: PrivateSubnetCfnTemplate/PrivateSubnet2RouteTableAssociation
+    Condition: HasAZ2
+  EksPrivateRouteTable2:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      Tags:
+        - Key: aws-sagemaker-hyperpod-prerequiste
+          Value:
+            Fn::Sub: ${ResourceNamePrefix}-EKS-Private-RT-2
+      VpcId:
+        Ref: VpcId
+    Metadata:
+      aws:cdk:path: PrivateSubnetCfnTemplate/EksPrivateRouteTable2
+  PrivateEksSubnet2RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId:
+        Ref: EksPrivateRouteTable2
+      SubnetId:
+        Ref: EksPrivateSubnet2
+    Metadata:
+      aws:cdk:path: PrivateSubnetCfnTemplate/PrivateEksSubnet2RouteTableAssociation
     Condition: HasAZ2
   DefaultPrivateRoute2:
     Type: AWS::EC2::Route
@@ -394,6 +436,27 @@ Resources:
     Metadata:
       aws:cdk:path: PrivateSubnetCfnTemplate/PrivateSubnet3RouteTableAssociation
     Condition: HasAZ3
+  EksPrivateRouteTable3:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      Tags:
+        - Key: aws-sagemaker-hyperpod-prerequiste
+          Value:
+            Fn::Sub: ${ResourceNamePrefix}-EKS-Private-RT-3
+      VpcId:
+        Ref: VpcId
+    Metadata:
+      aws:cdk:path: PrivateSubnetCfnTemplate/EksPrivateRouteTable3
+  PrivateEksSubnet3RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId:
+        Ref: EksPrivateRouteTable3
+      SubnetId:
+        Ref: EksPrivateSubnet3
+    Metadata:
+      aws:cdk:path: PrivateSubnetCfnTemplate/PrivateEksSubnet3RouteTableAssociation
+    Condition: HasAZ3
   DefaultPrivateRoute3:
     Type: AWS::EC2::Route
     Properties:
@@ -508,6 +571,27 @@ Resources:
         Ref: PrivateSubnet4
     Metadata:
       aws:cdk:path: PrivateSubnetCfnTemplate/PrivateSubnet4RouteTableAssociation
+    Condition: HasAZ4
+  EksPrivateRouteTable4:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      Tags:
+        - Key: aws-sagemaker-hyperpod-prerequiste
+          Value:
+            Fn::Sub: ${ResourceNamePrefix}-EKS-Private-RT-4
+      VpcId:
+        Ref: VpcId
+    Metadata:
+      aws:cdk:path: PrivateSubnetCfnTemplate/EksPrivateRouteTable4
+  PrivateEksSubnet4RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId:
+        Ref: EksPrivateRouteTable4
+      SubnetId:
+        Ref: EksPrivateSubnet4
+    Metadata:
+      aws:cdk:path: PrivateSubnetCfnTemplate/PrivateEksSubnet4RouteTableAssociation
     Condition: HasAZ4
   DefaultPrivateRoute4:
     Type: AWS::EC2::Route
@@ -624,6 +708,27 @@ Resources:
     Metadata:
       aws:cdk:path: PrivateSubnetCfnTemplate/PrivateSubnet5RouteTableAssociation
     Condition: HasAZ5
+  EksPrivateRouteTable5:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      Tags:
+        - Key: aws-sagemaker-hyperpod-prerequiste
+          Value:
+            Fn::Sub: ${ResourceNamePrefix}-EKS-Private-RT-5
+      VpcId:
+        Ref: VpcId
+    Metadata:
+      aws:cdk:path: PrivateSubnetCfnTemplate/EksPrivateRouteTable5
+  PrivateEksSubnet5RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId:
+        Ref: EksPrivateRouteTable5
+      SubnetId:
+        Ref: EksPrivateSubnet5
+    Metadata:
+      aws:cdk:path: PrivateSubnetCfnTemplate/PrivateEksSubnet5RouteTableAssociation
+    Condition: HasAZ5
   DefaultPrivateRoute5:
     Type: AWS::EC2::Route
     Properties:
@@ -687,6 +792,31 @@ Outputs:
           - Fn::If:
               - HasAZ5
               - Ref: PrivateSubnet5
+              - Ref: AWS::NoValue
+  EksPrivateRouteTableIds:
+    Description: Private Eks Route Table Id
+    Value:
+      Fn::Join:
+        - ','
+        - - Fn::If:
+              - HasAZ1
+              - Ref: EksPrivateRouteTable1
+              - Ref: AWS::NoValue
+          - Fn::If:
+              - HasAZ2
+              - Ref: EksPrivateRouteTable2
+              - Ref: AWS::NoValue
+          - Fn::If:
+              - HasAZ3
+              - Ref: EksPrivateRouteTable3
+              - Ref: AWS::NoValue
+          - Fn::If:
+              - HasAZ4
+              - Ref: EksPrivateRouteTable4
+              - Ref: AWS::NoValue
+          - Fn::If:
+              - HasAZ5
+              - Ref: EksPrivateRouteTable5
               - Ref: AWS::NoValue
   EksPrivateSubnetIds:
     Description: Comma-delimited list of created Eks Private Subnet IDs
