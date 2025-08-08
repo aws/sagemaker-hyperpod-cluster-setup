@@ -1,0 +1,653 @@
+Description: Main Stack for Slurm based HyperPod Cluster
+Metadata:
+  AWS::CloudFormation::Interface:
+    ParameterGroups:
+      - Label:
+          default: General Settings
+        Parameters:
+          - ResourceNamePrefix
+          - Stage
+          - CustomBucketName
+          - NodeRecovery
+          - Tags
+      - Label:
+          default: HyperPod Cluster
+        Parameters:
+          - CreateHyperPodClusterStack
+          - HyperPodClusterName
+      - Label:
+          default: Networking
+        Parameters:
+          - CreateVPCStack
+          - VpcId
+          - VpcCIDR
+          - AvailabilityZoneIds
+          - CreateSecurityGroupStack
+          - SecurityGroupId
+          - PrivateSubnetIds
+      - Label:
+          default: Lifecycle Configuration
+        Parameters:
+          - CreateLifeCycleScriptStack
+          - CreateS3BucketStack
+          - S3BucketName
+          - OnCreatePath
+      - Label:
+          default: Permissions
+        Parameters:
+          - CreateSageMakerIAMRoleStack
+          - SageMakerIAMRoleName
+      - Label:
+          default: Storage
+        Parameters:
+          - CreateFsxStack
+          - FsxFileSystemId
+          - FsxSubnetId
+          - FsxAvailabilityZoneId
+          - StorageCapacity
+          - PerUnitStorageThroughput
+          - DataCompressionType
+          - FileSystemTypeVersion
+      - Label:
+          default: Instance Groups
+        Parameters:
+          - InstanceGroupSettings1
+          - InstanceGroupSettings2
+          - InstanceGroupSettings3
+          - InstanceGroupSettings4
+          - InstanceGroupSettings5
+          - InstanceGroupSettings6
+          - InstanceGroupSettings7
+          - InstanceGroupSettings8
+          - InstanceGroupSettings9
+          - InstanceGroupSettings10
+          - InstanceGroupSettings11
+          - InstanceGroupSettings12
+          - InstanceGroupSettings13
+          - InstanceGroupSettings14
+          - InstanceGroupSettings15
+          - InstanceGroupSettings16
+          - InstanceGroupSettings17
+          - InstanceGroupSettings18
+          - InstanceGroupSettings19
+          - InstanceGroupSettings20
+    ParameterLabels:
+      ResourceNamePrefix:
+        default: Resource Name Prefix
+      Stage:
+        default: Deployment Stage
+      CustomBucketName:
+        default: Custom S3 Bucket Name
+      NodeRecovery:
+        default: Instance Recovery
+      Tags:
+        default: Resource Tags
+      CreateHyperPodClusterStack:
+        default: Create HyperPod Cluster
+      HyperPodClusterName:
+        default: HyperPod Cluster Name
+      CreateVPCStack:
+        default: Create New VPC
+      VpcId:
+        default: Existing VPC ID
+      VpcCIDR:
+        default: VPC CIDR Range
+      AvailabilityZoneIds:
+        default: Availability Zone IDs
+      CreateSecurityGroupStack:
+        default: Create New Security Group
+      SecurityGroupId:
+        default: Existing Security Group ID
+      PrivateSubnetIds:
+        default: Private Subnet IDs
+      CreateLifeCycleScriptStack:
+        default: Create Lifecycle Scripts
+      CreateS3BucketStack:
+        default: Create New S3 Bucket
+      S3BucketName:
+        default: S3 Bucket Name
+      OnCreatePath:
+        default: OnCreate Script Path
+      CreateSageMakerIAMRoleStack:
+        default: Create New IAM Role
+      SageMakerIAMRoleName:
+        default: IAM Role Name
+      CreateFsxStack:
+        default: Create New FSx for Lustre File System
+      FsxFileSystemId:
+        default: Existing FSx File System ID
+      FsxSubnetId:
+        default: FSx Subnet ID
+      FsxAvailabilityZoneId:
+        default: FSx Availability Zone
+      StorageCapacity:
+        default: Storage Capacity (GB)
+      PerUnitStorageThroughput:
+        default: Per-unit Storage Throughput (MB/s/TiB)
+      DataCompressionType:
+        default: Compression Type
+      FileSystemTypeVersion:
+        default: Lustre Version
+Parameters:
+  Stage:
+    Type: String
+    Default: prod
+    AllowedValues:
+      - gamma
+      - prod
+    Description: Deployment stage (gamma, prod)
+  ResourceNamePrefix:
+    Type: String
+    Default: sagemaker-hyperpod-slurm
+    Description: Prefix to be used for all resources created by this template.
+  CustomBucketName:
+    Type: String
+    Default: ''
+    Description: Custom S3 bucket name to use for templates
+  HyperPodClusterName:
+    Type: String
+    Default: slurm-hyper-pod
+    Description: Name of SageMaker HyperPod Cluster.
+  Tags:
+    Type: String
+    Default: ''
+    Description: Custom tags for managing the SageMaker HyperPod cluster as an AWS resource.
+  VpcId:
+    Type: String
+    Default: vpc-1234567890abcdef0
+    Description: The ID of the VPC you wish to use if you do not want to create a new VPC.
+  VpcCIDR:
+    Type: String
+    Default: 10.192.0.0/16
+    Description: The IP range (CIDR notation) for the VPC.
+  AvailabilityZoneIds:
+    Type: String
+    Default: use2-az1,use2-az2
+    Description: List of AZs to deploy subnets in (up to 5, comma separated)
+  SecurityGroupId:
+    Type: String
+    Default: ''
+    Description: The Id of cluster security group chosen from existing security group
+  NodeRecovery:
+    Type: String
+    Default: Automatic
+    AllowedValues:
+      - Automatic
+      - None
+    Description: Specifies whether to enable or disable the automatic node recovery feature (Automatic or None).
+  SageMakerIAMRoleName:
+    Type: String
+    Default: role
+    Description: The name of the IAM role that SageMaker will use to access the AWS resources on your behalf.
+  S3BucketName:
+    Type: String
+    Default: bucket
+    Description: The name of the S3 bucket used to store the cluster lifecycle scripts.
+  OnCreatePath:
+    Type: String
+    Default: on_create.sh
+    Description: >-
+      The file name of lifecycle script for the general purpose instance group. This script runs during cluster
+      creation.
+  PrivateSubnetIds:
+    Type: String
+    Default: ''
+    Description: Comma-separated list of private subnet IDs for EKS cluster.
+  FsxSubnetId:
+    Type: String
+    Default: ''
+    Description: The subnet id that will be used to create FSx
+  FsxAvailabilityZoneId:
+    Type: String
+    Default: use2-az1
+    Description: The availability zone to get subnet id that will be used to create FSx
+  PerUnitStorageThroughput:
+    Type: Number
+    Default: 250
+    Description: Per unit storage throughput for the FSx file system
+  DataCompressionType:
+    Type: String
+    Default: NONE
+    AllowedValues:
+      - NONE
+      - LZ4
+    Description: Data compression type for the FSx file system (NONE, LZ4)
+  FileSystemTypeVersion:
+    Type: Number
+    Default: 2.15
+    Description: File system type version for the FSx file system
+  StorageCapacity:
+    Type: Number
+    Default: 1200
+    Description: Storage capacity for the FSx file system in GiB
+  FsxFileSystemId:
+    Type: String
+    Default: ''
+    Description: Existing FSx for Lustre file system
+  CreateVPCStack:
+    Type: String
+    Default: 'true'
+    AllowedValues:
+      - 'true'
+      - 'false'
+    Description: Boolean to Create VPC Stack
+  CreateLifeCycleScriptStack:
+    Type: String
+    Default: 'true'
+    AllowedValues:
+      - 'true'
+      - 'false'
+    Description: Boolean to Create Life Cycle Script Stack
+  CreateS3BucketStack:
+    Type: String
+    Default: 'true'
+    AllowedValues:
+      - 'true'
+      - 'false'
+    Description: Boolean to Create a new bucket for Life Cycle Script
+  CreateSecurityGroupStack:
+    Type: String
+    Default: 'true'
+    AllowedValues:
+      - 'true'
+      - 'false'
+    Description: Boolean to Create Security Group Stack
+  CreateSageMakerIAMRoleStack:
+    Type: String
+    Default: 'true'
+    AllowedValues:
+      - 'true'
+      - 'false'
+    Description: Boolean to Create SageMaker IAM Role Stack
+  CreateFsxStack:
+    Type: String
+    Default: 'true'
+    AllowedValues:
+      - 'true'
+      - 'false'
+    Description: Boolean to Create FSx for Lustre File System Stack
+  CreateHyperPodClusterStack:
+    Type: String
+    Default: 'true'
+    AllowedValues:
+      - 'true'
+      - 'false'
+    Description: Boolean to Create HyperPod Cluster Stack
+  InstanceGroupSettings1:
+    Type: String
+    Default: >-
+      [[{"InstanceGroupName":"controller-machine","InstanceType":"ml.c5.xlarge","InstanceGroupType":"Controller","InstanceCount":1,"ThreadsPerCore":1,"TargetAvailabilityZoneId":"use2-az1"}],[{"InstanceGroupName":"compute-nodes","InstanceGroupType":"Compute","InstanceType":"ml.t3.medium","InstanceCount":4,"ThreadsPerCore":1,"TargetAvailabilityZoneId":"use2-az1"}]]
+    Description: JSON array string containing instance group configurations.
+  InstanceGroupSettings2:
+    Type: String
+    Default: '[]'
+    Description: JSON array string containing instance group configurations.
+  InstanceGroupSettings3:
+    Type: String
+    Default: '[]'
+    Description: JSON array string containing instance group configurations.
+  InstanceGroupSettings4:
+    Type: String
+    Default: '[]'
+    Description: JSON array string containing instance group configurations.
+  InstanceGroupSettings5:
+    Type: String
+    Default: '[]'
+    Description: JSON array string containing instance group configurations.
+  InstanceGroupSettings6:
+    Type: String
+    Default: '[]'
+    Description: JSON array string containing instance group configurations.
+  InstanceGroupSettings7:
+    Type: String
+    Default: '[]'
+    Description: JSON array string containing instance group configurations.
+  InstanceGroupSettings8:
+    Type: String
+    Default: '[]'
+    Description: JSON array string containing instance group configurations.
+  InstanceGroupSettings9:
+    Type: String
+    Default: '[]'
+    Description: JSON array string containing instance group configurations.
+  InstanceGroupSettings10:
+    Type: String
+    Default: '[]'
+    Description: JSON array string containing instance group configurations.
+  InstanceGroupSettings11:
+    Type: String
+    Default: '[]'
+    Description: JSON array string containing instance group configurations.
+  InstanceGroupSettings12:
+    Type: String
+    Default: '[]'
+    Description: JSON array string containing instance group configurations.
+  InstanceGroupSettings13:
+    Type: String
+    Default: '[]'
+    Description: JSON array string containing instance group configurations.
+  InstanceGroupSettings14:
+    Type: String
+    Default: '[]'
+    Description: JSON array string containing instance group configurations.
+  InstanceGroupSettings15:
+    Type: String
+    Default: '[]'
+    Description: JSON array string containing instance group configurations.
+  InstanceGroupSettings16:
+    Type: String
+    Default: '[]'
+    Description: JSON array string containing instance group configurations.
+  InstanceGroupSettings17:
+    Type: String
+    Default: '[]'
+    Description: JSON array string containing instance group configurations.
+  InstanceGroupSettings18:
+    Type: String
+    Default: '[]'
+    Description: JSON array string containing instance group configurations.
+  InstanceGroupSettings19:
+    Type: String
+    Default: '[]'
+    Description: JSON array string containing instance group configurations.
+  InstanceGroupSettings20:
+    Type: String
+    Default: '[]'
+    Description: JSON array string containing instance group configurations.
+Conditions:
+  CreateVPCStackCondition:
+    Fn::Equals:
+      - Ref: CreateVPCStack
+      - 'true'
+  CreateLifeCycleScriptStackCondition:
+    Fn::Equals:
+      - Ref: CreateLifeCycleScriptStack
+      - 'true'
+  CreateS3BucketStackCondition:
+    Fn::Equals:
+      - Ref: CreateS3BucketStack
+      - 'true'
+  CreateSecurityGroupStackCondition:
+    Fn::Equals:
+      - Ref: CreateSecurityGroupStack
+      - 'true'
+  CreateSageMakerIAMRoleStackCondition:
+    Fn::Equals:
+      - Ref: CreateSageMakerIAMRoleStack
+      - 'true'
+  CreateFsxStackCondition:
+    Fn::Equals:
+      - Ref: CreateFsxStack
+      - 'true'
+  CustomBucketCondition:
+    Fn::Not:
+      - Fn::Equals:
+          - Ref: CustomBucketName
+          - ''
+  CreateHyperPodClusterStackCondition:
+    Fn::Equals:
+      - Ref: CreateHyperPodClusterStack
+      - 'true'
+Resources:
+  VPCStack:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL:
+        Fn::If:
+          - CustomBucketCondition
+          - Fn::Sub: https://${CustomBucketName}.s3.${AWS::Region}.amazonaws.com/templates-slurm/slurm-vpc-template.yaml
+          - Fn::Sub: >-
+              https://aws-sagemaker-hyperpod-cluster-setup-${AWS::Region}-${Stage}.s3.${AWS::Region}.amazonaws.com/templates-slurm/slurm-vpc-template.yaml
+      Parameters:
+        ResourceNamePrefix:
+          Ref: ResourceNamePrefix
+        VpcCIDR:
+          Ref: VpcCIDR
+        AvailabilityZoneIds:
+          Fn::Join:
+            - ','
+            - - Ref: AvailabilityZoneIds
+              - ',,,'
+    Metadata:
+      aws:cdk:path: MainSlurmBasedCfnTemplate/VPCStack
+    Condition: CreateVPCStackCondition
+  SecurityGroupStack:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL:
+        Fn::If:
+          - CustomBucketCondition
+          - Fn::Sub: >-
+              https://${CustomBucketName}.s3.${AWS::Region}.amazonaws.com/templates-slurm/slurm-security-group-template.yaml
+          - Fn::Sub: >-
+              https://aws-sagemaker-hyperpod-cluster-setup-${AWS::Region}-${Stage}.s3.${AWS::Region}.amazonaws.com/templates-slurm/slurm-security-group-template.yaml
+      Parameters:
+        ResourceNamePrefix:
+          Ref: ResourceNamePrefix
+        VpcId:
+          Fn::If:
+            - CreateVPCStackCondition
+            - Fn::GetAtt:
+                - VPCStack
+                - Outputs.VpcId
+            - Ref: VpcId
+    Metadata:
+      aws:cdk:path: MainSlurmBasedCfnTemplate/SecurityGroupStack
+    Condition: CreateSecurityGroupStackCondition
+  LifeCycleScriptStack:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL:
+        Fn::If:
+          - CustomBucketCondition
+          - Fn::Sub: >-
+              https://${CustomBucketName}.s3.${AWS::Region}.amazonaws.com/templates-slurm/slurm-lifecycle-script-template.yaml
+          - Fn::Sub: >-
+              https://aws-sagemaker-hyperpod-cluster-setup-${AWS::Region}-${Stage}.s3.${AWS::Region}.amazonaws.com/templates-slurm/slurm-lifecycle-script-template.yaml
+      Parameters:
+        ResourceNamePrefix:
+          Ref: ResourceNamePrefix
+        CreateNewS3Bucket:
+          Fn::If:
+            - CreateS3BucketStackCondition
+            - 'true'
+            - 'false'
+        S3BucketName:
+          Ref: S3BucketName
+    Metadata:
+      aws:cdk:path: MainSlurmBasedCfnTemplate/LifeCycleScriptStack
+    Condition: CreateLifeCycleScriptStackCondition
+  IamRoleStack:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL:
+        Fn::If:
+          - CustomBucketCondition
+          - Fn::Sub: https://${CustomBucketName}.s3.${AWS::Region}.amazonaws.com/templates-slurm/slurm-iam-role-template.yaml
+          - Fn::Sub: >-
+              https://aws-sagemaker-hyperpod-cluster-setup-${AWS::Region}-${Stage}.s3.${AWS::Region}.amazonaws.com/templates-slurm/slurm-iam-role-template.yaml
+      Parameters:
+        ResourceNamePrefix:
+          Ref: ResourceNamePrefix
+        S3BucketName:
+          Fn::If:
+            - CreateLifeCycleScriptStackCondition
+            - Fn::GetAtt:
+                - LifeCycleScriptStack
+                - Outputs.SlurmLifeCycleScriptSourceS3BucketName
+            - Ref: S3BucketName
+    Metadata:
+      aws:cdk:path: MainSlurmBasedCfnTemplate/IamRoleStack
+    Condition: CreateSageMakerIAMRoleStackCondition
+  FsxStack:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL:
+        Fn::If:
+          - CustomBucketCondition
+          - Fn::Sub: https://${CustomBucketName}.s3.${AWS::Region}.amazonaws.com/templates-slurm/slurm-fsx-template.yaml
+          - Fn::Sub: >-
+              https://aws-sagemaker-hyperpod-cluster-setup-${AWS::Region}-${Stage}.s3.${AWS::Region}.amazonaws.com/templates-slurm/slurm-fsx-template.yaml
+      Parameters:
+        ResourceNamePrefix:
+          Ref: ResourceNamePrefix
+        PrivateSubnetIds:
+          Fn::If:
+            - CreateVPCStackCondition
+            - Fn::GetAtt:
+                - VPCStack
+                - Outputs.PrivateSubnetIds
+            - Ref: PrivateSubnetIds
+        FsxSubnetId:
+          Ref: FsxSubnetId
+        FsxAvailabilityZoneId:
+          Ref: FsxAvailabilityZoneId
+        SecurityGroupIds:
+          Fn::If:
+            - CreateSecurityGroupStackCondition
+            - Fn::GetAtt:
+                - SecurityGroupStack
+                - Outputs.SlurmSecurityGroupId
+            - Ref: SecurityGroupId
+        PerUnitStorageThroughput:
+          Ref: PerUnitStorageThroughput
+        DataCompressionType:
+          Ref: DataCompressionType
+        FileSystemTypeVersion:
+          Ref: FileSystemTypeVersion
+        StorageCapacity:
+          Ref: StorageCapacity
+        FsxFileSystemId:
+          Ref: FsxFileSystemId
+    Metadata:
+      aws:cdk:path: MainSlurmBasedCfnTemplate/FsxStack
+    Condition: CreateFsxStackCondition
+  HyperPodParamClusterStack:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL:
+        Fn::If:
+          - CustomBucketCondition
+          - Fn::Sub: >-
+              https://${CustomBucketName}.s3.${AWS::Region}.amazonaws.com/templates-slurm/slurm-hyperpod-cluster-template.yaml
+          - Fn::Sub: >-
+              https://aws-sagemaker-hyperpod-cluster-setup-${AWS::Region}-${Stage}.s3.${AWS::Region}.amazonaws.com/templates-slurm/slurm-hyperpod-cluster-template.yaml
+      Parameters:
+        ResourceNamePrefix:
+          Ref: ResourceNamePrefix
+        EnabledFsx:
+          Fn::If:
+            - CreateFsxStackCondition
+            - 'true'
+            - 'false'
+        HyperPodClusterName:
+          Ref: HyperPodClusterName
+        NodeRecovery:
+          Ref: NodeRecovery
+        SecurityGroupIds:
+          Fn::If:
+            - CreateSecurityGroupStackCondition
+            - Fn::GetAtt:
+                - SecurityGroupStack
+                - Outputs.SlurmSecurityGroupId
+            - Ref: SecurityGroupId
+        PrivateSubnetIds:
+          Fn::If:
+            - CreateVPCStackCondition
+            - Fn::GetAtt:
+                - VPCStack
+                - Outputs.PrivateSubnetIds
+            - Ref: PrivateSubnetIds
+        CustomResourceS3Bucket:
+          Fn::If:
+            - CustomBucketCondition
+            - Ref: CustomBucketName
+            - Fn::Sub: aws-sagemaker-hyperpod-cluster-setup-${AWS::Region}-${Stage}
+        SageMakerIAMRoleName:
+          Fn::If:
+            - CreateSageMakerIAMRoleStackCondition
+            - Fn::GetAtt:
+                - IamRoleStack
+                - Outputs.AmazonSagemakerClusterExecutionRoleName
+            - Ref: SageMakerIAMRoleName
+        S3BucketName:
+          Fn::If:
+            - CreateS3BucketStackCondition
+            - Fn::GetAtt:
+                - LifeCycleScriptStack
+                - Outputs.SlurmLifeCycleScriptSourceS3BucketName
+            - Ref: S3BucketName
+        OnCreatePath:
+          Fn::If:
+            - CreateS3BucketStackCondition
+            - on_create.sh
+            - Ref: OnCreatePath
+        InstanceGroupSettings1:
+          Ref: InstanceGroupSettings1
+        InstanceGroupSettings2:
+          Ref: InstanceGroupSettings2
+        InstanceGroupSettings3:
+          Ref: InstanceGroupSettings3
+        InstanceGroupSettings4:
+          Ref: InstanceGroupSettings4
+        InstanceGroupSettings5:
+          Ref: InstanceGroupSettings5
+        InstanceGroupSettings6:
+          Ref: InstanceGroupSettings6
+        InstanceGroupSettings7:
+          Ref: InstanceGroupSettings7
+        InstanceGroupSettings8:
+          Ref: InstanceGroupSettings8
+        InstanceGroupSettings9:
+          Ref: InstanceGroupSettings9
+        InstanceGroupSettings10:
+          Ref: InstanceGroupSettings10
+        InstanceGroupSettings11:
+          Ref: InstanceGroupSettings11
+        InstanceGroupSettings12:
+          Ref: InstanceGroupSettings12
+        InstanceGroupSettings13:
+          Ref: InstanceGroupSettings13
+        InstanceGroupSettings14:
+          Ref: InstanceGroupSettings14
+        InstanceGroupSettings15:
+          Ref: InstanceGroupSettings15
+        InstanceGroupSettings16:
+          Ref: InstanceGroupSettings16
+        InstanceGroupSettings17:
+          Ref: InstanceGroupSettings17
+        InstanceGroupSettings18:
+          Ref: InstanceGroupSettings18
+        InstanceGroupSettings19:
+          Ref: InstanceGroupSettings19
+        InstanceGroupSettings20:
+          Ref: InstanceGroupSettings20
+        Tags:
+          Ref: Tags
+        FsxDnsName:
+          Fn::If:
+            - CreateFsxStackCondition
+            - Fn::GetAtt:
+                - FsxStack
+                - Outputs.FSxLustreFileSystemDNSName
+            - ''
+        FsxMountName:
+          Fn::If:
+            - CreateFsxStackCondition
+            - Fn::GetAtt:
+                - FsxStack
+                - Outputs.FSxLustreFileSystemMountName
+            - ''
+    Metadata:
+      aws:cdk:path: MainSlurmBasedCfnTemplate/HyperPodParamClusterStack
+    Condition: CreateHyperPodClusterStackCondition
+  HyperPodClusterStack:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL:
+        Fn::GetAtt:
+          - HyperPodParamClusterStack
+          - Outputs.HyperPodClusterTemplateUrlOutput
+    Metadata:
+      aws:cdk:path: MainSlurmBasedCfnTemplate/HyperPodClusterStack
+    Condition: CreateHyperPodClusterStackCondition

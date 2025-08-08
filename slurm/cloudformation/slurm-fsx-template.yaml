@@ -1,0 +1,293 @@
+Description: FSx for Lustre File System Stack for SageMaker HyperPod with Slurm
+Parameters:
+  ResourceNamePrefix:
+    Type: String
+    Default: sagemaker-hyperpod-slurm
+    Description: Prefix to be used for all resources created by this template.
+  FsxFileSystemId:
+    Type: String
+    Default: ''
+    Description: Existing FSx for Lustre file system
+  FsxSubnetId:
+    Type: String
+    Default: ''
+    Description: The subnet id that will be used to create FSx
+  FsxAvailabilityZoneId:
+    Type: String
+    Default: ''
+    Description: The availability zone id to get subnet id that will be used to create FSx
+  PrivateSubnetIds:
+    Type: String
+    Default: ''
+    Description: Comma-separated list of private subnet IDs
+  SecurityGroupIds:
+    Type: CommaDelimitedList
+    Default: ''
+    Description: Comma-separated list of security group IDs for the FSx file system
+  StorageCapacity:
+    Type: Number
+    Default: 1200
+    Description: Storage capacity for the FSx file system in GiB (1200 or increments of 2400)
+  PerUnitStorageThroughput:
+    Type: Number
+    Default: 250
+    AllowedValues:
+      - '125'
+      - '250'
+      - '500'
+      - '1000'
+    Description: Provisioned Read/Write throughput (MB/s/TiB)
+  DataCompressionType:
+    Type: String
+    Default: LZ4
+    AllowedValues:
+      - LZ4
+      - NONE
+    Description: Data compression type for the FSx file system
+  FileSystemTypeVersion:
+    Type: Number
+    Default: 2.15
+    Description: File system type version for the FSx file system
+Conditions:
+  UseFsxFileSystemIdCondition:
+    Fn::Not:
+      - Fn::Equals:
+          - Ref: FsxFileSystemId
+          - ''
+  FsxSubnetIdIsEmptyCondition:
+    Fn::Equals:
+      - Ref: FsxSubnetId
+      - ''
+  CreateNewFsxCondition:
+    Fn::Not:
+      - Condition: UseFsxFileSystemIdCondition
+Resources:
+  FsxLambdaExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Path: /
+      Policies:
+        - PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action:
+                  - ec2:DescribeSubnets
+                  - ec2:DescribeAvailabilityZones
+                  - fsx:DescribeFileSystems
+                Resource: '*'
+          PolicyName: FsxLambdaPolicy
+    Metadata:
+      aws:cdk:path: SlurmFsxCfnTemplate/FsxLambdaExecutionRole
+  FsxHelperFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      Code:
+        ZipFile: |
+          import boto3
+          import cfnresponse
+          import json
+          import logging
+
+          logger = logging.getLogger()
+          logger.setLevel(logging.INFO)
+
+          def handler(event, context):
+              logger.info(f"Received event: {json.dumps(event)}")
+              
+              response_data = {}
+              
+              # Return immediately if this is a DELETE request
+              if event.get('RequestType') == 'Delete':
+                  logger.info("Delete request received. Returning early.")
+                  cfnresponse.send(event, context, cfnresponse.SUCCESS, {})
+                  return
+              
+              try:
+                  # Extract parameters
+                  properties = event['ResourceProperties']
+                  fsxFileSystemId = properties.get('FsxFileSystemId', '')
+                  fsxSubnetId = properties.get('FsxSubnetId', '')
+                  fsxAvailabilityZoneId = properties.get('FsxAvailabilityZoneId', '')
+                  privateSubnetIds = properties.get('PrivateSubnetIds', '').split(',')
+                  
+                  # Check if we need to find a subnet or describe FSx
+                  if fsxFileSystemId == '':
+                      # No FSx file system ID provided, we may need to find a subnet
+                      if fsxSubnetId == '':
+                          # Need to find a subnet in the specified AZ
+                          ec2 = boto3.client('ec2')
+                          selected_subnet = None
+                          
+                          logger.info(f"Finding subnet in AZ ID: {fsxAvailabilityZoneId}")
+                          logger.info(f"Available private subnets: {privateSubnetIds}")
+                          
+                          if fsxAvailabilityZoneId and privateSubnetIds:
+                              for subnet_id in privateSubnetIds:
+                                  try:
+                                      subnet_info = ec2.describe_subnets(SubnetIds=[subnet_id.strip()])
+                                      if subnet_info['Subnets']:
+                                          subnet = subnet_info['Subnets'][0]
+                                          if subnet['AvailabilityZoneId'] == fsxAvailabilityZoneId:
+                                              selected_subnet = subnet_id.strip()
+                                              logger.info(f"Selected subnet {selected_subnet} in AZ ID {fsxAvailabilityZoneId}")
+                                              break
+                                  except Exception as e:
+                                      logger.error(f"Error checking subnet {subnet_id}: {str(e)}")
+                          
+                          if selected_subnet:
+                              response_data['SubnetId'] = selected_subnet
+                          else:
+                              error_msg = f"No subnet found in availability zone ID {fsxAvailabilityZoneId}"
+                              logger.error(error_msg)
+                              cfnresponse.send(event, context, cfnresponse.FAILED, {'Error': error_msg})
+                              return
+                      else:
+                          # Use provided subnet ID
+                          response_data['SubnetId'] = fsxSubnetId
+                  else:
+                      # FSx file system ID provided, get the mount name
+                      fsx = boto3.client('fsx')
+                      try:
+                          response = fsx.describe_file_systems(FileSystemIds=[fsxFileSystemId])
+                          if response['FileSystems']:
+                              fs = response['FileSystems'][0]
+                              if 'LustreConfiguration' in fs:
+                                  mount_name = fs['LustreConfiguration'].get('MountName', '')
+                                  response_data['FSxMountName'] = mount_name
+                                  response_data['FileSystemId'] = fsxFileSystemId
+                                  logger.info(f"Found FSx file system {fsxFileSystemId} with mount name {mount_name}")
+                              else:
+                                  error_msg = f"The file system {fsxFileSystemId} is not a Lustre file system"
+                                  logger.error(error_msg)
+                                  cfnresponse.send(event, context, cfnresponse.FAILED, {'Error': error_msg})
+                                  return
+                          else:
+                              error_msg = f"FSx file system {fsxFileSystemId} not found"
+                              logger.error(error_msg)
+                              cfnresponse.send(event, context, cfnresponse.FAILED, {'Error': error_msg})
+                              return
+                      except Exception as e:
+                          error_msg = f"Error describing FSx file system: {str(e)}"
+                          logger.error(error_msg)
+                          cfnresponse.send(event, context, cfnresponse.FAILED, {'Error': error_msg})
+                          return
+                  
+                  # Send success response
+                  cfnresponse.send(event, context, cfnresponse.SUCCESS, response_data)
+                  
+              except Exception as e:
+                  logger.error(f"Exception: {str(e)}")
+                  cfnresponse.send(event, context, cfnresponse.FAILED, {'Error': str(e)})
+      Handler: index.handler
+      Role:
+        Fn::GetAtt:
+          - FsxLambdaExecutionRole
+          - Arn
+      Runtime: python3.10
+      Timeout: 60
+    Metadata:
+      aws:cdk:path: SlurmFsxCfnTemplate/FsxHelperFunction
+  FsxHelperResource:
+    Type: AWS::CloudFormation::CustomResource
+    Properties:
+      ServiceToken:
+        Fn::GetAtt:
+          - FsxHelperFunction
+          - Arn
+      FsxFileSystemId:
+        Ref: FsxFileSystemId
+      FsxSubnetId:
+        Ref: FsxSubnetId
+      FsxAvailabilityZoneId:
+        Ref: FsxAvailabilityZoneId
+      PrivateSubnetIds:
+        Ref: PrivateSubnetIds
+      Timestamp: '1754674130197'
+    Metadata:
+      aws:cdk:path: SlurmFsxCfnTemplate/FsxHelperResource
+  FSxLustreFileSystem:
+    Type: AWS::FSx::FileSystem
+    Properties:
+      FileSystemType: LUSTRE
+      FileSystemTypeVersion:
+        Ref: FileSystemTypeVersion
+      LustreConfiguration:
+        DataCompressionType:
+          Ref: DataCompressionType
+        DeploymentType: PERSISTENT_2
+        MetadataConfiguration:
+          Mode: AUTOMATIC
+        PerUnitStorageThroughput:
+          Ref: PerUnitStorageThroughput
+      SecurityGroupIds:
+        Ref: SecurityGroupIds
+      StorageCapacity:
+        Ref: StorageCapacity
+      StorageType: SSD
+      SubnetIds:
+        - Fn::If:
+            - FsxSubnetIdIsEmptyCondition
+            - Fn::GetAtt:
+                - FsxHelperResource
+                - SubnetId
+            - Ref: FsxSubnetId
+      Tags:
+        - Key: aws-sagemaker-hyperpod-prerequiste
+          Value:
+            Fn::Sub: ${ResourceNamePrefix}-fsx-lustre
+    Metadata:
+      aws:cdk:path: SlurmFsxCfnTemplate/FSxLustreFileSystem
+    Condition: CreateNewFsxCondition
+Outputs:
+  FSxLustreFileSystemId:
+    Description: The ID of the FSx for Lustre file system
+    Value:
+      Fn::If:
+        - UseFsxFileSystemIdCondition
+        - Ref: FsxFileSystemId
+        - Ref: FSxLustreFileSystem
+    Export:
+      Name:
+        Fn::Sub: ${AWS::StackName}-FSxLustreFileSystemId
+  FSxLustreFileSystemDNSName:
+    Description: The DNS name of the FSx for Lustre file system
+    Value:
+      Fn::If:
+        - UseFsxFileSystemIdCondition
+        - Fn::Sub:
+            - ${FsxFileSystemId}.fsx.${AWS::Region}.amazonaws.com
+            - FsxFileSystemId:
+                Ref: FsxFileSystemId
+        - Fn::GetAtt:
+            - FSxLustreFileSystem
+            - DNSName
+    Export:
+      Name:
+        Fn::Sub: ${AWS::StackName}-FSxLustreFileSystemDNSName
+  FSxLustreFileSystemMountName:
+    Description: The mount name of the FSx for Lustre file system
+    Value:
+      Fn::If:
+        - UseFsxFileSystemIdCondition
+        - Fn::GetAtt:
+            - FsxHelperResource
+            - FSxMountName
+        - Fn::GetAtt:
+            - FSxLustreFileSystem
+            - LustreMountName
+    Export:
+      Name:
+        Fn::Sub: ${AWS::StackName}-FSxLustreFileSystemMountName
+  FsxDeploymentComplete:
+    Description: Indicates FSx deployment is complete
+    Value: FsxDeploymentComplete

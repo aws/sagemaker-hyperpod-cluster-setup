@@ -1,0 +1,991 @@
+Description: VPC Stack for Slurm
+Parameters:
+  ResourceNamePrefix:
+    Type: String
+    Default: sagemaker-hyperpod-slurm
+    Description: Prefix to be used for all resources created by this template.
+  VpcCIDR:
+    Type: String
+    Default: 10.192.0.0/16
+    Description: The IP range (CIDR notation) for the VPC.
+  AvailabilityZoneIds:
+    Type: CommaDelimitedList
+    Default: use2-az2,,,,
+    Description: List of AZs to deploy subnets in (up to 5)
+Conditions:
+  IsVpcCidr101:
+    Fn::Equals:
+      - Ref: VpcCIDR
+      - 10.1.0.0/16
+  HasAZ1:
+    Fn::Not:
+      - Fn::Equals:
+          - Fn::Select:
+              - 0
+              - Ref: AvailabilityZoneIds
+          - ''
+  HasAZ2:
+    Fn::Not:
+      - Fn::Equals:
+          - Fn::Select:
+              - 1
+              - Ref: AvailabilityZoneIds
+          - ''
+  HasAZ3:
+    Fn::Not:
+      - Fn::Equals:
+          - Fn::Select:
+              - 2
+              - Ref: AvailabilityZoneIds
+          - ''
+  HasAZ4:
+    Fn::Not:
+      - Fn::Equals:
+          - Fn::Select:
+              - 3
+              - Ref: AvailabilityZoneIds
+          - ''
+  HasAZ5:
+    Fn::Not:
+      - Fn::Equals:
+          - Fn::Select:
+              - 4
+              - Ref: AvailabilityZoneIds
+          - ''
+Resources:
+  VPC:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock:
+        Ref: VpcCIDR
+      EnableDnsHostnames: true
+      EnableDnsSupport: true
+      Tags:
+        - Key: aws-sagemaker-hyperpod-prerequiste
+          Value:
+            Fn::Sub: ${ResourceNamePrefix}-VPC
+    Metadata:
+      aws:cdk:path: SlurmVpcCfnTemplate/VPC
+  InternetGateway:
+    Type: AWS::EC2::InternetGateway
+    Properties:
+      Tags:
+        - Key: aws-sagemaker-hyperpod-prerequiste
+          Value:
+            Fn::Sub: ${ResourceNamePrefix}-IGW
+    Metadata:
+      aws:cdk:path: SlurmVpcCfnTemplate/InternetGateway
+  InternetGatewayAttachment:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      InternetGatewayId:
+        Ref: InternetGateway
+      VpcId:
+        Ref: VPC
+    Metadata:
+      aws:cdk:path: SlurmVpcCfnTemplate/InternetGatewayAttachment
+  FlowLogsRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: vpc-flow-logs.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                  - logs:DescribeLogGroups
+                  - logs:DescribeLogStreams
+                Resource:
+                  Fn::GetAtt:
+                    - FlowLogsGroup
+                    - Arn
+          PolicyName: flowlogs-policy
+    Metadata:
+      aws:cdk:path: SlurmVpcCfnTemplate/FlowLogsRole
+  FlowLogsGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      RetentionInDays: 7
+    Metadata:
+      aws:cdk:path: SlurmVpcCfnTemplate/FlowLogsGroup
+  FlowLogVPC:
+    Type: AWS::EC2::FlowLog
+    Properties:
+      DeliverLogsPermissionArn:
+        Fn::GetAtt:
+          - FlowLogsRole
+          - Arn
+      LogGroupName:
+        Fn::Sub: ${ResourceNamePrefix}-FlowLogsGroup
+      ResourceId:
+        Ref: VPC
+      ResourceType: VPC
+      TrafficType: ALL
+    Metadata:
+      aws:cdk:path: SlurmVpcCfnTemplate/FlowLogVPC
+  PublicRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      Tags:
+        - Key: Name
+          Value:
+            Fn::Sub: ${ResourceNamePrefix}-Public-Routes
+      VpcId:
+        Ref: VPC
+    Metadata:
+      aws:cdk:path: SlurmVpcCfnTemplate/PublicRouteTable
+  DefaultPublicRoute:
+    Type: AWS::EC2::Route
+    Properties:
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId:
+        Ref: InternetGateway
+      RouteTableId:
+        Ref: PublicRouteTable
+    DependsOn:
+      - InternetGatewayAttachment
+    Metadata:
+      aws:cdk:path: SlurmVpcCfnTemplate/DefaultPublicRoute
+  PublicSubnet1:
+    Type: AWS::EC2::Subnet
+    Properties:
+      AvailabilityZoneId:
+        Fn::Select:
+          - 0
+          - Ref: AvailabilityZoneIds
+      CidrBlock:
+        Fn::Join:
+          - ''
+          - - Fn::Select:
+                - 0
+                - Fn::Split:
+                    - .
+                    - Fn::Select:
+                        - 0
+                        - Fn::Split:
+                            - /
+                            - Ref: VpcCIDR
+            - .
+            - Fn::Select:
+                - 1
+                - Fn::Split:
+                    - .
+                    - Fn::Select:
+                        - 0
+                        - Fn::Split:
+                            - /
+                            - Ref: VpcCIDR
+            - .0.0/24
+      MapPublicIpOnLaunch: true
+      Tags:
+        - Key: Name
+          Value:
+            Fn::Sub: ${ResourceNamePrefix}-Public-Subnet1
+      VpcId:
+        Ref: VPC
+    Metadata:
+      aws:cdk:path: SlurmVpcCfnTemplate/PublicSubnet1
+    Condition: HasAZ1
+  NatGateway1EIP:
+    Type: AWS::EC2::EIP
+    Properties:
+      Domain: vpc
+    DependsOn:
+      - InternetGatewayAttachment
+    Metadata:
+      aws:cdk:path: SlurmVpcCfnTemplate/NatGateway1EIP
+    Condition: HasAZ1
+  NatGateway1:
+    Type: AWS::EC2::NatGateway
+    Properties:
+      AllocationId:
+        Fn::GetAtt:
+          - NatGateway1EIP
+          - AllocationId
+      SubnetId:
+        Ref: PublicSubnet1
+    Metadata:
+      aws:cdk:path: SlurmVpcCfnTemplate/NatGateway1
+    Condition: HasAZ1
+  PublicSubnet1RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId:
+        Ref: PublicRouteTable
+      SubnetId:
+        Ref: PublicSubnet1
+    Metadata:
+      aws:cdk:path: SlurmVpcCfnTemplate/PublicSubnet1RouteTableAssociation
+    Condition: HasAZ1
+  AdditionalCidrBlock1:
+    Type: AWS::EC2::VPCCidrBlock
+    Properties:
+      AmazonProvidedIpv6CidrBlock: false
+      CidrBlock:
+        Fn::If:
+          - IsVpcCidr101
+          - 10.192.0.0/16
+          - 10.1.0.0/16
+      VpcId:
+        Ref: VPC
+    Metadata:
+      aws:cdk:path: SlurmVpcCfnTemplate/AdditionalCidrBlock1
+    Condition: HasAZ1
+  PrivateSubnet1:
+    Type: AWS::EC2::Subnet
+    Properties:
+      AvailabilityZoneId:
+        Fn::Select:
+          - 0
+          - Ref: AvailabilityZoneIds
+      CidrBlock:
+        Fn::If:
+          - IsVpcCidr101
+          - 10.192.0.0/16
+          - 10.1.0.0/16
+      MapPublicIpOnLaunch: false
+      Tags:
+        - Key: Name
+          Value:
+            Fn::Sub: ${ResourceNamePrefix}-Private1
+      VpcId:
+        Ref: VPC
+    DependsOn:
+      - AdditionalCidrBlock1
+    Metadata:
+      aws:cdk:path: SlurmVpcCfnTemplate/PrivateSubnet1
+    Condition: HasAZ1
+  PrivateRouteTable1:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      Tags:
+        - Key: Name
+          Value:
+            Fn::Sub: ${ResourceNamePrefix}-Private-RT-1
+      VpcId:
+        Ref: VPC
+    Metadata:
+      aws:cdk:path: SlurmVpcCfnTemplate/PrivateRouteTable1
+    Condition: HasAZ1
+  PrivateSubnet1RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId:
+        Ref: PrivateRouteTable1
+      SubnetId:
+        Ref: PrivateSubnet1
+    Metadata:
+      aws:cdk:path: SlurmVpcCfnTemplate/PrivateSubnet1RouteTableAssociation
+    Condition: HasAZ1
+  DefaultPrivateRoute1:
+    Type: AWS::EC2::Route
+    Properties:
+      DestinationCidrBlock: 0.0.0.0/0
+      NatGatewayId:
+        Ref: NatGateway1
+      RouteTableId:
+        Ref: PrivateRouteTable1
+    Metadata:
+      aws:cdk:path: SlurmVpcCfnTemplate/DefaultPrivateRoute1
+    Condition: HasAZ1
+  PublicSubnet2:
+    Type: AWS::EC2::Subnet
+    Properties:
+      AvailabilityZoneId:
+        Fn::Select:
+          - 1
+          - Ref: AvailabilityZoneIds
+      CidrBlock:
+        Fn::Join:
+          - ''
+          - - Fn::Select:
+                - 0
+                - Fn::Split:
+                    - .
+                    - Fn::Select:
+                        - 0
+                        - Fn::Split:
+                            - /
+                            - Ref: VpcCIDR
+            - .
+            - Fn::Select:
+                - 1
+                - Fn::Split:
+                    - .
+                    - Fn::Select:
+                        - 0
+                        - Fn::Split:
+                            - /
+                            - Ref: VpcCIDR
+            - .32.0/24
+      MapPublicIpOnLaunch: true
+      Tags:
+        - Key: Name
+          Value:
+            Fn::Sub: ${ResourceNamePrefix}-Public-Subnet2
+      VpcId:
+        Ref: VPC
+    Metadata:
+      aws:cdk:path: SlurmVpcCfnTemplate/PublicSubnet2
+    Condition: HasAZ2
+  NatGateway2EIP:
+    Type: AWS::EC2::EIP
+    Properties:
+      Domain: vpc
+    DependsOn:
+      - InternetGatewayAttachment
+    Metadata:
+      aws:cdk:path: SlurmVpcCfnTemplate/NatGateway2EIP
+    Condition: HasAZ2
+  NatGateway2:
+    Type: AWS::EC2::NatGateway
+    Properties:
+      AllocationId:
+        Fn::GetAtt:
+          - NatGateway2EIP
+          - AllocationId
+      SubnetId:
+        Ref: PublicSubnet2
+    Metadata:
+      aws:cdk:path: SlurmVpcCfnTemplate/NatGateway2
+    Condition: HasAZ2
+  PublicSubnet2RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId:
+        Ref: PublicRouteTable
+      SubnetId:
+        Ref: PublicSubnet2
+    Metadata:
+      aws:cdk:path: SlurmVpcCfnTemplate/PublicSubnet2RouteTableAssociation
+    Condition: HasAZ2
+  AdditionalCidrBlock2:
+    Type: AWS::EC2::VPCCidrBlock
+    Properties:
+      AmazonProvidedIpv6CidrBlock: false
+      CidrBlock:
+        Fn::If:
+          - IsVpcCidr101
+          - 10.193.0.0/16
+          - 10.2.0.0/16
+      VpcId:
+        Ref: VPC
+    Metadata:
+      aws:cdk:path: SlurmVpcCfnTemplate/AdditionalCidrBlock2
+    Condition: HasAZ2
+  PrivateSubnet2:
+    Type: AWS::EC2::Subnet
+    Properties:
+      AvailabilityZoneId:
+        Fn::Select:
+          - 1
+          - Ref: AvailabilityZoneIds
+      CidrBlock:
+        Fn::If:
+          - IsVpcCidr101
+          - 10.193.0.0/16
+          - 10.2.0.0/16
+      MapPublicIpOnLaunch: false
+      Tags:
+        - Key: Name
+          Value:
+            Fn::Sub: ${ResourceNamePrefix}-Private2
+      VpcId:
+        Ref: VPC
+    DependsOn:
+      - AdditionalCidrBlock2
+    Metadata:
+      aws:cdk:path: SlurmVpcCfnTemplate/PrivateSubnet2
+    Condition: HasAZ2
+  PrivateRouteTable2:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      Tags:
+        - Key: Name
+          Value:
+            Fn::Sub: ${ResourceNamePrefix}-Private-RT-2
+      VpcId:
+        Ref: VPC
+    Metadata:
+      aws:cdk:path: SlurmVpcCfnTemplate/PrivateRouteTable2
+    Condition: HasAZ2
+  PrivateSubnet2RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId:
+        Ref: PrivateRouteTable2
+      SubnetId:
+        Ref: PrivateSubnet2
+    Metadata:
+      aws:cdk:path: SlurmVpcCfnTemplate/PrivateSubnet2RouteTableAssociation
+    Condition: HasAZ2
+  DefaultPrivateRoute2:
+    Type: AWS::EC2::Route
+    Properties:
+      DestinationCidrBlock: 0.0.0.0/0
+      NatGatewayId:
+        Ref: NatGateway2
+      RouteTableId:
+        Ref: PrivateRouteTable2
+    Metadata:
+      aws:cdk:path: SlurmVpcCfnTemplate/DefaultPrivateRoute2
+    Condition: HasAZ2
+  PublicSubnet3:
+    Type: AWS::EC2::Subnet
+    Properties:
+      AvailabilityZoneId:
+        Fn::Select:
+          - 2
+          - Ref: AvailabilityZoneIds
+      CidrBlock:
+        Fn::Join:
+          - ''
+          - - Fn::Select:
+                - 0
+                - Fn::Split:
+                    - .
+                    - Fn::Select:
+                        - 0
+                        - Fn::Split:
+                            - /
+                            - Ref: VpcCIDR
+            - .
+            - Fn::Select:
+                - 1
+                - Fn::Split:
+                    - .
+                    - Fn::Select:
+                        - 0
+                        - Fn::Split:
+                            - /
+                            - Ref: VpcCIDR
+            - .64.0/24
+      MapPublicIpOnLaunch: true
+      Tags:
+        - Key: Name
+          Value:
+            Fn::Sub: ${ResourceNamePrefix}-Public-Subnet3
+      VpcId:
+        Ref: VPC
+    Metadata:
+      aws:cdk:path: SlurmVpcCfnTemplate/PublicSubnet3
+    Condition: HasAZ3
+  NatGateway3EIP:
+    Type: AWS::EC2::EIP
+    Properties:
+      Domain: vpc
+    DependsOn:
+      - InternetGatewayAttachment
+    Metadata:
+      aws:cdk:path: SlurmVpcCfnTemplate/NatGateway3EIP
+    Condition: HasAZ3
+  NatGateway3:
+    Type: AWS::EC2::NatGateway
+    Properties:
+      AllocationId:
+        Fn::GetAtt:
+          - NatGateway3EIP
+          - AllocationId
+      SubnetId:
+        Ref: PublicSubnet3
+    Metadata:
+      aws:cdk:path: SlurmVpcCfnTemplate/NatGateway3
+    Condition: HasAZ3
+  PublicSubnet3RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId:
+        Ref: PublicRouteTable
+      SubnetId:
+        Ref: PublicSubnet3
+    Metadata:
+      aws:cdk:path: SlurmVpcCfnTemplate/PublicSubnet3RouteTableAssociation
+    Condition: HasAZ3
+  AdditionalCidrBlock3:
+    Type: AWS::EC2::VPCCidrBlock
+    Properties:
+      AmazonProvidedIpv6CidrBlock: false
+      CidrBlock:
+        Fn::If:
+          - IsVpcCidr101
+          - 10.194.0.0/16
+          - 10.3.0.0/16
+      VpcId:
+        Ref: VPC
+    Metadata:
+      aws:cdk:path: SlurmVpcCfnTemplate/AdditionalCidrBlock3
+    Condition: HasAZ3
+  PrivateSubnet3:
+    Type: AWS::EC2::Subnet
+    Properties:
+      AvailabilityZoneId:
+        Fn::Select:
+          - 2
+          - Ref: AvailabilityZoneIds
+      CidrBlock:
+        Fn::If:
+          - IsVpcCidr101
+          - 10.194.0.0/16
+          - 10.3.0.0/16
+      MapPublicIpOnLaunch: false
+      Tags:
+        - Key: Name
+          Value:
+            Fn::Sub: ${ResourceNamePrefix}-Private3
+      VpcId:
+        Ref: VPC
+    DependsOn:
+      - AdditionalCidrBlock3
+    Metadata:
+      aws:cdk:path: SlurmVpcCfnTemplate/PrivateSubnet3
+    Condition: HasAZ3
+  PrivateRouteTable3:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      Tags:
+        - Key: Name
+          Value:
+            Fn::Sub: ${ResourceNamePrefix}-Private-RT-3
+      VpcId:
+        Ref: VPC
+    Metadata:
+      aws:cdk:path: SlurmVpcCfnTemplate/PrivateRouteTable3
+    Condition: HasAZ3
+  PrivateSubnet3RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId:
+        Ref: PrivateRouteTable3
+      SubnetId:
+        Ref: PrivateSubnet3
+    Metadata:
+      aws:cdk:path: SlurmVpcCfnTemplate/PrivateSubnet3RouteTableAssociation
+    Condition: HasAZ3
+  DefaultPrivateRoute3:
+    Type: AWS::EC2::Route
+    Properties:
+      DestinationCidrBlock: 0.0.0.0/0
+      NatGatewayId:
+        Ref: NatGateway3
+      RouteTableId:
+        Ref: PrivateRouteTable3
+    Metadata:
+      aws:cdk:path: SlurmVpcCfnTemplate/DefaultPrivateRoute3
+    Condition: HasAZ3
+  PublicSubnet4:
+    Type: AWS::EC2::Subnet
+    Properties:
+      AvailabilityZoneId:
+        Fn::Select:
+          - 3
+          - Ref: AvailabilityZoneIds
+      CidrBlock:
+        Fn::Join:
+          - ''
+          - - Fn::Select:
+                - 0
+                - Fn::Split:
+                    - .
+                    - Fn::Select:
+                        - 0
+                        - Fn::Split:
+                            - /
+                            - Ref: VpcCIDR
+            - .
+            - Fn::Select:
+                - 1
+                - Fn::Split:
+                    - .
+                    - Fn::Select:
+                        - 0
+                        - Fn::Split:
+                            - /
+                            - Ref: VpcCIDR
+            - .96.0/24
+      MapPublicIpOnLaunch: true
+      Tags:
+        - Key: Name
+          Value:
+            Fn::Sub: ${ResourceNamePrefix}-Public-Subnet4
+      VpcId:
+        Ref: VPC
+    Metadata:
+      aws:cdk:path: SlurmVpcCfnTemplate/PublicSubnet4
+    Condition: HasAZ4
+  NatGateway4EIP:
+    Type: AWS::EC2::EIP
+    Properties:
+      Domain: vpc
+    DependsOn:
+      - InternetGatewayAttachment
+    Metadata:
+      aws:cdk:path: SlurmVpcCfnTemplate/NatGateway4EIP
+    Condition: HasAZ4
+  NatGateway4:
+    Type: AWS::EC2::NatGateway
+    Properties:
+      AllocationId:
+        Fn::GetAtt:
+          - NatGateway4EIP
+          - AllocationId
+      SubnetId:
+        Ref: PublicSubnet4
+    Metadata:
+      aws:cdk:path: SlurmVpcCfnTemplate/NatGateway4
+    Condition: HasAZ4
+  PublicSubnet4RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId:
+        Ref: PublicRouteTable
+      SubnetId:
+        Ref: PublicSubnet4
+    Metadata:
+      aws:cdk:path: SlurmVpcCfnTemplate/PublicSubnet4RouteTableAssociation
+    Condition: HasAZ4
+  AdditionalCidrBlock4:
+    Type: AWS::EC2::VPCCidrBlock
+    Properties:
+      AmazonProvidedIpv6CidrBlock: false
+      CidrBlock:
+        Fn::If:
+          - IsVpcCidr101
+          - 10.195.0.0/16
+          - 10.4.0.0/16
+      VpcId:
+        Ref: VPC
+    Metadata:
+      aws:cdk:path: SlurmVpcCfnTemplate/AdditionalCidrBlock4
+    Condition: HasAZ4
+  PrivateSubnet4:
+    Type: AWS::EC2::Subnet
+    Properties:
+      AvailabilityZoneId:
+        Fn::Select:
+          - 3
+          - Ref: AvailabilityZoneIds
+      CidrBlock:
+        Fn::If:
+          - IsVpcCidr101
+          - 10.195.0.0/16
+          - 10.4.0.0/16
+      MapPublicIpOnLaunch: false
+      Tags:
+        - Key: Name
+          Value:
+            Fn::Sub: ${ResourceNamePrefix}-Private4
+      VpcId:
+        Ref: VPC
+    DependsOn:
+      - AdditionalCidrBlock4
+    Metadata:
+      aws:cdk:path: SlurmVpcCfnTemplate/PrivateSubnet4
+    Condition: HasAZ4
+  PrivateRouteTable4:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      Tags:
+        - Key: Name
+          Value:
+            Fn::Sub: ${ResourceNamePrefix}-Private-RT-4
+      VpcId:
+        Ref: VPC
+    Metadata:
+      aws:cdk:path: SlurmVpcCfnTemplate/PrivateRouteTable4
+    Condition: HasAZ4
+  PrivateSubnet4RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId:
+        Ref: PrivateRouteTable4
+      SubnetId:
+        Ref: PrivateSubnet4
+    Metadata:
+      aws:cdk:path: SlurmVpcCfnTemplate/PrivateSubnet4RouteTableAssociation
+    Condition: HasAZ4
+  DefaultPrivateRoute4:
+    Type: AWS::EC2::Route
+    Properties:
+      DestinationCidrBlock: 0.0.0.0/0
+      NatGatewayId:
+        Ref: NatGateway4
+      RouteTableId:
+        Ref: PrivateRouteTable4
+    Metadata:
+      aws:cdk:path: SlurmVpcCfnTemplate/DefaultPrivateRoute4
+    Condition: HasAZ4
+  PublicSubnet5:
+    Type: AWS::EC2::Subnet
+    Properties:
+      AvailabilityZoneId:
+        Fn::Select:
+          - 4
+          - Ref: AvailabilityZoneIds
+      CidrBlock:
+        Fn::Join:
+          - ''
+          - - Fn::Select:
+                - 0
+                - Fn::Split:
+                    - .
+                    - Fn::Select:
+                        - 0
+                        - Fn::Split:
+                            - /
+                            - Ref: VpcCIDR
+            - .
+            - Fn::Select:
+                - 1
+                - Fn::Split:
+                    - .
+                    - Fn::Select:
+                        - 0
+                        - Fn::Split:
+                            - /
+                            - Ref: VpcCIDR
+            - .128.0/24
+      MapPublicIpOnLaunch: true
+      Tags:
+        - Key: Name
+          Value:
+            Fn::Sub: ${ResourceNamePrefix}-Public-Subnet5
+      VpcId:
+        Ref: VPC
+    Metadata:
+      aws:cdk:path: SlurmVpcCfnTemplate/PublicSubnet5
+    Condition: HasAZ5
+  NatGateway5EIP:
+    Type: AWS::EC2::EIP
+    Properties:
+      Domain: vpc
+    DependsOn:
+      - InternetGatewayAttachment
+    Metadata:
+      aws:cdk:path: SlurmVpcCfnTemplate/NatGateway5EIP
+    Condition: HasAZ5
+  NatGateway5:
+    Type: AWS::EC2::NatGateway
+    Properties:
+      AllocationId:
+        Fn::GetAtt:
+          - NatGateway5EIP
+          - AllocationId
+      SubnetId:
+        Ref: PublicSubnet5
+    Metadata:
+      aws:cdk:path: SlurmVpcCfnTemplate/NatGateway5
+    Condition: HasAZ5
+  PublicSubnet5RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId:
+        Ref: PublicRouteTable
+      SubnetId:
+        Ref: PublicSubnet5
+    Metadata:
+      aws:cdk:path: SlurmVpcCfnTemplate/PublicSubnet5RouteTableAssociation
+    Condition: HasAZ5
+  AdditionalCidrBlock5:
+    Type: AWS::EC2::VPCCidrBlock
+    Properties:
+      AmazonProvidedIpv6CidrBlock: false
+      CidrBlock:
+        Fn::If:
+          - IsVpcCidr101
+          - 10.196.0.0/16
+          - 10.5.0.0/16
+      VpcId:
+        Ref: VPC
+    Metadata:
+      aws:cdk:path: SlurmVpcCfnTemplate/AdditionalCidrBlock5
+    Condition: HasAZ5
+  PrivateSubnet5:
+    Type: AWS::EC2::Subnet
+    Properties:
+      AvailabilityZoneId:
+        Fn::Select:
+          - 4
+          - Ref: AvailabilityZoneIds
+      CidrBlock:
+        Fn::If:
+          - IsVpcCidr101
+          - 10.196.0.0/16
+          - 10.5.0.0/16
+      MapPublicIpOnLaunch: false
+      Tags:
+        - Key: Name
+          Value:
+            Fn::Sub: ${ResourceNamePrefix}-Private5
+      VpcId:
+        Ref: VPC
+    DependsOn:
+      - AdditionalCidrBlock5
+    Metadata:
+      aws:cdk:path: SlurmVpcCfnTemplate/PrivateSubnet5
+    Condition: HasAZ5
+  PrivateRouteTable5:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      Tags:
+        - Key: Name
+          Value:
+            Fn::Sub: ${ResourceNamePrefix}-Private-RT-5
+      VpcId:
+        Ref: VPC
+    Metadata:
+      aws:cdk:path: SlurmVpcCfnTemplate/PrivateRouteTable5
+    Condition: HasAZ5
+  PrivateSubnet5RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId:
+        Ref: PrivateRouteTable5
+      SubnetId:
+        Ref: PrivateSubnet5
+    Metadata:
+      aws:cdk:path: SlurmVpcCfnTemplate/PrivateSubnet5RouteTableAssociation
+    Condition: HasAZ5
+  DefaultPrivateRoute5:
+    Type: AWS::EC2::Route
+    Properties:
+      DestinationCidrBlock: 0.0.0.0/0
+      NatGatewayId:
+        Ref: NatGateway5
+      RouteTableId:
+        Ref: PrivateRouteTable5
+    Metadata:
+      aws:cdk:path: SlurmVpcCfnTemplate/DefaultPrivateRoute5
+    Condition: HasAZ5
+  S3Endpoint:
+    Type: AWS::EC2::VPCEndpoint
+    Properties:
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal: '*'
+            Action:
+              - s3:*
+            Resource:
+              - '*'
+      RouteTableIds:
+        - Fn::If:
+            - HasAZ1
+            - Ref: PrivateRouteTable1
+            - Ref: AWS::NoValue
+        - Fn::If:
+            - HasAZ2
+            - Ref: PrivateRouteTable2
+            - Ref: AWS::NoValue
+        - Fn::If:
+            - HasAZ3
+            - Ref: PrivateRouteTable3
+            - Ref: AWS::NoValue
+        - Fn::If:
+            - HasAZ4
+            - Ref: PrivateRouteTable4
+            - Ref: AWS::NoValue
+        - Fn::If:
+            - HasAZ5
+            - Ref: PrivateRouteTable5
+            - Ref: AWS::NoValue
+      ServiceName:
+        Fn::Join:
+          - ''
+          - - com.amazonaws.
+            - Ref: AWS::Region
+            - .s3
+      VpcEndpointType: Gateway
+      VpcId:
+        Ref: VPC
+    Metadata:
+      aws:cdk:path: SlurmVpcCfnTemplate/S3Endpoint
+Outputs:
+  VpcId:
+    Description: VPC Id
+    Value:
+      Ref: VPC
+  NatGatewayIds:
+    Description: Comma-delimited list of created NAT Gateway IDs
+    Value:
+      Fn::Join:
+        - ','
+        - - Fn::If:
+              - HasAZ1
+              - Ref: NatGateway1
+              - Ref: AWS::NoValue
+          - Fn::If:
+              - HasAZ2
+              - Ref: NatGateway2
+              - Ref: AWS::NoValue
+          - Fn::If:
+              - HasAZ3
+              - Ref: NatGateway3
+              - Ref: AWS::NoValue
+          - Fn::If:
+              - HasAZ4
+              - Ref: NatGateway4
+              - Ref: AWS::NoValue
+          - Fn::If:
+              - HasAZ5
+              - Ref: NatGateway5
+              - Ref: AWS::NoValue
+  PrivateRouteTableIds:
+    Description: Private Route Table Id
+    Value:
+      Fn::Join:
+        - ','
+        - - Fn::If:
+              - HasAZ1
+              - Ref: PrivateRouteTable1
+              - Ref: AWS::NoValue
+          - Fn::If:
+              - HasAZ2
+              - Ref: PrivateRouteTable2
+              - Ref: AWS::NoValue
+          - Fn::If:
+              - HasAZ3
+              - Ref: PrivateRouteTable3
+              - Ref: AWS::NoValue
+          - Fn::If:
+              - HasAZ4
+              - Ref: PrivateRouteTable4
+              - Ref: AWS::NoValue
+          - Fn::If:
+              - HasAZ5
+              - Ref: PrivateRouteTable5
+              - Ref: AWS::NoValue
+  PrivateSubnetIds:
+    Description: Comma-delimited list of created Private Subnet IDs
+    Value:
+      Fn::Join:
+        - ','
+        - - Fn::If:
+              - HasAZ1
+              - Ref: PrivateSubnet1
+              - Ref: AWS::NoValue
+          - Fn::If:
+              - HasAZ2
+              - Ref: PrivateSubnet2
+              - Ref: AWS::NoValue
+          - Fn::If:
+              - HasAZ3
+              - Ref: PrivateSubnet3
+              - Ref: AWS::NoValue
+          - Fn::If:
+              - HasAZ4
+              - Ref: PrivateSubnet4
+              - Ref: AWS::NoValue
+          - Fn::If:
+              - HasAZ5
+              - Ref: PrivateSubnet5
+              - Ref: AWS::NoValue

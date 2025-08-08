@@ -1,0 +1,117 @@
+Description: S3 Bucket Stack
+Parameters:
+  ResourceNamePrefix:
+    Type: String
+    Default: sagemaker-hyperpod-eks
+    Description: Prefix to be used for all resources created by this template.
+Resources:
+  AccessLogsBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      BucketName:
+        Fn::Sub:
+          - ${ResourceNamePrefix}-logs
+          - ResourceNamePrefix:
+              Ref: ResourceNamePrefix
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      Tags:
+        - Key: aws-sagemaker-hyperpod-prerequiste
+          Value:
+            Fn::Sub: ${ResourceNamePrefix}-Logs-Bucket
+    Metadata:
+      aws:cdk:path: S3BucketCfnTemplate/AccessLogsBucket
+  LoggingBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket:
+        Ref: AccessLogsBucket
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Sid: DenyUnsecuredTransport
+            Effect: Deny
+            Principal:
+              AWS: '*'
+            Action: s3:*
+            Resource:
+              - Fn::Join:
+                  - ''
+                  - - 'arn:aws:s3:::'
+                    - Ref: AccessLogsBucket
+              - Fn::Join:
+                  - ''
+                  - - 'arn:aws:s3:::'
+                    - Ref: AccessLogsBucket
+                    - /*
+            Condition:
+              Bool:
+                aws:SecureTransport: 'false'
+    Metadata:
+      aws:cdk:path: S3BucketCfnTemplate/LoggingBucketPolicy
+  Bucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      BucketName:
+        Fn::Sub:
+          - ${ResourceNamePrefix}-bucket
+          - ResourceNamePrefix:
+              Ref: ResourceNamePrefix
+      LoggingConfiguration:
+        DestinationBucketName:
+          Ref: AccessLogsBucket
+        LogFilePrefix: bucket-logs/
+      Tags:
+        - Key: aws-sagemaker-hyperpod-prerequiste
+          Value:
+            Fn::Sub: ${ResourceNamePrefix}-S3-Bucket
+    Metadata:
+      aws:cdk:path: S3BucketCfnTemplate/Bucket
+  BucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket:
+        Ref: Bucket
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Sid: DenyUnsecuredTransport
+            Effect: Deny
+            Principal:
+              AWS: '*'
+            Action: s3:*
+            Resource:
+              - Fn::Join:
+                  - ''
+                  - - 'arn:aws:s3:::'
+                    - Ref: Bucket
+              - Fn::Join:
+                  - ''
+                  - - 'arn:aws:s3:::'
+                    - Ref: Bucket
+                    - /*
+            Condition:
+              Bool:
+                aws:SecureTransport: 'false'
+    Metadata:
+      aws:cdk:path: S3BucketCfnTemplate/BucketPolicy
+Outputs:
+  S3BucketName:
+    Description: S3 Bucket Name
+    Value:
+      Ref: Bucket
+  S3LogsBucketName:
+    Description: S3 Access Logs Bucket Name
+    Value:
+      Ref: AccessLogsBucket

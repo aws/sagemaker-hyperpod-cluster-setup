@@ -1,0 +1,128 @@
+Description: Security Group Stack
+Parameters:
+  ResourceNamePrefix:
+    Type: String
+    Default: sagemaker-hyperpod-eks
+    Description: Prefix to be used for all resources created by this template.
+  VpcId:
+    Type: String
+    Default: vpc-1234567890abcdef0
+    Description: The ID of the VPC you wish to use if you do not want to create a new VPC.
+  SecurityGroupId:
+    Type: String
+    Default: ''
+    Description: The ID of the security group associated with an existing EKS cluster.
+Conditions:
+  createNewSGCondition:
+    Fn::Equals:
+      - Ref: SecurityGroupId
+      - ''
+Resources:
+  NoIngressSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Security group with no ingress rule
+      GroupName:
+        Fn::Sub: ${ResourceNamePrefix}-sg
+      Tags:
+        - Key: aws-sagemaker-hyperpod-prerequiste
+          Value:
+            Fn::Sub: ${ResourceNamePrefix}-sg
+      VpcId:
+        Ref: VpcId
+    Metadata:
+      aws:cdk:path: SecurityGroupCfnTemplate/NoIngressSecurityGroup
+    Condition: createNewSGCondition
+  IntraSGCommunicationRule:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      Description: Allow traffic within the security group
+      GroupId:
+        Fn::If:
+          - createNewSGCondition
+          - Ref: NoIngressSecurityGroup
+          - Ref: SecurityGroupId
+      IpProtocol: '-1'
+      SourceSecurityGroupId:
+        Fn::If:
+          - createNewSGCondition
+          - Ref: NoIngressSecurityGroup
+          - Ref: SecurityGroupId
+    Metadata:
+      aws:cdk:path: SecurityGroupCfnTemplate/IntraSGCommunicationRule
+  IntraSGCommunicationRuleEgress:
+    Type: AWS::EC2::SecurityGroupEgress
+    Properties:
+      Description: Allow traffic within the security group
+      DestinationSecurityGroupId:
+        Fn::If:
+          - createNewSGCondition
+          - Ref: NoIngressSecurityGroup
+          - Ref: SecurityGroupId
+      GroupId:
+        Fn::If:
+          - createNewSGCondition
+          - Ref: NoIngressSecurityGroup
+          - Ref: SecurityGroupId
+      IpProtocol: '-1'
+    Metadata:
+      aws:cdk:path: SecurityGroupCfnTemplate/IntraSGCommunicationRuleEgress
+  InternetCommunicationRuleEgress:
+    Type: AWS::EC2::SecurityGroupEgress
+    Properties:
+      CidrIp: 0.0.0.0/0
+      Description: Allow traffic to internet
+      GroupId:
+        Fn::If:
+          - createNewSGCondition
+          - Ref: NoIngressSecurityGroup
+          - Ref: SecurityGroupId
+      IpProtocol: '-1'
+    Metadata:
+      aws:cdk:path: SecurityGroupCfnTemplate/InternetCommunicationRuleEgress
+  FSxForLustreRule1:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      Description: Allows Lustre traffic between FSx for Lustre file servers and Lustre clients
+      FromPort: 988
+      GroupId:
+        Fn::If:
+          - createNewSGCondition
+          - Ref: NoIngressSecurityGroup
+          - Ref: SecurityGroupId
+      IpProtocol: tcp
+      SourceSecurityGroupId:
+        Fn::If:
+          - createNewSGCondition
+          - Ref: NoIngressSecurityGroup
+          - Ref: SecurityGroupId
+      ToPort: 988
+    Metadata:
+      aws:cdk:path: SecurityGroupCfnTemplate/FSxForLustreRule1
+  FSxForLustreRule2:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      Description: Allows Lustre traffic between FSx for Lustre file servers and Lustre clients
+      FromPort: 1018
+      GroupId:
+        Fn::If:
+          - createNewSGCondition
+          - Ref: NoIngressSecurityGroup
+          - Ref: SecurityGroupId
+      IpProtocol: tcp
+      SourceSecurityGroupId:
+        Fn::If:
+          - createNewSGCondition
+          - Ref: NoIngressSecurityGroup
+          - Ref: SecurityGroupId
+      ToPort: 1023
+    Metadata:
+      aws:cdk:path: SecurityGroupCfnTemplate/FSxForLustreRule2
+Outputs:
+  SecurityGroupId:
+    Description: Security Group Id
+    Value:
+      Fn::If:
+        - createNewSGCondition
+        - Ref: NoIngressSecurityGroup
+        - Ref: SecurityGroupId

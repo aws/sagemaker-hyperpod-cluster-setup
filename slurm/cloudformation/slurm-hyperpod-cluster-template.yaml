@@ -1,0 +1,317 @@
+Description: SageMaker HyperPod Cluster Stack with Slurm Orchestrator
+Parameters:
+  ResourceNamePrefix:
+    Type: String
+    Default: sagemaker-hyperpod-slurm
+    Description: Prefix to be used for all resources created by this template.
+  EnabledFsx:
+    Type: String
+    Default: 'false'
+    AllowedValues:
+      - 'true'
+      - 'false'
+    Description: Conditionally wait on FsxStack if deployed
+  FsxDnsName:
+    Type: String
+    Default: ''
+    Description: DNS name of the FSx for Lustre file system
+  FsxMountName:
+    Type: String
+    Default: ''
+    Description: Mount name of the FSx for Lustre file system
+  HyperPodClusterName:
+    Type: String
+    Default: slurm-cluster
+    Description: Name of SageMaker HyperPod Cluster with Slurm orchestrator.
+  NodeRecovery:
+    Type: String
+    Default: Automatic
+    AllowedValues:
+      - Automatic
+      - None
+    Description: Enable or disable the automatic node recovery feature
+  SecurityGroupIds:
+    Type: String
+    Description: Comma-separated list of security group IDs for the HyperPod cluster
+  PrivateSubnetIds:
+    Type: String
+    Description: Comma-separated list of private subnet IDs for the HyperPod cluster
+  CustomResourceS3Bucket:
+    Type: String
+    Default: ws-assets-prod-iad-r-pdx-f3b3f9f1a7d6a3d0
+    Description: The name of the S3 bucket containing the custom resource Lambda function.
+  SageMakerIAMRoleName:
+    Type: String
+    Default: role
+    Description: The name of the IAM role that SageMaker will use to access AWS resources.
+  S3BucketName:
+    Type: String
+    Default: bucket
+    Description: The name of the S3 bucket used to store the cluster lifecycle scripts.
+  OnCreatePath:
+    Type: String
+    Default: on_create.sh
+    Description: >-
+      The file name of lifecycle script for the general purpose instance group. This script runs during cluster
+      creation.
+  Tags:
+    Type: String
+    Default: ''
+    Description: Custom tags for managing the SageMaker HyperPod cluster as an AWS resource.
+  InstanceGroupSettings1:
+    Type: String
+    Default: '[]'
+    Description: JSON array string containing instance group configurations for Slurm cluster.
+  InstanceGroupSettings2:
+    Type: String
+    Default: '[]'
+    Description: JSON array string containing instance group configurations for Slurm cluster.
+  InstanceGroupSettings3:
+    Type: String
+    Default: '[]'
+    Description: JSON array string containing instance group configurations for Slurm cluster.
+  InstanceGroupSettings4:
+    Type: String
+    Default: '[]'
+    Description: JSON array string containing instance group configurations for Slurm cluster.
+  InstanceGroupSettings5:
+    Type: String
+    Default: '[]'
+    Description: JSON array string containing instance group configurations for Slurm cluster.
+  InstanceGroupSettings6:
+    Type: String
+    Default: '[]'
+    Description: JSON array string containing instance group configurations for Slurm cluster.
+  InstanceGroupSettings7:
+    Type: String
+    Default: '[]'
+    Description: JSON array string containing instance group configurations for Slurm cluster.
+  InstanceGroupSettings8:
+    Type: String
+    Default: '[]'
+    Description: JSON array string containing instance group configurations for Slurm cluster.
+  InstanceGroupSettings9:
+    Type: String
+    Default: '[]'
+    Description: JSON array string containing instance group configurations for Slurm cluster.
+  InstanceGroupSettings10:
+    Type: String
+    Default: '[]'
+    Description: JSON array string containing instance group configurations for Slurm cluster.
+  InstanceGroupSettings11:
+    Type: String
+    Default: '[]'
+    Description: JSON array string containing instance group configurations for Slurm cluster.
+  InstanceGroupSettings12:
+    Type: String
+    Default: '[]'
+    Description: JSON array string containing instance group configurations for Slurm cluster.
+  InstanceGroupSettings13:
+    Type: String
+    Default: '[]'
+    Description: JSON array string containing instance group configurations for Slurm cluster.
+  InstanceGroupSettings14:
+    Type: String
+    Default: '[]'
+    Description: JSON array string containing instance group configurations for Slurm cluster.
+  InstanceGroupSettings15:
+    Type: String
+    Default: '[]'
+    Description: JSON array string containing instance group configurations for Slurm cluster.
+  InstanceGroupSettings16:
+    Type: String
+    Default: '[]'
+    Description: JSON array string containing instance group configurations for Slurm cluster.
+  InstanceGroupSettings17:
+    Type: String
+    Default: '[]'
+    Description: JSON array string containing instance group configurations for Slurm cluster.
+  InstanceGroupSettings18:
+    Type: String
+    Default: '[]'
+    Description: JSON array string containing instance group configurations for Slurm cluster.
+  InstanceGroupSettings19:
+    Type: String
+    Default: '[]'
+    Description: JSON array string containing instance group configurations for Slurm cluster.
+  InstanceGroupSettings20:
+    Type: String
+    Default: '[]'
+    Description: JSON array string containing instance group configurations for Slurm cluster.
+Resources:
+  HyperPodClusterCustomResourceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        - PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action:
+                  - sagemaker:CreateCluster
+                  - sagemaker:UpdateCluster
+                  - sagemaker:DeleteCluster
+                  - sagemaker:DescribeCluster
+                  - sagemaker:ListClusters
+                  - sagemaker:ListClusterNodes
+                  - sagemaker:AddTags
+                  - sagemaker:ListTags
+                Resource:
+                  - Fn::Sub: arn:aws:sagemaker:${AWS::Region}:${AWS::AccountId}:cluster/*
+                  - Fn::Sub: arn:aws:sagemaker:${AWS::Region}:${AWS::AccountId}:training-plan/*
+                  - Fn::Sub: arn:aws:sagemaker:${AWS::Region}:${AWS::AccountId}:reserved-capacity/*
+              - Effect: Allow
+                Action:
+                  - fsx:DescribeFileSystems
+                Resource: '*'
+              - Effect: Allow
+                Action:
+                  - s3:PutObject
+                  - s3:DeleteObject
+                Resource:
+                  - Fn::Sub:
+                      - arn:aws:s3:::${S3BucketName}/*
+                      - S3BucketName:
+                          Ref: S3BucketName
+              - Effect: Allow
+                Action:
+                  - iam:PassRole
+                Resource:
+                  - Fn::Sub: arn:aws:iam::${AWS::AccountId}:role/*
+                Condition:
+                  StringEquals:
+                    iam:PassedToService: sagemaker.amazonaws.com
+              - Effect: Allow
+                Action:
+                  - ec2:DescribeVpcs
+                  - ec2:DescribeSubnets
+                  - ec2:DescribeSecurityGroups
+                Resource: '*'
+          PolicyName:
+            Fn::Sub: ${ResourceNamePrefix}-HpClusterPolicy
+      RoleName:
+        Fn::Sub: ${ResourceNamePrefix}-resrole
+      Tags:
+        - Key: Name
+          Value:
+            Fn::Sub: ${ResourceNamePrefix}-resrole
+    Metadata:
+      aws:cdk:path: SlurmHyperPodClusterCfnTemplate/HyperPodClusterCustomResourceRole
+  hyperPodCustomResourceFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      Code:
+        S3Bucket:
+          Ref: CustomResourceS3Bucket
+        S3Key: resources/artifacts/hp-lambda-function.zip
+      Environment:
+        Variables:
+          ORCHESTRATOR_TYPE: SLURM
+          HYPER_POD_CLUSTER_NAME:
+            Ref: HyperPodClusterName
+          NODE_RECOVERY:
+            Ref: NodeRecovery
+          SECURITY_GROUP_IDS:
+            Ref: SecurityGroupIds
+          PRIVATE_SUBNET_IDS:
+            Ref: PrivateSubnetIds
+          SAGEMAKER_IAM_ROLE_NAME:
+            Fn::Sub: arn:aws:iam::${AWS::AccountId}:role/${SageMakerIAMRoleName}
+          S3_BUCKET_NAME:
+            Ref: S3BucketName
+          ON_CREATE_PATH:
+            Ref: OnCreatePath
+          CLUSTER_TAGS:
+            Ref: Tags
+          ENABLED_FSX:
+            Ref: EnabledFsx
+          FSX_DNS_NAME:
+            Ref: FsxDnsName
+          FSX_MOUNT_NAME:
+            Ref: FsxMountName
+          INSTANCE_GROUP_SETTINGS1:
+            Ref: InstanceGroupSettings1
+          INSTANCE_GROUP_SETTINGS2:
+            Ref: InstanceGroupSettings2
+          INSTANCE_GROUP_SETTINGS3:
+            Ref: InstanceGroupSettings3
+          INSTANCE_GROUP_SETTINGS4:
+            Ref: InstanceGroupSettings4
+          INSTANCE_GROUP_SETTINGS5:
+            Ref: InstanceGroupSettings5
+          INSTANCE_GROUP_SETTINGS6:
+            Ref: InstanceGroupSettings6
+          INSTANCE_GROUP_SETTINGS7:
+            Ref: InstanceGroupSettings7
+          INSTANCE_GROUP_SETTINGS8:
+            Ref: InstanceGroupSettings8
+          INSTANCE_GROUP_SETTINGS9:
+            Ref: InstanceGroupSettings9
+          INSTANCE_GROUP_SETTINGS10:
+            Ref: InstanceGroupSettings10
+          INSTANCE_GROUP_SETTINGS11:
+            Ref: InstanceGroupSettings11
+          INSTANCE_GROUP_SETTINGS12:
+            Ref: InstanceGroupSettings12
+          INSTANCE_GROUP_SETTINGS13:
+            Ref: InstanceGroupSettings13
+          INSTANCE_GROUP_SETTINGS14:
+            Ref: InstanceGroupSettings14
+          INSTANCE_GROUP_SETTINGS15:
+            Ref: InstanceGroupSettings15
+          INSTANCE_GROUP_SETTINGS16:
+            Ref: InstanceGroupSettings16
+          INSTANCE_GROUP_SETTINGS17:
+            Ref: InstanceGroupSettings17
+          INSTANCE_GROUP_SETTINGS18:
+            Ref: InstanceGroupSettings18
+          INSTANCE_GROUP_SETTINGS19:
+            Ref: InstanceGroupSettings19
+          INSTANCE_GROUP_SETTINGS20:
+            Ref: InstanceGroupSettings20
+          NUMBER_OF_INSTANCE_GROUPS: '20'
+      FunctionName:
+        Fn::Sub:
+          - ${ResourceNamePrefix}-hp-func
+          - ResourceNamePrefix:
+              Ref: ResourceNamePrefix
+      Handler: lambda_function.lambda_handler
+      Role:
+        Fn::GetAtt:
+          - HyperPodClusterCustomResourceRole
+          - Arn
+      Runtime: python3.12
+      Tags:
+        - Key: Name
+          Value:
+            Fn::Sub: ${ResourceNamePrefix}-slurm-hp-func
+        - Key: Purpose
+          Value: SageMaker HyperPod Slurm Cluster Management
+      Timeout: 900
+    Metadata:
+      aws:cdk:path: SlurmHyperPodClusterCfnTemplate/hyperPodCustomResourceFunction
+  SlurmHpLambdaCustomResource:
+    Type: AWS::CloudFormation::CustomResource
+    Properties:
+      ServiceToken:
+        Fn::GetAtt:
+          - hyperPodCustomResourceFunction
+          - Arn
+    Metadata:
+      aws:cdk:path: SlurmHyperPodClusterCfnTemplate/SlurmHpLambdaCustomResource
+Outputs:
+  HyperPodClusterTemplateUrlOutput:
+    Description: Template url of the SageMaker HyperPod Cluster
+    Value:
+      Fn::GetAtt:
+        - SlurmHpLambdaCustomResource
+        - TemplateUrl

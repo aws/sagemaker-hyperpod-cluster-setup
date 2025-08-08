@@ -1,0 +1,583 @@
+Description: SageMaker IAM Role Stack
+Parameters:
+  VpcId:
+    Type: String
+    Default: vpc-1234567890abcdef0
+    Description: The VPC ID from the VPC stack
+  SecurityGroupIds:
+    Type: CommaDelimitedList
+    Default: sg-1234567890abcdef0
+    Description: Security Group IDs from the security group stack
+  PrivateSubnetIds:
+    Type: CommaDelimitedList
+    Default: subnet-1234567890abcdef0,subnet-1234567890abcdef1
+    Description: Subnet IDs from the private subnet stack
+  ResourceNamePrefix:
+    Type: String
+    Default: sagemaker-hyperpod-eks
+    Description: Prefix to be used for all resources created by this template.
+  EKSClusterName:
+    Type: String
+    Default: eks
+    Description: The name of the newly created EKS cluster you wish to use.
+  S3BucketName:
+    Type: String
+    Default: sagemaker-hyperpod-eks-bucket
+    Description: The name of the S3 bucket used to store the cluster lifecycle scripts.
+  RigS3BucketName:
+    Type: String
+    Default: ''
+    Description: The name of the S3 bucket used to store the RIG resources.
+Conditions:
+  HasRigS3Bucket:
+    Fn::Not:
+      - Fn::Equals:
+          - Ref: RigS3BucketName
+          - ''
+  HasSubnet1:
+    Fn::Not:
+      - Fn::Equals:
+          - Fn::Select:
+              - 0
+              - Fn::Split:
+                  - ','
+                  - Fn::Join:
+                      - ','
+                      - - Fn::Join:
+                            - ','
+                            - Ref: PrivateSubnetIds
+                        - ',,,,'
+          - ''
+  HasSubnet2:
+    Fn::Not:
+      - Fn::Equals:
+          - Fn::Select:
+              - 1
+              - Fn::Split:
+                  - ','
+                  - Fn::Join:
+                      - ','
+                      - - Fn::Join:
+                            - ','
+                            - Ref: PrivateSubnetIds
+                        - ',,,,'
+          - ''
+  HasSubnet3:
+    Fn::Not:
+      - Fn::Equals:
+          - Fn::Select:
+              - 2
+              - Fn::Split:
+                  - ','
+                  - Fn::Join:
+                      - ','
+                      - - Fn::Join:
+                            - ','
+                            - Ref: PrivateSubnetIds
+                        - ',,,,'
+          - ''
+  HasSubnet4:
+    Fn::Not:
+      - Fn::Equals:
+          - Fn::Select:
+              - 3
+              - Fn::Split:
+                  - ','
+                  - Fn::Join:
+                      - ','
+                      - - Fn::Join:
+                            - ','
+                            - Ref: PrivateSubnetIds
+                        - ',,,,'
+          - ''
+  HasSubnet5:
+    Fn::Not:
+      - Fn::Equals:
+          - Fn::Select:
+              - 4
+              - Fn::Split:
+                  - ','
+                  - Fn::Join:
+                      - ','
+                      - - Fn::Join:
+                            - ','
+                            - Ref: PrivateSubnetIds
+                        - ',,,,'
+          - ''
+  HasSecurityGroup1:
+    Fn::Not:
+      - Fn::Equals:
+          - Fn::Select:
+              - 0
+              - Fn::Split:
+                  - ','
+                  - Fn::Join:
+                      - ','
+                      - - Fn::Join:
+                            - ','
+                            - Ref: SecurityGroupIds
+                        - ',,,,'
+          - ''
+  HasSecurityGroup2:
+    Fn::Not:
+      - Fn::Equals:
+          - Fn::Select:
+              - 1
+              - Fn::Split:
+                  - ','
+                  - Fn::Join:
+                      - ','
+                      - - Fn::Join:
+                            - ','
+                            - Ref: SecurityGroupIds
+                        - ',,,,'
+          - ''
+  HasSecurityGroup3:
+    Fn::Not:
+      - Fn::Equals:
+          - Fn::Select:
+              - 2
+              - Fn::Split:
+                  - ','
+                  - Fn::Join:
+                      - ','
+                      - - Fn::Join:
+                            - ','
+                            - Ref: SecurityGroupIds
+                        - ',,,,'
+          - ''
+  HasSecurityGroup4:
+    Fn::Not:
+      - Fn::Equals:
+          - Fn::Select:
+              - 3
+              - Fn::Split:
+                  - ','
+                  - Fn::Join:
+                      - ','
+                      - - Fn::Join:
+                            - ','
+                            - Ref: SecurityGroupIds
+                        - ',,,,'
+          - ''
+  HasSecurityGroup5:
+    Fn::Not:
+      - Fn::Equals:
+          - Fn::Select:
+              - 4
+              - Fn::Split:
+                  - ','
+                  - Fn::Join:
+                      - ','
+                      - - Fn::Join:
+                            - ','
+                            - Ref: SecurityGroupIds
+                        - ',,,,'
+          - ''
+Resources:
+  ExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - sagemaker.amazonaws.com
+            Action:
+              - sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AmazonSageMakerClusterInstanceRolePolicy
+      Path: /
+      Policies:
+        - PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action:
+                  - ec2:AttachNetworkInterface
+                Resource:
+                  - Fn::Sub: arn:aws:ec2:${AWS::Region}:${AWS::AccountId}:instance/*
+                  - Fn::Sub: arn:aws:ec2:${AWS::Region}:${AWS::AccountId}:network-interface/*
+              - Sid: AmazonEKSCNIDescribePolicy
+                Effect: Allow
+                Action:
+                  - ec2:DescribeInstances
+                  - ec2:DescribeTags
+                  - ec2:DescribeNetworkInterfaces
+                  - ec2:DescribeInstanceTypes
+                  - ec2:DescribeSubnets
+                Resource: '*'
+              - Sid: AmazonEKSCNIPolicyENITag
+                Effect: Allow
+                Action:
+                  - ec2:CreateTags
+                Resource:
+                  - arn:aws:ec2:*:*:network-interface/*
+          PolicyName:
+            Fn::Sub: ${ResourceNamePrefix}_AmazonEKS_CNI_Policy
+        - PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action:
+                  - ec2:AssignPrivateIpAddresses
+                  - ec2:CreateNetworkInterface
+                  - ec2:CreateNetworkInterfacePermission
+                  - ec2:DeleteNetworkInterface
+                  - ec2:DeleteNetworkInterfacePermission
+                  - ec2:DetachNetworkInterface
+                  - ec2:ModifyNetworkInterfaceAttribute
+                  - ec2:UnassignPrivateIpAddresses
+                Resource:
+                  - Fn::Sub: arn:aws:ec2:${AWS::Region}:${AWS::AccountId}:instance/*
+                  - Fn::Sub: arn:aws:ec2:${AWS::Region}:${AWS::AccountId}:network-interface/*
+                  - Fn::Sub: arn:aws:ec2:${AWS::Region}:${AWS::AccountId}:vpc/${VpcId}
+              - Effect: Allow
+                Action:
+                  - ec2:DescribeVpcs
+                  - ec2:DescribeDhcpOptions
+                  - ec2:DescribeSecurityGroups
+                Resource: '*'
+              - Effect: Allow
+                Action:
+                  - ecr:BatchCheckLayerAvailability
+                  - ecr:BatchGetImage
+                  - ecr:GetAuthorizationToken
+                  - ecr:GetDownloadUrlForLayer
+                  - cloudwatch:DescribeAlarms
+                Resource: '*'
+              - Effect: Allow
+                Action:
+                  - eks-auth:AssumeRoleForPodIdentity
+                Resource:
+                  - Fn::Sub: arn:aws:eks:${AWS::Region}:${AWS::AccountId}:cluster/${EKSClusterName}
+              - Effect: Allow
+                Action:
+                  - ec2:CreateTags
+                Resource: arn:aws:ec2:*:*:network-interface/*
+              - Effect: Allow
+                Action:
+                  - s3:ListBucket
+                  - s3:GetObject
+                Resource:
+                  Fn::If:
+                    - HasRigS3Bucket
+                    - - Fn::Sub: arn:aws:s3:::${S3BucketName}
+                      - Fn::Sub: arn:aws:s3:::${S3BucketName}/*
+                      - Fn::Sub: arn:aws:s3:::${RigS3BucketName}
+                      - Fn::Sub: arn:aws:s3:::${RigS3BucketName}/*
+                    - - Fn::Sub: arn:aws:s3:::${S3BucketName}
+                      - Fn::Sub: arn:aws:s3:::${S3BucketName}/*
+          PolicyName:
+            Fn::Sub: ${ResourceNamePrefix}-Policy
+      RoleName:
+        Fn::Sub: ${ResourceNamePrefix}ExecRole
+      Tags:
+        - Key: aws-sagemaker-hyperpod-prerequisite
+          Value:
+            Fn::Sub: ${ResourceNamePrefix}ExecRole
+    Metadata:
+      aws:cdk:path: SageMakerIamRoleCfnTemplate/ExecutionRole
+  ConditionalPolicySubnet1:
+    Type: AWS::IAM::Policy
+    Properties:
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Action:
+              - ec2:AssignPrivateIpAddresses
+              - ec2:CreateNetworkInterface
+              - ec2:CreateNetworkInterfacePermission
+              - ec2:DeleteNetworkInterface
+              - ec2:DeleteNetworkInterfacePermission
+              - ec2:DetachNetworkInterface
+              - ec2:ModifyNetworkInterfaceAttribute
+              - ec2:UnassignPrivateIpAddresses
+            Resource:
+              - Fn::Sub:
+                  - arn:aws:ec2:${AWS::Region}:${AWS::AccountId}:subnet/${PrivateSubnet1}
+                  - PrivateSubnet1:
+                      Fn::Select:
+                        - 0
+                        - Ref: PrivateSubnetIds
+      PolicyName: ConditionalPolicySubnet1
+      Roles:
+        - Ref: ExecutionRole
+    Metadata:
+      aws:cdk:path: SageMakerIamRoleCfnTemplate/ConditionalPolicySubnet1
+    Condition: HasSubnet1
+  ConditionalPolicySubnet2:
+    Type: AWS::IAM::Policy
+    Properties:
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Action:
+              - ec2:AssignPrivateIpAddresses
+              - ec2:CreateNetworkInterface
+              - ec2:CreateNetworkInterfacePermission
+              - ec2:DeleteNetworkInterface
+              - ec2:DeleteNetworkInterfacePermission
+              - ec2:DetachNetworkInterface
+              - ec2:ModifyNetworkInterfaceAttribute
+              - ec2:UnassignPrivateIpAddresses
+            Resource:
+              - Fn::Sub:
+                  - arn:aws:ec2:${AWS::Region}:${AWS::AccountId}:subnet/${PrivateSubnet2}
+                  - PrivateSubnet2:
+                      Fn::Select:
+                        - 1
+                        - Ref: PrivateSubnetIds
+      PolicyName: ConditionalPolicySubnet2
+      Roles:
+        - Ref: ExecutionRole
+    Metadata:
+      aws:cdk:path: SageMakerIamRoleCfnTemplate/ConditionalPolicySubnet2
+    Condition: HasSubnet2
+  ConditionalPolicySubnet3:
+    Type: AWS::IAM::Policy
+    Properties:
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Action:
+              - ec2:AssignPrivateIpAddresses
+              - ec2:CreateNetworkInterface
+              - ec2:CreateNetworkInterfacePermission
+              - ec2:DeleteNetworkInterface
+              - ec2:DeleteNetworkInterfacePermission
+              - ec2:DetachNetworkInterface
+              - ec2:ModifyNetworkInterfaceAttribute
+              - ec2:UnassignPrivateIpAddresses
+            Resource:
+              - Fn::Sub:
+                  - arn:aws:ec2:${AWS::Region}:${AWS::AccountId}:subnet/${PrivateSubnet3}
+                  - PrivateSubnet3:
+                      Fn::Select:
+                        - 2
+                        - Ref: PrivateSubnetIds
+      PolicyName: ConditionalPolicySubnet3
+      Roles:
+        - Ref: ExecutionRole
+    Metadata:
+      aws:cdk:path: SageMakerIamRoleCfnTemplate/ConditionalPolicySubnet3
+    Condition: HasSubnet3
+  ConditionalPolicySubnet4:
+    Type: AWS::IAM::Policy
+    Properties:
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Action:
+              - ec2:AssignPrivateIpAddresses
+              - ec2:CreateNetworkInterface
+              - ec2:CreateNetworkInterfacePermission
+              - ec2:DeleteNetworkInterface
+              - ec2:DeleteNetworkInterfacePermission
+              - ec2:DetachNetworkInterface
+              - ec2:ModifyNetworkInterfaceAttribute
+              - ec2:UnassignPrivateIpAddresses
+            Resource:
+              - Fn::Sub:
+                  - arn:aws:ec2:${AWS::Region}:${AWS::AccountId}:subnet/${PrivateSubnet4}
+                  - PrivateSubnet4:
+                      Fn::Select:
+                        - 3
+                        - Ref: PrivateSubnetIds
+      PolicyName: ConditionalPolicySubnet4
+      Roles:
+        - Ref: ExecutionRole
+    Metadata:
+      aws:cdk:path: SageMakerIamRoleCfnTemplate/ConditionalPolicySubnet4
+    Condition: HasSubnet4
+  ConditionalPolicySubnet5:
+    Type: AWS::IAM::Policy
+    Properties:
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Action:
+              - ec2:AssignPrivateIpAddresses
+              - ec2:CreateNetworkInterface
+              - ec2:CreateNetworkInterfacePermission
+              - ec2:DeleteNetworkInterface
+              - ec2:DeleteNetworkInterfacePermission
+              - ec2:DetachNetworkInterface
+              - ec2:ModifyNetworkInterfaceAttribute
+              - ec2:UnassignPrivateIpAddresses
+            Resource:
+              - Fn::Sub:
+                  - arn:aws:ec2:${AWS::Region}:${AWS::AccountId}:subnet/${PrivateSubnet5}
+                  - PrivateSubnet5:
+                      Fn::Select:
+                        - 4
+                        - Ref: PrivateSubnetIds
+      PolicyName: ConditionalPolicySubnet5
+      Roles:
+        - Ref: ExecutionRole
+    Metadata:
+      aws:cdk:path: SageMakerIamRoleCfnTemplate/ConditionalPolicySubnet5
+    Condition: HasSubnet5
+  conditionalSecurityGroup1:
+    Type: AWS::IAM::Policy
+    Properties:
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Action:
+              - ec2:AssignPrivateIpAddresses
+              - ec2:CreateNetworkInterface
+              - ec2:CreateNetworkInterfacePermission
+              - ec2:DeleteNetworkInterface
+              - ec2:DeleteNetworkInterfacePermission
+              - ec2:DetachNetworkInterface
+              - ec2:ModifyNetworkInterfaceAttribute
+              - ec2:UnassignPrivateIpAddresses
+            Resource:
+              - Fn::Sub:
+                  - arn:aws:ec2:${AWS::Region}:${AWS::AccountId}:security-group/${SecurityGroup1}
+                  - SecurityGroup1:
+                      Fn::Select:
+                        - 0
+                        - Ref: SecurityGroupIds
+      PolicyName: conditionalSecurityGroup1
+      Roles:
+        - Ref: ExecutionRole
+    Metadata:
+      aws:cdk:path: SageMakerIamRoleCfnTemplate/conditionalSecurityGroup1
+    Condition: HasSecurityGroup1
+  conditionalSecurityGroup2:
+    Type: AWS::IAM::Policy
+    Properties:
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Action:
+              - ec2:AssignPrivateIpAddresses
+              - ec2:CreateNetworkInterface
+              - ec2:CreateNetworkInterfacePermission
+              - ec2:DeleteNetworkInterface
+              - ec2:DeleteNetworkInterfacePermission
+              - ec2:DetachNetworkInterface
+              - ec2:ModifyNetworkInterfaceAttribute
+              - ec2:UnassignPrivateIpAddresses
+            Resource:
+              - Fn::Sub:
+                  - arn:aws:ec2:${AWS::Region}:${AWS::AccountId}:security-group/${SecurityGroup2}
+                  - SecurityGroup2:
+                      Fn::Select:
+                        - 1
+                        - Ref: SecurityGroupIds
+      PolicyName: conditionalSecurityGroup2
+      Roles:
+        - Ref: ExecutionRole
+    Metadata:
+      aws:cdk:path: SageMakerIamRoleCfnTemplate/conditionalSecurityGroup2
+    Condition: HasSecurityGroup2
+  conditionalSecurityGroup3:
+    Type: AWS::IAM::Policy
+    Properties:
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Action:
+              - ec2:AssignPrivateIpAddresses
+              - ec2:CreateNetworkInterface
+              - ec2:CreateNetworkInterfacePermission
+              - ec2:DeleteNetworkInterface
+              - ec2:DeleteNetworkInterfacePermission
+              - ec2:DetachNetworkInterface
+              - ec2:ModifyNetworkInterfaceAttribute
+              - ec2:UnassignPrivateIpAddresses
+            Resource:
+              - Fn::Sub:
+                  - arn:aws:ec2:${AWS::Region}:${AWS::AccountId}:security-group/${SecurityGroup3}
+                  - SecurityGroup3:
+                      Fn::Select:
+                        - 2
+                        - Ref: SecurityGroupIds
+      PolicyName: conditionalSecurityGroup3
+      Roles:
+        - Ref: ExecutionRole
+    Metadata:
+      aws:cdk:path: SageMakerIamRoleCfnTemplate/conditionalSecurityGroup3
+    Condition: HasSecurityGroup3
+  conditionalSecurityGroup4:
+    Type: AWS::IAM::Policy
+    Properties:
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Action:
+              - ec2:AssignPrivateIpAddresses
+              - ec2:CreateNetworkInterface
+              - ec2:CreateNetworkInterfacePermission
+              - ec2:DeleteNetworkInterface
+              - ec2:DeleteNetworkInterfacePermission
+              - ec2:DetachNetworkInterface
+              - ec2:ModifyNetworkInterfaceAttribute
+              - ec2:UnassignPrivateIpAddresses
+            Resource:
+              - Fn::Sub:
+                  - arn:aws:ec2:${AWS::Region}:${AWS::AccountId}:security-group/${SecurityGroup4}
+                  - SecurityGroup4:
+                      Fn::Select:
+                        - 3
+                        - Ref: SecurityGroupIds
+      PolicyName: conditionalSecurityGroup4
+      Roles:
+        - Ref: ExecutionRole
+    Metadata:
+      aws:cdk:path: SageMakerIamRoleCfnTemplate/conditionalSecurityGroup4
+    Condition: HasSecurityGroup4
+  conditionalSecurityGroup5:
+    Type: AWS::IAM::Policy
+    Properties:
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Action:
+              - ec2:AssignPrivateIpAddresses
+              - ec2:CreateNetworkInterface
+              - ec2:CreateNetworkInterfacePermission
+              - ec2:DeleteNetworkInterface
+              - ec2:DeleteNetworkInterfacePermission
+              - ec2:DetachNetworkInterface
+              - ec2:ModifyNetworkInterfaceAttribute
+              - ec2:UnassignPrivateIpAddresses
+            Resource:
+              - Fn::Sub:
+                  - arn:aws:ec2:${AWS::Region}:${AWS::AccountId}:security-group/${SecurityGroup5}
+                  - SecurityGroup5:
+                      Fn::Select:
+                        - 4
+                        - Ref: SecurityGroupIds
+      PolicyName: conditionalSecurityGroup5
+      Roles:
+        - Ref: ExecutionRole
+    Metadata:
+      aws:cdk:path: SageMakerIamRoleCfnTemplate/conditionalSecurityGroup5
+    Condition: HasSecurityGroup5
+Outputs:
+  SageMakerIAMRoleName:
+    Description: SageMaker IAM role Name
+    Value:
+      Ref: ExecutionRole
+  SageMakerIAMRoleArn:
+    Description: SageMaker IAM role Arn
+    Value:
+      Fn::GetAtt:
+        - ExecutionRole
+        - Arn

@@ -1,0 +1,68 @@
+Description: SecurityGroup stack for SageMaker HyperPod with Slurm
+Parameters:
+  ResourceNamePrefix:
+    Type: String
+    Default: sagemaker-hyperpod-slurm
+    Description: Prefix to be used for all resources created by this template.
+  VpcId:
+    Type: String
+    Default: vpc-1234567890abcdef0
+    Description: The ID of the VPC you wish to use if you do not want to create a new VPC.
+Resources:
+  SlurmSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Allow EFA communication for Multi-Node Parallel Batch jobs
+      GroupName:
+        Fn::Sub: ${ResourceNamePrefix}-sg
+      Tags:
+        - Key: aws-sagemaker-hyperpod-prerequiste
+          Value:
+            Fn::Sub: ${ResourceNamePrefix}-sg
+      VpcId:
+        Ref: VpcId
+    Metadata:
+      aws:cdk:path: SlurmSecurityGroupCfnTemplateTemplate/SlurmSecurityGroup
+  SlurmEFASecurityGroupIngress:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      Description: All to all communication for EFA Ingress within Security Group
+      FromPort: -1
+      GroupId:
+        Ref: SlurmSecurityGroup
+      IpProtocol: '-1'
+      SourceSecurityGroupId:
+        Ref: SlurmSecurityGroup
+      ToPort: -1
+    Metadata:
+      aws:cdk:path: SlurmSecurityGroupCfnTemplateTemplate/SlurmEFASecurityGroupIngress
+  SlurmEFASecurityGroupEgress:
+    Type: AWS::EC2::SecurityGroupEgress
+    Properties:
+      Description: All to all communication for EFA Egress within Security Group
+      DestinationSecurityGroupId:
+        Ref: SlurmSecurityGroup
+      FromPort: -1
+      GroupId:
+        Ref: SlurmSecurityGroup
+      IpProtocol: '-1'
+      ToPort: -1
+    Metadata:
+      aws:cdk:path: SlurmSecurityGroupCfnTemplateTemplate/SlurmEFASecurityGroupEgress
+  SlurmEFASecurityGroupEgressECS:
+    Type: AWS::EC2::SecurityGroupEgress
+    Properties:
+      CidrIp: 0.0.0.0/0
+      Description: All to all communication for Egress to all
+      FromPort: -1
+      GroupId:
+        Ref: SlurmSecurityGroup
+      IpProtocol: '-1'
+      ToPort: -1
+    Metadata:
+      aws:cdk:path: SlurmSecurityGroupCfnTemplateTemplate/SlurmEFASecurityGroupEgressECS
+Outputs:
+  SlurmSecurityGroupId:
+    Description: Security Group Id
+    Value:
+      Ref: SlurmSecurityGroup

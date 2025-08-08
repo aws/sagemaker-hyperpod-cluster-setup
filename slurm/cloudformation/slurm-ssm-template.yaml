@@ -1,0 +1,54 @@
+Parameters:
+  ssmDocumentName:
+    Type: String
+    Default: 'true'
+    AllowedValues:
+      - 'true'
+      - 'false'
+    Description: >-
+      Create SSM Session Manager Document. Only set to False if SSM-SessionManagerRunShellAsUbuntu document exists in
+      your account.
+Conditions:
+  createSSMDocumentCondition:
+    Fn::Equals:
+      - Ref: ssmDocumentName
+      - 'true'
+Resources:
+  SSMSessionManagerRunShellAsUbuntu:
+    Type: AWS::SSM::Document
+    Properties:
+      Content:
+        schemaVersion: '1.0'
+        description: Document to hold regional settings for Session Manager
+        sessionType: Standard_Stream
+        inputs:
+          s3BucketName: ''
+          s3KeyPrefix: ''
+          s3EncryptionEnabled: true
+          cloudWatchLogGroupName: ''
+          cloudWatchEncryptionEnabled: true
+          cloudWatchStreamingEnabled: true
+          idleSessionTimeout: '20'
+          maxSessionDuration: ''
+          kmsKeyId: ''
+          runAsEnabled: true
+          runAsDefaultUser: ubuntu
+          shellProfile:
+            windows: ''
+            linux: /bin/bash -c 'sudo su - ubuntu'
+      DocumentType: Session
+      Name: SSM-SessionManagerRunShellAsUbuntu
+      Tags:
+        - Key: aws-sagemaker-hyperpod-prerequiste
+          Value:
+            Fn::Sub: ${ResourceNamePrefix}-ssm-Document
+    Metadata:
+      aws:cdk:path: SlurmSsmTemplate/SSMSessionManagerRunShellAsUbuntu
+    Condition: createSSMDocumentCondition
+Outputs:
+  SSMDocumentName:
+    Description: The name of the SSM Session Manager document
+    Value:
+      Ref: SSMSessionManagerRunShellAsUbuntu
+    Export:
+      Name: SlurmSsmTemplate-SSMDocumentName

@@ -1,0 +1,92 @@
+Description: SageMaker HyperPod Cluster Execution Role Stack for Slurm
+Parameters:
+  ResourceNamePrefix:
+    Type: String
+    Default: sagemaker-hyperpod-slurm
+    Description: Prefix to be used for all resources created by this template.
+  S3BucketName:
+    Type: String
+    Default: sagemaker-lifecycle
+    Description: The name of the S3 bucket used to store the cluster lifecycle scripts.
+Resources:
+  AmazonSagemakerClusterExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - sagemaker.amazonaws.com
+            Action:
+              - sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AmazonSageMakerClusterInstanceRolePolicy
+      Policies:
+        - PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action:
+                  - ec2:CreateNetworkInterface
+                  - ec2:CreateNetworkInterfacePermission
+                  - ec2:DeleteNetworkInterface
+                  - ec2:DeleteNetworkInterfacePermission
+                  - ec2:DetachNetworkInterface
+                Resource:
+                  - Fn::Sub: arn:aws:ec2:${AWS::Region}:${AWS::AccountId}:network-interface/*
+                  - Fn::Sub: arn:aws:ec2:${AWS::Region}:${AWS::AccountId}:security-group/*
+                  - Fn::Sub: arn:aws:ec2:${AWS::Region}:${AWS::AccountId}:subnet/*
+                  - Fn::Sub: arn:aws:ec2:${AWS::Region}:${AWS::AccountId}:vpc/*
+              - Effect: Allow
+                Action:
+                  - ec2:DescribeNetworkInterfaces
+                  - ec2:DescribeVpcs
+                  - ec2:DescribeDhcpOptions
+                  - ec2:DescribeSubnets
+                  - ec2:DescribeSecurityGroups
+                  - ec2:CreateTags
+                Resource: '*'
+          PolicyName: AmazonSagemakerClusterVPCPolicy
+        - PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action:
+                  - s3:ListBucket
+                  - s3:GetObject
+                  - s3:PutObject
+                  - s3:DeleteObject
+                Resource:
+                  - Fn::Sub: arn:aws:s3:::${S3BucketName}
+                  - Fn::Sub: arn:aws:s3:::${S3BucketName}/*
+          PolicyName:
+            Fn::Sub: ${ResourceNamePrefix}-S3AccessPolicy
+      RoleName:
+        Fn::Sub: ${ResourceNamePrefix}ExecRole
+      Tags:
+        - Key: aws-sagemaker-hyperpod-prerequisite
+          Value:
+            Fn::Sub: ${ResourceNamePrefix}ExecRole
+        - Key: Purpose
+          Value: SageMaker HyperPod Cluster Execution
+    Metadata:
+      aws:cdk:path: SlurmIamRoleCfnTemplate/AmazonSagemakerClusterExecutionRole
+Outputs:
+  AmazonSagemakerClusterExecutionRoleArn:
+    Description: The Role ARN used for cluster creation
+    Value:
+      Fn::GetAtt:
+        - AmazonSagemakerClusterExecutionRole
+        - Arn
+    Export:
+      Name:
+        Fn::Sub: ${AWS::StackName}-AmazonSagemakerClusterExecutionRoleArn
+  AmazonSagemakerClusterExecutionRoleName:
+    Description: The Role Name used for cluster creation
+    Value:
+      Ref: AmazonSagemakerClusterExecutionRole
+    Export:
+      Name:
+        Fn::Sub: ${AWS::StackName}-AmazonSagemakerClusterExecutionRoleName

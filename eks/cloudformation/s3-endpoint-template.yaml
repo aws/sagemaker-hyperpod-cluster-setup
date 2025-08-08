@@ -1,0 +1,35 @@
+Description: S3 Endpoint Stack
+Parameters:
+  VpcId:
+    Type: String
+    Default: vpc-1234567890abcdef0
+    Description: The ID of the VPC you wish to use to create an S3 endpoint
+  PrivateRouteTableIds:
+    Type: CommaDelimitedList
+    Default: rtb-1234567890abcdef0
+    Description: The Id of your private route table.
+  ResourceNamePrefix:
+    Type: String
+    Default: sagemaker-hyperpod-eks
+    Description: Prefix to be used for all resources created by this template.
+Resources:
+  S3Endpoint:
+    Type: AWS::EC2::VPCEndpoint
+    Properties:
+      RouteTableIds:
+        Ref: PrivateRouteTableIds
+      ServiceName:
+        Fn::Join:
+          - ''
+          - - com.amazonaws.
+            - Ref: AWS::Region
+            - .s3
+      Tags:
+        - Key: aws-sagemaker-hyperpod-prerequiste
+          Value:
+            Fn::Sub: ${ResourceNamePrefix}-s3-vpc-endpoint
+      VpcEndpointType: Gateway
+      VpcId:
+        Ref: VpcId
+    Metadata:
+      aws:cdk:path: S3EndpointCfnTemplate/S3Endpoint
