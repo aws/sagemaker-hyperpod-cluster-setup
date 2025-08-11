@@ -219,7 +219,7 @@ Resources:
           KUBECONFIG: /tmp/.kube/config
           LD_LIBRARY_PATH: /opt/python/lib
       FunctionName:
-        Fn::Sub: ${ResourceNamePrefix}-fsx-func1
+        Fn::Sub: ${ResourceNamePrefix}fsxfunc1
       Handler: lambda_function.lambda_handler
       Layers:
         - Ref: FsxCustomResourceLayer

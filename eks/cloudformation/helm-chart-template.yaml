@@ -153,7 +153,7 @@ Resources:
             Ref: RigHelmScriptPath
           LD_LIBRARY_PATH: /opt/python/lib
       FunctionName:
-        Fn::Sub: ${ResourceNamePrefix}-helm-func
+        Fn::Sub: ${ResourceNamePrefix}helmfunc
       Handler: lambda_function.lambda_handler
       Layers:
         - Ref: HelmCustomResourceLayer

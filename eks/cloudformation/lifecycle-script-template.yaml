@@ -118,7 +118,7 @@ Resources:
             Ref: GithubRawUrl
       FunctionName:
         Fn::Sub:
-          - ${ResourceNamePrefix}-lcs-func
+          - ${ResourceNamePrefix}-lcsfunc
           - ResourceNamePrefix:
               Ref: ResourceNamePrefix
       Handler: index.lambda_handler

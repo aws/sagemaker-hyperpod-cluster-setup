@@ -425,7 +425,7 @@ Resources:
           NUMBER_OF_INSTANCE_GROUPS: '20'
       FunctionName:
         Fn::Sub:
-          - ${ResourceNamePrefix}-hp-func
+          - ${ResourceNamePrefix}hpfunc
           - ResourceNamePrefix:
               Ref: ResourceNamePrefix
       Handler: lambda_function.lambda_handler
