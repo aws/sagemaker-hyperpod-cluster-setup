@@ -577,7 +577,7 @@ def on_create(event):
                             '--cluster', os.environ['CLUSTER_NAME'],
                             '--attach-policy-arn', 'arn:aws:iam::aws:policy/AmazonFSxFullAccess',
                             '--approve',
-                            '--role-name', f"FSXLCSI-{os.environ['CLUSTER_NAME']}-{os.environ['AWS_REGION']}",
+                            '--role-name', f"FSXLCSI-{os.environ['CLUSTER_NAME']}",
                             '--region', os.environ['AWS_REGION']], check=True)
 
             # Verify proper annotation of the service account with the IAM role ARN
