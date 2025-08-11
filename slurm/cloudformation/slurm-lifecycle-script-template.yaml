@@ -386,7 +386,7 @@ Resources:
             Ref: GithubPath
       FunctionName:
         Fn::Sub:
-          - ${ResourceNamePrefix}-lcs-loader
+          - ${ResourceNamePrefix}lcsload
           - ResourceNamePrefix:
               Ref: ResourceNamePrefix
       Handler: index.lambda_handler
