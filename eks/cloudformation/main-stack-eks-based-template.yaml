@@ -23,7 +23,6 @@ Metadata:
           - VpcId
           - VpcCIDR
           - AvailabilityZoneIds
-          - EksAvailabilityZoneIds
           - CreateSecurityGroupStack
           - SecurityGroupId
           - SecurityGroupIds
@@ -137,8 +136,6 @@ Metadata:
         default: VPC CIDR Range
       AvailabilityZoneIds:
         default: Availability Zone IDs
-      EksAvailabilityZoneIds:
-        default: EKS Availability Zone IDs
       CreateSecurityGroupStack:
         default: Create New Security Group
       SecurityGroupId:
@@ -242,10 +239,6 @@ Parameters:
     Type: String
     Default: use2-az1,use2-az2
     Description: List of AZs to deploy subnets in (up to 5, comma separated)
-  EksAvailabilityZoneIds:
-    Type: String
-    Default: ''
-    Description: List of AZs to deploy eks subnets in (up to 5, comma separated)
   VpcId:
     Type: String
     Default: vpc-1234567890abcdef0
@@ -615,13 +608,13 @@ Parameters:
     Description: Boolean to Create FSx for Lustre File System Stack
 Conditions:
   EnableHPInferenceFeatureCondition:
-    Fn::Equals:
-      - Ref: EnableHPInferenceFeature
-      - 'true'
-  EksAZIdsIsEmptyCondition:
-    Fn::Equals:
-      - Ref: EksAvailabilityZoneIds
-      - ''
+    Fn::And:
+      - Fn::Equals:
+          - Ref: EnableHPInferenceFeature
+          - 'true'
+      - Fn::Equals:
+          - Ref: Stage
+          - gamma
   CreateVPCStackCondition:
     Fn::Equals:
       - Ref: CreateVPCStack
@@ -734,17 +727,6 @@ Resources:
             - ','
             - - Ref: AvailabilityZoneIds
               - ',,,'
-        EksAvailabilityZoneIds:
-          Fn::If:
-            - EksAZIdsIsEmptyCondition
-            - Fn::Join:
-                - ','
-                - - Ref: AvailabilityZoneIds
-                  - ',,,'
-            - Fn::Join:
-                - ','
-                - - Ref: EksAvailabilityZoneIds
-                  - ',,,'
         NatGatewayIds:
           Fn::If:
             - CreateVPCStackCondition

@@ -17,10 +17,6 @@ Parameters:
     Type: CommaDelimitedList
     Default: use2-az2,,,,
     Description: List of AZs to deploy subnets in (up to 5)
-  EksAvailabilityZoneIds:
-    Type: CommaDelimitedList
-    Default: use2-az2,,,,
-    Description: List of AZs to deploy eks subnets in (up to 5)
   NatGatewayIds:
     Type: CommaDelimitedList
     Default: nat-1234567890abcdef0
@@ -65,41 +61,6 @@ Conditions:
               - 4
               - Ref: AvailabilityZoneIds
           - ''
-  HasEksAZ1:
-    Fn::Not:
-      - Fn::Equals:
-          - Fn::Select:
-              - 0
-              - Ref: EksAvailabilityZoneIds
-          - ''
-  HasEksAZ2:
-    Fn::Not:
-      - Fn::Equals:
-          - Fn::Select:
-              - 1
-              - Ref: EksAvailabilityZoneIds
-          - ''
-  HasEksAZ3:
-    Fn::Not:
-      - Fn::Equals:
-          - Fn::Select:
-              - 2
-              - Ref: EksAvailabilityZoneIds
-          - ''
-  HasEksAZ4:
-    Fn::Not:
-      - Fn::Equals:
-          - Fn::Select:
-              - 3
-              - Ref: EksAvailabilityZoneIds
-          - ''
-  HasEksAZ5:
-    Fn::Not:
-      - Fn::Equals:
-          - Fn::Select:
-              - 4
-              - Ref: EksAvailabilityZoneIds
-          - ''
 Resources:
   AdditionalCidrBlock1:
     Type: AWS::EC2::VPCCidrBlock
@@ -139,6 +100,48 @@ Resources:
     Metadata:
       aws:cdk:path: PrivateSubnetCfnTemplate/PrivateSubnet1
     Condition: HasAZ1
+  EksPrivateSubnet1:
+    Type: AWS::EC2::Subnet
+    Properties:
+      AvailabilityZoneId:
+        Fn::Select:
+          - 0
+          - Ref: AvailabilityZoneIds
+      CidrBlock:
+        Fn::Join:
+          - ''
+          - - Fn::Select:
+                - 0
+                - Fn::Split:
+                    - .
+                    - Fn::Select:
+                        - 0
+                        - Fn::Split:
+                            - /
+                            - Ref: VpcCidrBlock
+            - .
+            - Fn::Select:
+                - 1
+                - Fn::Split:
+                    - .
+                    - Fn::Select:
+                        - 0
+                        - Fn::Split:
+                            - /
+                            - Ref: VpcCidrBlock
+            - .16.0/24
+      MapPublicIpOnLaunch: false
+      Tags:
+        - Key: aws-sagemaker-hyperpod-prerequiste
+          Value:
+            Fn::Sub: ${ResourceNamePrefix}-Eks-Private1
+        - Key: kubernetes.io/role/internal-elb
+          Value: '1'
+      VpcId:
+        Ref: VpcId
+    Metadata:
+      aws:cdk:path: PrivateSubnetCfnTemplate/EksPrivateSubnet1
+    Condition: HasAZ1
   PrivateRouteTable1:
     Type: AWS::EC2::RouteTable
     Properties:
@@ -160,6 +163,27 @@ Resources:
         Ref: PrivateSubnet1
     Metadata:
       aws:cdk:path: PrivateSubnetCfnTemplate/PrivateSubnet1RouteTableAssociation
+    Condition: HasAZ1
+  EksPrivateRouteTable1:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      Tags:
+        - Key: aws-sagemaker-hyperpod-prerequiste
+          Value:
+            Fn::Sub: ${ResourceNamePrefix}-EKS-Private-RT-1
+      VpcId:
+        Ref: VpcId
+    Metadata:
+      aws:cdk:path: PrivateSubnetCfnTemplate/EksPrivateRouteTable1
+  PrivateEksSubnet1RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId:
+        Ref: EksPrivateRouteTable1
+      SubnetId:
+        Ref: EksPrivateSubnet1
+    Metadata:
+      aws:cdk:path: PrivateSubnetCfnTemplate/PrivateEksSubnet1RouteTableAssociation
     Condition: HasAZ1
   DefaultPrivateRoute1:
     Type: AWS::EC2::Route
@@ -212,6 +236,48 @@ Resources:
     Metadata:
       aws:cdk:path: PrivateSubnetCfnTemplate/PrivateSubnet2
     Condition: HasAZ2
+  EksPrivateSubnet2:
+    Type: AWS::EC2::Subnet
+    Properties:
+      AvailabilityZoneId:
+        Fn::Select:
+          - 1
+          - Ref: AvailabilityZoneIds
+      CidrBlock:
+        Fn::Join:
+          - ''
+          - - Fn::Select:
+                - 0
+                - Fn::Split:
+                    - .
+                    - Fn::Select:
+                        - 0
+                        - Fn::Split:
+                            - /
+                            - Ref: VpcCidrBlock
+            - .
+            - Fn::Select:
+                - 1
+                - Fn::Split:
+                    - .
+                    - Fn::Select:
+                        - 0
+                        - Fn::Split:
+                            - /
+                            - Ref: VpcCidrBlock
+            - .48.0/24
+      MapPublicIpOnLaunch: false
+      Tags:
+        - Key: aws-sagemaker-hyperpod-prerequiste
+          Value:
+            Fn::Sub: ${ResourceNamePrefix}-Eks-Private2
+        - Key: kubernetes.io/role/internal-elb
+          Value: '1'
+      VpcId:
+        Ref: VpcId
+    Metadata:
+      aws:cdk:path: PrivateSubnetCfnTemplate/EksPrivateSubnet2
+    Condition: HasAZ2
   PrivateRouteTable2:
     Type: AWS::EC2::RouteTable
     Properties:
@@ -233,6 +299,27 @@ Resources:
         Ref: PrivateSubnet2
     Metadata:
       aws:cdk:path: PrivateSubnetCfnTemplate/PrivateSubnet2RouteTableAssociation
+    Condition: HasAZ2
+  EksPrivateRouteTable2:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      Tags:
+        - Key: aws-sagemaker-hyperpod-prerequiste
+          Value:
+            Fn::Sub: ${ResourceNamePrefix}-EKS-Private-RT-2
+      VpcId:
+        Ref: VpcId
+    Metadata:
+      aws:cdk:path: PrivateSubnetCfnTemplate/EksPrivateRouteTable2
+  PrivateEksSubnet2RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId:
+        Ref: EksPrivateRouteTable2
+      SubnetId:
+        Ref: EksPrivateSubnet2
+    Metadata:
+      aws:cdk:path: PrivateSubnetCfnTemplate/PrivateEksSubnet2RouteTableAssociation
     Condition: HasAZ2
   DefaultPrivateRoute2:
     Type: AWS::EC2::Route
@@ -285,6 +372,48 @@ Resources:
     Metadata:
       aws:cdk:path: PrivateSubnetCfnTemplate/PrivateSubnet3
     Condition: HasAZ3
+  EksPrivateSubnet3:
+    Type: AWS::EC2::Subnet
+    Properties:
+      AvailabilityZoneId:
+        Fn::Select:
+          - 2
+          - Ref: AvailabilityZoneIds
+      CidrBlock:
+        Fn::Join:
+          - ''
+          - - Fn::Select:
+                - 0
+                - Fn::Split:
+                    - .
+                    - Fn::Select:
+                        - 0
+                        - Fn::Split:
+                            - /
+                            - Ref: VpcCidrBlock
+            - .
+            - Fn::Select:
+                - 1
+                - Fn::Split:
+                    - .
+                    - Fn::Select:
+                        - 0
+                        - Fn::Split:
+                            - /
+                            - Ref: VpcCidrBlock
+            - .80.0/24
+      MapPublicIpOnLaunch: false
+      Tags:
+        - Key: aws-sagemaker-hyperpod-prerequiste
+          Value:
+            Fn::Sub: ${ResourceNamePrefix}-Eks-Private3
+        - Key: kubernetes.io/role/internal-elb
+          Value: '1'
+      VpcId:
+        Ref: VpcId
+    Metadata:
+      aws:cdk:path: PrivateSubnetCfnTemplate/EksPrivateSubnet3
+    Condition: HasAZ3
   PrivateRouteTable3:
     Type: AWS::EC2::RouteTable
     Properties:
@@ -306,6 +435,27 @@ Resources:
         Ref: PrivateSubnet3
     Metadata:
       aws:cdk:path: PrivateSubnetCfnTemplate/PrivateSubnet3RouteTableAssociation
+    Condition: HasAZ3
+  EksPrivateRouteTable3:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      Tags:
+        - Key: aws-sagemaker-hyperpod-prerequiste
+          Value:
+            Fn::Sub: ${ResourceNamePrefix}-EKS-Private-RT-3
+      VpcId:
+        Ref: VpcId
+    Metadata:
+      aws:cdk:path: PrivateSubnetCfnTemplate/EksPrivateRouteTable3
+  PrivateEksSubnet3RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId:
+        Ref: EksPrivateRouteTable3
+      SubnetId:
+        Ref: EksPrivateSubnet3
+    Metadata:
+      aws:cdk:path: PrivateSubnetCfnTemplate/PrivateEksSubnet3RouteTableAssociation
     Condition: HasAZ3
   DefaultPrivateRoute3:
     Type: AWS::EC2::Route
@@ -358,6 +508,48 @@ Resources:
     Metadata:
       aws:cdk:path: PrivateSubnetCfnTemplate/PrivateSubnet4
     Condition: HasAZ4
+  EksPrivateSubnet4:
+    Type: AWS::EC2::Subnet
+    Properties:
+      AvailabilityZoneId:
+        Fn::Select:
+          - 3
+          - Ref: AvailabilityZoneIds
+      CidrBlock:
+        Fn::Join:
+          - ''
+          - - Fn::Select:
+                - 0
+                - Fn::Split:
+                    - .
+                    - Fn::Select:
+                        - 0
+                        - Fn::Split:
+                            - /
+                            - Ref: VpcCidrBlock
+            - .
+            - Fn::Select:
+                - 1
+                - Fn::Split:
+                    - .
+                    - Fn::Select:
+                        - 0
+                        - Fn::Split:
+                            - /
+                            - Ref: VpcCidrBlock
+            - .112.0/24
+      MapPublicIpOnLaunch: false
+      Tags:
+        - Key: aws-sagemaker-hyperpod-prerequiste
+          Value:
+            Fn::Sub: ${ResourceNamePrefix}-Eks-Private4
+        - Key: kubernetes.io/role/internal-elb
+          Value: '1'
+      VpcId:
+        Ref: VpcId
+    Metadata:
+      aws:cdk:path: PrivateSubnetCfnTemplate/EksPrivateSubnet4
+    Condition: HasAZ4
   PrivateRouteTable4:
     Type: AWS::EC2::RouteTable
     Properties:
@@ -379,6 +571,27 @@ Resources:
         Ref: PrivateSubnet4
     Metadata:
       aws:cdk:path: PrivateSubnetCfnTemplate/PrivateSubnet4RouteTableAssociation
+    Condition: HasAZ4
+  EksPrivateRouteTable4:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      Tags:
+        - Key: aws-sagemaker-hyperpod-prerequiste
+          Value:
+            Fn::Sub: ${ResourceNamePrefix}-EKS-Private-RT-4
+      VpcId:
+        Ref: VpcId
+    Metadata:
+      aws:cdk:path: PrivateSubnetCfnTemplate/EksPrivateRouteTable4
+  PrivateEksSubnet4RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId:
+        Ref: EksPrivateRouteTable4
+      SubnetId:
+        Ref: EksPrivateSubnet4
+    Metadata:
+      aws:cdk:path: PrivateSubnetCfnTemplate/PrivateEksSubnet4RouteTableAssociation
     Condition: HasAZ4
   DefaultPrivateRoute4:
     Type: AWS::EC2::Route
@@ -431,304 +644,13 @@ Resources:
     Metadata:
       aws:cdk:path: PrivateSubnetCfnTemplate/PrivateSubnet5
     Condition: HasAZ5
-  PrivateRouteTable5:
-    Type: AWS::EC2::RouteTable
-    Properties:
-      Tags:
-        - Key: aws-sagemaker-hyperpod-prerequiste
-          Value:
-            Fn::Sub: ${ResourceNamePrefix}-Private-RT-5
-      VpcId:
-        Ref: VpcId
-    Metadata:
-      aws:cdk:path: PrivateSubnetCfnTemplate/PrivateRouteTable5
-    Condition: HasAZ5
-  PrivateSubnet5RouteTableAssociation:
-    Type: AWS::EC2::SubnetRouteTableAssociation
-    Properties:
-      RouteTableId:
-        Ref: PrivateRouteTable5
-      SubnetId:
-        Ref: PrivateSubnet5
-    Metadata:
-      aws:cdk:path: PrivateSubnetCfnTemplate/PrivateSubnet5RouteTableAssociation
-    Condition: HasAZ5
-  DefaultPrivateRoute5:
-    Type: AWS::EC2::Route
-    Properties:
-      DestinationCidrBlock: 0.0.0.0/0
-      NatGatewayId:
-        Fn::Select:
-          - 4
-          - Ref: NatGatewayIds
-      RouteTableId:
-        Ref: PrivateRouteTable5
-    Metadata:
-      aws:cdk:path: PrivateSubnetCfnTemplate/DefaultPrivateRoute5
-    Condition: HasAZ5
-  EksPrivateSubnet1:
-    Type: AWS::EC2::Subnet
-    Properties:
-      AvailabilityZoneId:
-        Fn::Select:
-          - 0
-          - Ref: EksAvailabilityZoneIds
-      CidrBlock:
-        Fn::Join:
-          - ''
-          - - Fn::Select:
-                - 0
-                - Fn::Split:
-                    - .
-                    - Fn::Select:
-                        - 0
-                        - Fn::Split:
-                            - /
-                            - Ref: VpcCidrBlock
-            - .
-            - Fn::Select:
-                - 1
-                - Fn::Split:
-                    - .
-                    - Fn::Select:
-                        - 0
-                        - Fn::Split:
-                            - /
-                            - Ref: VpcCidrBlock
-            - .16.0/24
-      MapPublicIpOnLaunch: false
-      Tags:
-        - Key: aws-sagemaker-hyperpod-prerequiste
-          Value:
-            Fn::Sub: ${ResourceNamePrefix}-Eks-Private1
-        - Key: kubernetes.io/role/internal-elb
-          Value: '1'
-      VpcId:
-        Ref: VpcId
-    Metadata:
-      aws:cdk:path: PrivateSubnetCfnTemplate/EksPrivateSubnet1
-    Condition: HasEksAZ1
-  EksPrivateRouteTable1:
-    Type: AWS::EC2::RouteTable
-    Properties:
-      Tags:
-        - Key: aws-sagemaker-hyperpod-prerequiste
-          Value:
-            Fn::Sub: ${ResourceNamePrefix}-EKS-Private-RT-1
-      VpcId:
-        Ref: VpcId
-    Metadata:
-      aws:cdk:path: PrivateSubnetCfnTemplate/EksPrivateRouteTable1
-    Condition: HasEksAZ1
-  PrivateEksSubnet1RouteTableAssociation:
-    Type: AWS::EC2::SubnetRouteTableAssociation
-    Properties:
-      RouteTableId:
-        Ref: EksPrivateRouteTable1
-      SubnetId:
-        Ref: EksPrivateSubnet1
-    Metadata:
-      aws:cdk:path: PrivateSubnetCfnTemplate/PrivateEksSubnet1RouteTableAssociation
-    Condition: HasEksAZ1
-  EksPrivateSubnet2:
-    Type: AWS::EC2::Subnet
-    Properties:
-      AvailabilityZoneId:
-        Fn::Select:
-          - 1
-          - Ref: EksAvailabilityZoneIds
-      CidrBlock:
-        Fn::Join:
-          - ''
-          - - Fn::Select:
-                - 0
-                - Fn::Split:
-                    - .
-                    - Fn::Select:
-                        - 0
-                        - Fn::Split:
-                            - /
-                            - Ref: VpcCidrBlock
-            - .
-            - Fn::Select:
-                - 1
-                - Fn::Split:
-                    - .
-                    - Fn::Select:
-                        - 0
-                        - Fn::Split:
-                            - /
-                            - Ref: VpcCidrBlock
-            - .48.0/24
-      MapPublicIpOnLaunch: false
-      Tags:
-        - Key: aws-sagemaker-hyperpod-prerequiste
-          Value:
-            Fn::Sub: ${ResourceNamePrefix}-Eks-Private2
-        - Key: kubernetes.io/role/internal-elb
-          Value: '1'
-      VpcId:
-        Ref: VpcId
-    Metadata:
-      aws:cdk:path: PrivateSubnetCfnTemplate/EksPrivateSubnet2
-    Condition: HasEksAZ2
-  EksPrivateRouteTable2:
-    Type: AWS::EC2::RouteTable
-    Properties:
-      Tags:
-        - Key: aws-sagemaker-hyperpod-prerequiste
-          Value:
-            Fn::Sub: ${ResourceNamePrefix}-EKS-Private-RT-2
-      VpcId:
-        Ref: VpcId
-    Metadata:
-      aws:cdk:path: PrivateSubnetCfnTemplate/EksPrivateRouteTable2
-    Condition: HasEksAZ2
-  PrivateEksSubnet2RouteTableAssociation:
-    Type: AWS::EC2::SubnetRouteTableAssociation
-    Properties:
-      RouteTableId:
-        Ref: EksPrivateRouteTable2
-      SubnetId:
-        Ref: EksPrivateSubnet2
-    Metadata:
-      aws:cdk:path: PrivateSubnetCfnTemplate/PrivateEksSubnet2RouteTableAssociation
-    Condition: HasEksAZ2
-  EksPrivateSubnet3:
-    Type: AWS::EC2::Subnet
-    Properties:
-      AvailabilityZoneId:
-        Fn::Select:
-          - 2
-          - Ref: EksAvailabilityZoneIds
-      CidrBlock:
-        Fn::Join:
-          - ''
-          - - Fn::Select:
-                - 0
-                - Fn::Split:
-                    - .
-                    - Fn::Select:
-                        - 0
-                        - Fn::Split:
-                            - /
-                            - Ref: VpcCidrBlock
-            - .
-            - Fn::Select:
-                - 1
-                - Fn::Split:
-                    - .
-                    - Fn::Select:
-                        - 0
-                        - Fn::Split:
-                            - /
-                            - Ref: VpcCidrBlock
-            - .80.0/24
-      MapPublicIpOnLaunch: false
-      Tags:
-        - Key: aws-sagemaker-hyperpod-prerequiste
-          Value:
-            Fn::Sub: ${ResourceNamePrefix}-Eks-Private3
-        - Key: kubernetes.io/role/internal-elb
-          Value: '1'
-      VpcId:
-        Ref: VpcId
-    Metadata:
-      aws:cdk:path: PrivateSubnetCfnTemplate/EksPrivateSubnet3
-    Condition: HasEksAZ3
-  EksPrivateRouteTable3:
-    Type: AWS::EC2::RouteTable
-    Properties:
-      Tags:
-        - Key: aws-sagemaker-hyperpod-prerequiste
-          Value:
-            Fn::Sub: ${ResourceNamePrefix}-EKS-Private-RT-3
-      VpcId:
-        Ref: VpcId
-    Metadata:
-      aws:cdk:path: PrivateSubnetCfnTemplate/EksPrivateRouteTable3
-    Condition: HasEksAZ3
-  PrivateEksSubnet3RouteTableAssociation:
-    Type: AWS::EC2::SubnetRouteTableAssociation
-    Properties:
-      RouteTableId:
-        Ref: EksPrivateRouteTable3
-      SubnetId:
-        Ref: EksPrivateSubnet3
-    Metadata:
-      aws:cdk:path: PrivateSubnetCfnTemplate/PrivateEksSubnet3RouteTableAssociation
-    Condition: HasEksAZ3
-  EksPrivateSubnet4:
-    Type: AWS::EC2::Subnet
-    Properties:
-      AvailabilityZoneId:
-        Fn::Select:
-          - 3
-          - Ref: EksAvailabilityZoneIds
-      CidrBlock:
-        Fn::Join:
-          - ''
-          - - Fn::Select:
-                - 0
-                - Fn::Split:
-                    - .
-                    - Fn::Select:
-                        - 0
-                        - Fn::Split:
-                            - /
-                            - Ref: VpcCidrBlock
-            - .
-            - Fn::Select:
-                - 1
-                - Fn::Split:
-                    - .
-                    - Fn::Select:
-                        - 0
-                        - Fn::Split:
-                            - /
-                            - Ref: VpcCidrBlock
-            - .112.0/24
-      MapPublicIpOnLaunch: false
-      Tags:
-        - Key: aws-sagemaker-hyperpod-prerequiste
-          Value:
-            Fn::Sub: ${ResourceNamePrefix}-Eks-Private4
-        - Key: kubernetes.io/role/internal-elb
-          Value: '1'
-      VpcId:
-        Ref: VpcId
-    Metadata:
-      aws:cdk:path: PrivateSubnetCfnTemplate/EksPrivateSubnet4
-    Condition: HasEksAZ4
-  EksPrivateRouteTable4:
-    Type: AWS::EC2::RouteTable
-    Properties:
-      Tags:
-        - Key: aws-sagemaker-hyperpod-prerequiste
-          Value:
-            Fn::Sub: ${ResourceNamePrefix}-EKS-Private-RT-4
-      VpcId:
-        Ref: VpcId
-    Metadata:
-      aws:cdk:path: PrivateSubnetCfnTemplate/EksPrivateRouteTable4
-    Condition: HasEksAZ4
-  PrivateEksSubnet4RouteTableAssociation:
-    Type: AWS::EC2::SubnetRouteTableAssociation
-    Properties:
-      RouteTableId:
-        Ref: EksPrivateRouteTable4
-      SubnetId:
-        Ref: EksPrivateSubnet4
-    Metadata:
-      aws:cdk:path: PrivateSubnetCfnTemplate/PrivateEksSubnet4RouteTableAssociation
-    Condition: HasEksAZ4
   EksPrivateSubnet5:
     Type: AWS::EC2::Subnet
     Properties:
       AvailabilityZoneId:
         Fn::Select:
           - 4
-          - Ref: EksAvailabilityZoneIds
+          - Ref: AvailabilityZoneIds
       CidrBlock:
         Fn::Join:
           - ''
@@ -763,7 +685,29 @@ Resources:
         Ref: VpcId
     Metadata:
       aws:cdk:path: PrivateSubnetCfnTemplate/EksPrivateSubnet5
-    Condition: HasEksAZ5
+    Condition: HasAZ5
+  PrivateRouteTable5:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      Tags:
+        - Key: aws-sagemaker-hyperpod-prerequiste
+          Value:
+            Fn::Sub: ${ResourceNamePrefix}-Private-RT-5
+      VpcId:
+        Ref: VpcId
+    Metadata:
+      aws:cdk:path: PrivateSubnetCfnTemplate/PrivateRouteTable5
+    Condition: HasAZ5
+  PrivateSubnet5RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId:
+        Ref: PrivateRouteTable5
+      SubnetId:
+        Ref: PrivateSubnet5
+    Metadata:
+      aws:cdk:path: PrivateSubnetCfnTemplate/PrivateSubnet5RouteTableAssociation
+    Condition: HasAZ5
   EksPrivateRouteTable5:
     Type: AWS::EC2::RouteTable
     Properties:
@@ -775,7 +719,6 @@ Resources:
         Ref: VpcId
     Metadata:
       aws:cdk:path: PrivateSubnetCfnTemplate/EksPrivateRouteTable5
-    Condition: HasEksAZ5
   PrivateEksSubnet5RouteTableAssociation:
     Type: AWS::EC2::SubnetRouteTableAssociation
     Properties:
@@ -785,7 +728,20 @@ Resources:
         Ref: EksPrivateSubnet5
     Metadata:
       aws:cdk:path: PrivateSubnetCfnTemplate/PrivateEksSubnet5RouteTableAssociation
-    Condition: HasEksAZ5
+    Condition: HasAZ5
+  DefaultPrivateRoute5:
+    Type: AWS::EC2::Route
+    Properties:
+      DestinationCidrBlock: 0.0.0.0/0
+      NatGatewayId:
+        Fn::Select:
+          - 4
+          - Ref: NatGatewayIds
+      RouteTableId:
+        Ref: PrivateRouteTable5
+    Metadata:
+      aws:cdk:path: PrivateSubnetCfnTemplate/DefaultPrivateRoute5
+    Condition: HasAZ5
 Outputs:
   PrivateRouteTableIds:
     Description: Private Route Table Id
@@ -843,23 +799,23 @@ Outputs:
       Fn::Join:
         - ','
         - - Fn::If:
-              - HasEksAZ1
+              - HasAZ1
               - Ref: EksPrivateRouteTable1
               - Ref: AWS::NoValue
           - Fn::If:
-              - HasEksAZ2
+              - HasAZ2
               - Ref: EksPrivateRouteTable2
               - Ref: AWS::NoValue
           - Fn::If:
-              - HasEksAZ3
+              - HasAZ3
               - Ref: EksPrivateRouteTable3
               - Ref: AWS::NoValue
           - Fn::If:
-              - HasEksAZ4
+              - HasAZ4
               - Ref: EksPrivateRouteTable4
               - Ref: AWS::NoValue
           - Fn::If:
-              - HasEksAZ5
+              - HasAZ5
               - Ref: EksPrivateRouteTable5
               - Ref: AWS::NoValue
   EksPrivateSubnetIds:
@@ -868,22 +824,22 @@ Outputs:
       Fn::Join:
         - ','
         - - Fn::If:
-              - HasEksAZ1
+              - HasAZ1
               - Ref: EksPrivateSubnet1
               - Ref: AWS::NoValue
           - Fn::If:
-              - HasEksAZ2
+              - HasAZ2
               - Ref: EksPrivateSubnet2
               - Ref: AWS::NoValue
           - Fn::If:
-              - HasEksAZ3
+              - HasAZ3
               - Ref: EksPrivateSubnet3
               - Ref: AWS::NoValue
           - Fn::If:
-              - HasEksAZ4
+              - HasAZ4
               - Ref: EksPrivateSubnet4
               - Ref: AWS::NoValue
           - Fn::If:
-              - HasEksAZ5
+              - HasAZ5
               - Ref: EksPrivateSubnet5
               - Ref: AWS::NoValue
