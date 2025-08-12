@@ -1,0 +1,1218 @@
+{
+  "annotations": {
+    "list": [
+      {
+        "builtIn": 1,
+        "datasource": {
+          "type": "datasource",
+          "uid": "grafana"
+        },
+        "enable": true,
+        "hide": true,
+        "iconColor": "rgba(0, 211, 255, 1)",
+        "name": "Annotations & Alerts",
+        "type": "dashboard"
+      }
+    ]
+  },
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 1,
+  "id": 149,
+  "links": [
+    {
+      "asDropdown": false,
+      "icon": "external link",
+      "includeVars": false,
+      "keepTime": true,
+      "tags": ["hyperpod"],
+      "targetBlank": false,
+      "title": "",
+      "tooltip": "",
+      "type": "dashboards",
+      "url": ""
+    }
+  ],
+  "panels": [
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "shades"
+          },
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            },
+            "filterable": false,
+            "inspect": false
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 10,
+        "w": 24,
+        "x": 0,
+        "y": 0
+      },
+      "id": 47,
+      "options": {
+        "cellHeight": "sm",
+        "footer": {
+          "countRows": false,
+          "enablePagination": true,
+          "fields": [],
+          "reducer": ["sum"],
+          "show": false
+        },
+        "frameIndex": 0,
+        "showHeader": true,
+        "sortBy": []
+      },
+      "pluginVersion": "10.4.1",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "editorMode": "code",
+          "exemplar": false,
+          "expr": "rate(container_cpu_usage_seconds_total{cluster_id=\"$cluster_id\", namespace=~\"$namespace\", pod=~\"$pod\", container!=\"\"}[5m]) * on(pod, namespace) group_left(created_by_name, created_by_kind, node) kube_pod_info{cluster_id=\"$cluster_id\", namespace=~\"$namespace\", created_by_kind=~\"$created_by_kind\", created_by_name=~\"$created_by_name\", pod=~\"$pod\"}",
+          "format": "table",
+          "hide": false,
+          "instant": true,
+          "legendFormat": "__auto",
+          "range": false,
+          "refId": "C"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "editorMode": "code",
+          "exemplar": false,
+          "expr": "container_memory_usage_bytes{cluster_id=\"$cluster_id\",namespace=~\"$namespace\", pod=~\"$pod\", container!=\"\"} * on(pod, namespace) group_left(created_by_name, created_by_kind, node) kube_pod_info{cluster_id=\"$cluster_id\",namespace=~\"$namespace\", created_by_kind=~\"$created_by_kind\", created_by_name=~\"$created_by_name\", pod=~\"$pod\"}",
+          "format": "table",
+          "hide": false,
+          "instant": true,
+          "legendFormat": "__auto",
+          "range": false,
+          "refId": "D"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "editorMode": "code",
+          "exemplar": false,
+          "expr": "DCGM_FI_DEV_GPU_UTIL{cluster_id=\"$cluster_id\",namespace=~\"$namespace\", pod=~\"$pod\"} * on(pod, namespace) group_left(created_by_name, created_by_kind, node) kube_pod_info{cluster_id=\"$cluster_id\",namespace=~\"$namespace\", created_by_kind=~\"$created_by_kind\", created_by_name=~\"$created_by_name\", pod=~\"$pod\"}",
+          "format": "table",
+          "instant": true,
+          "legendFormat": "__auto",
+          "range": false,
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "editorMode": "code",
+          "exemplar": false,
+          "expr": "DCGM_FI_DEV_FB_USED{cluster_id=\"$cluster_id\",namespace=~\"$namespace\", pod=~\"$pod\"} * on(pod, namespace) group_left(created_by_name, created_by_kind, node) kube_pod_info{cluster_id=\"$cluster_id\",namespace=~\"$namespace\", created_by_kind=~\"$created_by_kind\", created_by_name=~\"$created_by_name\", pod=~\"$pod\"}",
+          "format": "table",
+          "hide": false,
+          "instant": true,
+          "legendFormat": "__auto",
+          "range": false,
+          "refId": "B"
+        }
+      ],
+      "title": "Resource usage per Task (Grouped by Parent Task)",
+      "transformations": [
+        {
+          "id": "joinByField",
+          "options": {
+            "byField": "pod",
+            "mode": "outer"
+          }
+        },
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "Hostname 1": true,
+              "Hostname 2": true,
+              "Time": true,
+              "Time 1": false,
+              "Time 2": false,
+              "Time 3": true,
+              "Time 4": true,
+              "Value #D": false,
+              "__name__": true,
+              "container": true,
+              "created_by_kind 1": false,
+              "created_by_kind 2": false,
+              "created_by_kind 4": false,
+              "created_by_name 1": false,
+              "created_by_name 2": false,
+              "created_by_name 4": false,
+              "endpoint": true,
+              "instance": true,
+              "job": true,
+              "service": true
+            },
+            "includeByName": {},
+            "indexByName": {
+              "Hostname 1": 12,
+              "Hostname 2": 81,
+              "Time 1": 13,
+              "Time 2": 15,
+              "Time 3": 66,
+              "Time 4": 80,
+              "UUID 1": 67,
+              "UUID 2": 82,
+              "Value #A": 4,
+              "Value #B": 5,
+              "Value #C": 6,
+              "Value #D": 7,
+              "beta_kubernetes_io_arch 1": 24,
+              "beta_kubernetes_io_arch 2": 44,
+              "beta_kubernetes_io_instance_type 1": 25,
+              "beta_kubernetes_io_instance_type 2": 45,
+              "beta_kubernetes_io_os 1": 26,
+              "beta_kubernetes_io_os 2": 46,
+              "cluster_id 1": 60,
+              "cluster_id 2": 63,
+              "cluster_id 3": 68,
+              "cluster_id 4": 83,
+              "cluster_name 1": 61,
+              "cluster_name 2": 64,
+              "cluster_name 3": 69,
+              "cluster_name 4": 84,
+              "container 1": 3,
+              "container 2": 19,
+              "container 3": 70,
+              "container 4": 85,
+              "cpu": 27,
+              "created_by_kind 1": 1,
+              "created_by_kind 2": 20,
+              "created_by_kind 3": 71,
+              "created_by_kind 4": 86,
+              "created_by_name 1": 0,
+              "created_by_name 2": 21,
+              "created_by_name 3": 72,
+              "created_by_name 4": 87,
+              "device 1": 73,
+              "device 2": 88,
+              "failure_domain_beta_kubernetes_io_region 1": 28,
+              "failure_domain_beta_kubernetes_io_region 2": 47,
+              "failure_domain_beta_kubernetes_io_zone 1": 29,
+              "failure_domain_beta_kubernetes_io_zone 2": 48,
+              "gpu 1": 74,
+              "gpu 2": 89,
+              "id 1": 30,
+              "id 2": 49,
+              "image 1": 31,
+              "image 2": 50,
+              "instance 1": 17,
+              "instance 2": 22,
+              "instance 3": 75,
+              "instance 4": 90,
+              "job 1": 18,
+              "job 2": 23,
+              "job 3": 76,
+              "job 4": 91,
+              "kubernetes_io_arch 1": 32,
+              "kubernetes_io_arch 2": 51,
+              "kubernetes_io_hostname 1": 33,
+              "kubernetes_io_hostname 2": 52,
+              "kubernetes_io_os 1": 34,
+              "kubernetes_io_os 2": 53,
+              "modelName 1": 77,
+              "modelName 2": 92,
+              "name 1": 35,
+              "name 2": 54,
+              "namespace 1": 14,
+              "namespace 2": 16,
+              "namespace 3": 78,
+              "namespace 4": 93,
+              "node 1": 11,
+              "node 2": 96,
+              "node 3": 98,
+              "node 4": 99,
+              "node_kubernetes_io_instance_type 1": 36,
+              "node_kubernetes_io_instance_type 2": 8,
+              "nvidia_com_gpu_present 1": 62,
+              "nvidia_com_gpu_present 2": 65,
+              "pci_bus_id 1": 79,
+              "pci_bus_id 2": 94,
+              "pod": 2,
+              "sagemaker_amazonaws_com_cluster_name 1": 37,
+              "sagemaker_amazonaws_com_cluster_name 2": 55,
+              "sagemaker_amazonaws_com_compute_type 1": 38,
+              "sagemaker_amazonaws_com_compute_type 2": 56,
+              "sagemaker_amazonaws_com_deep_health_check_status 1": 95,
+              "sagemaker_amazonaws_com_deep_health_check_status 2": 97,
+              "sagemaker_amazonaws_com_instance_group_name 1": 39,
+              "sagemaker_amazonaws_com_instance_group_name 2": 9,
+              "sagemaker_amazonaws_com_node_health_status 1": 40,
+              "sagemaker_amazonaws_com_node_health_status 2": 10,
+              "topology_k8s_aws_zone_id 1": 41,
+              "topology_k8s_aws_zone_id 2": 57,
+              "topology_kubernetes_io_region 1": 42,
+              "topology_kubernetes_io_region 2": 58,
+              "topology_kubernetes_io_zone 1": 43,
+              "topology_kubernetes_io_zone 2": 59
+            },
+            "renameByName": {
+              "Hostname 1": "",
+              "Value #A": "GPU Utilization %",
+              "Value #B": "GPU Memory",
+              "Value #C": "CPU Utilization %",
+              "Value #D": "System Memory",
+              "container 1": "Container",
+              "created_by_kind": "Task Type",
+              "created_by_kind 1": "Task Type",
+              "created_by_kind 4": "",
+              "created_by_name": "Task Name",
+              "created_by_name 1": "Task Name",
+              "created_by_name 4": "",
+              "instance 1": "",
+              "namespace": "Namespace",
+              "node": "Node",
+              "node 1": "Hostname",
+              "node_kubernetes_io_instance_type 2": "Instance Type",
+              "pod": "POD",
+              "sagemaker_amazonaws_com_cluster_name 2": "",
+              "sagemaker_amazonaws_com_compute_type 2": "",
+              "sagemaker_amazonaws_com_instance_group_name 2": "Instance Group",
+              "sagemaker_amazonaws_com_node_health_status 2": "Status"
+            }
+          }
+        },
+        {
+          "id": "calculateField",
+          "options": {
+            "alias": "GPU %",
+            "mode": "reduceRow",
+            "reduce": {
+              "include": ["GPU Utilization %"],
+              "reducer": "sum"
+            }
+          }
+        },
+        {
+          "id": "calculateField",
+          "options": {
+            "alias": "GPU Mem",
+            "mode": "reduceRow",
+            "reduce": {
+              "include": ["GPU Memory"],
+              "reducer": "sum"
+            }
+          }
+        },
+        {
+          "id": "calculateField",
+          "options": {
+            "alias": "CPU %",
+            "mode": "reduceRow",
+            "reduce": {
+              "include": ["CPU Utilization %"],
+              "reducer": "sum"
+            }
+          }
+        },
+        {
+          "id": "calculateField",
+          "options": {
+            "alias": "System Mem",
+            "mode": "reduceRow",
+            "reduce": {
+              "include": ["System Memory"],
+              "reducer": "sum"
+            }
+          }
+        },
+        {
+          "id": "filterFieldsByName",
+          "options": {
+            "byVariable": false,
+            "include": {
+              "names": [
+                "Task Name",
+                "Task Type",
+                "POD",
+                "GPU Utilization %",
+                "GPU Memory",
+                "CPU Utilization %",
+                "System Memory",
+                "Instance Type",
+                "Instance Group",
+                "Status",
+                "GPU %",
+                "GPU Mem",
+                "CPU %",
+                "System Mem",
+                "Hostname"
+              ]
+            }
+          }
+        },
+        {
+          "id": "groupToNestedTable",
+          "options": {
+            "fields": {
+              "CPU %": {
+                "aggregations": ["mean"],
+                "operation": "aggregate"
+              },
+              "CPU Utilization %": {
+                "aggregations": ["mean"]
+              },
+              "GPU %": {
+                "aggregations": ["mean"],
+                "operation": "aggregate"
+              },
+              "GPU Mem": {
+                "aggregations": ["mean"],
+                "operation": "aggregate"
+              },
+              "GPU Memory": {
+                "aggregations": ["mean"]
+              },
+              "GPU Utilization %": {
+                "aggregations": ["mean"]
+              },
+              "Memory": {
+                "aggregations": ["mean"],
+                "operation": "aggregate"
+              },
+              "System Mem": {
+                "aggregations": ["mean"],
+                "operation": "aggregate"
+              },
+              "System Memory": {
+                "aggregations": ["mean"]
+              },
+              "Task Name": {
+                "aggregations": [],
+                "operation": "groupby"
+              },
+              "Task Type": {
+                "aggregations": [],
+                "operation": "groupby"
+              },
+              "Task Type 1": {
+                "aggregations": [],
+                "operation": "groupby"
+              },
+              "Task Type 4": {
+                "aggregations": [],
+                "operation": "groupby"
+              },
+              "created_by_kind 1": {
+                "aggregations": [],
+                "operation": "groupby"
+              },
+              "created_by_kind 2": {
+                "aggregations": []
+              },
+              "created_by_kind 3": {
+                "aggregations": []
+              },
+              "created_by_kind 4": {
+                "aggregations": []
+              },
+              "created_by_kind 5": {
+                "aggregations": [],
+                "operation": "groupby"
+              },
+              "created_by_name 1": {
+                "aggregations": [],
+                "operation": "groupby"
+              },
+              "created_by_name 3": {
+                "aggregations": []
+              },
+              "created_by_name 4": {
+                "aggregations": [],
+                "operation": "groupby"
+              },
+              "created_by_name 5": {
+                "aggregations": [],
+                "operation": "groupby"
+              }
+            },
+            "showSubframeHeaders": true
+          }
+        }
+      ],
+      "type": "table"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "description": "CPU usage for the selected pod",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "CPU cores",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 0,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "auto",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 10
+      },
+      "id": 6,
+      "options": {
+        "legend": {
+          "calcs": ["mean", "lastNotNull", "max"],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true,
+          "sortBy": "Name",
+          "sortDesc": true
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "pluginVersion": "7.5.0",
+      "targets": [
+        {
+          "datasource": {
+            "uid": "${datasource}"
+          },
+          "editorMode": "code",
+          "expr": "\navg(rate(container_cpu_usage_seconds_total{cluster_id=\"$cluster_id\",namespace=~\"$namespace\", pod=~\"$pod\", container!=\"\"}[5m]) * on(pod) group_left(created_by_name, created_by_kind) kube_pod_info{cluster_id=\"$cluster_id\",namespace=~\"$namespace\", created_by_kind=~\"$created_by_kind\", created_by_name=~\"$created_by_name\", pod=~\"$pod\", host_ip!=\"\", pod_ip!=\"\"}) by ($aggregated_by) ",
+          "instant": true,
+          "interval": "",
+          "legendFormat": "__auto",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "CPU Usage: $pod",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "description": "Memory usage for the selected pod",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "Memory",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 0,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "unit": "bytes"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 10
+      },
+      "id": 7,
+      "options": {
+        "legend": {
+          "calcs": ["mean", "lastNotNull", "max"],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true,
+          "sortBy": "Last *",
+          "sortDesc": true
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "pluginVersion": "7.5.0",
+      "targets": [
+        {
+          "datasource": {
+            "uid": "${datasource}"
+          },
+          "editorMode": "code",
+          "expr": "avg(container_memory_working_set_bytes{cluster_id=\"$cluster_id\",namespace=~\"$namespace\", pod=~\"$pod\", container!=\"\"} * on(pod, namespace) group_left(created_by_name, created_by_kind) kube_pod_info{cluster_id=\"$cluster_id\",namespace=~\"$namespace\", created_by_kind=~\"$created_by_kind\", created_by_name=~\"$created_by_name\", pod=~\"$pod\", host_ip!=\"\", pod_ip!=\"\"}) by ($aggregated_by)",
+          "interval": "",
+          "legendFormat": "__auto",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Memory Usage: $pod",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "description": "GPU utilization by pod",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "Utilization",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 0,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "min": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 90
+              }
+            ]
+          },
+          "unit": "percent"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 18
+      },
+      "id": 9,
+      "options": {
+        "legend": {
+          "calcs": ["mean", "lastNotNull", "max"],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true,
+          "sortBy": "Last *",
+          "sortDesc": true
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "pluginVersion": "7.5.0",
+      "targets": [
+        {
+          "datasource": {
+            "uid": "${datasource}"
+          },
+          "editorMode": "code",
+          "exemplar": false,
+          "expr": "avg(DCGM_FI_DEV_GPU_UTIL{cluster_id=\"$cluster_id\",namespace=~\"$namespace\", pod=~\"$pod\", gpu=~\"$gpu\"} * on(pod, namespace) group_left(created_by_name, created_by_kind) kube_pod_info{cluster_id=\"$cluster_id\",namespace=~\"$namespace\", created_by_kind=~\"$created_by_kind\", created_by_name=~\"$created_by_name\", pod=~\"$pod\", host_ip!=\"\", pod_ip!=\"\"}) by (gpu,$aggregated_by)",
+          "interval": "",
+          "legendFormat": "{{$aggregated_by}}",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "GPU Utilization: $pod",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "description": "GPU memory usage by pod",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "Memory",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 0,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "min": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "unit": "bytes"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 18
+      },
+      "id": 10,
+      "options": {
+        "legend": {
+          "calcs": ["mean", "lastNotNull", "max"],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true,
+          "sortBy": "Last *",
+          "sortDesc": true
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "pluginVersion": "7.5.0",
+      "targets": [
+        {
+          "datasource": {
+            "uid": "${datasource}"
+          },
+          "editorMode": "code",
+          "expr": "avg(DCGM_FI_DEV_FB_USED{cluster_id=\"$cluster_id\",namespace=~\"$namespace\", pod=~\"$pod\", gpu=~\"$gpu\"} * on(pod) group_left(created_by_name, created_by_kind) kube_pod_info{cluster_id=\"$cluster_id\",namespace=~\"$namespace\", created_by_kind=~\"$created_by_kind\", created_by_name=~\"$created_by_name\", pod=~\"$pod\", host_ip!=\"\", pod_ip!=\"\"} ) by ($aggregated_by)",
+          "interval": "",
+          "legendFormat": "__auto",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "GPU Memory: $pod",
+      "type": "timeseries"
+    },
+    {
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 26
+      },
+      "id": 51,
+      "panels": [],
+      "title": "Help",
+      "type": "row"
+    },
+    {
+      "datasource": {
+        "uid": "$datasource"
+      },
+      "editable": false,
+      "error": false,
+      "gridPos": {
+        "h": 3,
+        "w": 24,
+        "x": 0,
+        "y": 27
+      },
+      "id": 48,
+      "options": {
+        "code": {
+          "language": "plaintext",
+          "showLineNumbers": false,
+          "showMiniMap": false
+        },
+        "content": "To enable additional metrics or troubleshoot issues, refer to the Amazon SageMaker HyperPod observability user guide: https://docs.aws.amazon.com/sagemaker/latest/dg/sagemaker-hyperpod-eks-cluster-observability-cluster.html",
+        "mode": "markdown"
+      },
+      "pluginVersion": "10.4.1",
+      "targets": [
+        {
+          "datasource": {
+            "uid": "$datasource"
+          },
+          "refId": "A"
+        }
+      ],
+      "title": "Documentation",
+      "type": "text"
+    },
+    {
+      "datasource": {
+        "type": "datasource",
+        "uid": "grafana"
+      },
+      "description": "",
+      "gridPos": {
+        "h": 3,
+        "w": 24,
+        "x": 0,
+        "y": 30
+      },
+      "id": 49,
+      "options": {
+        "code": {
+          "language": "plaintext",
+          "showLineNumbers": false,
+          "showMiniMap": false
+        },
+        "content": "Tell us how we can improve your Amazon SageMaker HyperPod observability experience by reporting bugs or submitting feature requests here\nhttps://github.com/aws/amazon-sagemaker-feedback/issues",
+        "mode": "markdown"
+      },
+      "pluginVersion": "10.4.1",
+      "title": "Feedback?",
+      "type": "text"
+    }
+  ],
+  "refresh": "30s",
+  "schemaVersion": 39,
+  "tags": ["hyperpod", "task", "aws", "sagemaker", "pod"],
+  "templating": {
+    "list": [
+      {
+        "current": {
+          "selected": false,
+          "text": "ml-cluster-lt3",
+          "value": "ml-cluster-lt3"
+        },
+        "datasource": {
+          "type": "prometheus",
+          "uid": "${datasource}"
+        },
+        "definition": "label_values(kube_node_info,cluster_name)",
+        "description": "HyperPod Cluster Name",
+        "hide": 0,
+        "includeAll": false,
+        "label": "Cluster Name",
+        "multi": false,
+        "name": "cluster_name",
+        "options": [],
+        "query": {
+          "qryType": 1,
+          "query": "label_values(kube_node_info,cluster_name)",
+          "refId": "PrometheusVariableQueryEditor-VariableQuery"
+        },
+        "refresh": 1,
+        "regex": "",
+        "skipUrlSync": false,
+        "sort": 0,
+        "type": "query"
+      },
+      {
+        "current": {
+          "selected": false,
+          "text": "0kns09eo5set",
+          "value": "0kns09eo5set"
+        },
+        "datasource": {
+          "type": "prometheus",
+          "uid": "${datasource}"
+        },
+        "definition": "label_values(kube_node_info{cluster_name=\"$cluster_name\"},cluster_id)",
+        "description": "HyperPod Cluster Id",
+        "hide": 0,
+        "includeAll": false,
+        "label": "Cluster ID",
+        "multi": false,
+        "name": "cluster_id",
+        "options": [],
+        "query": {
+          "qryType": 1,
+          "query": "label_values(kube_node_info{cluster_name=\"$cluster_name\"},cluster_id)",
+          "refId": "PrometheusVariableQueryEditor-VariableQuery"
+        },
+        "refresh": 1,
+        "regex": "",
+        "skipUrlSync": false,
+        "sort": 0,
+        "type": "query"
+      },
+      {
+        "current": {
+          "selected": false,
+          "text": "Task Pod",
+          "value": "pod"
+        },
+        "hide": 0,
+        "includeAll": false,
+        "label": "Aggregate by:",
+        "multi": false,
+        "name": "aggregated_by",
+        "options": [
+          {
+            "selected": true,
+            "text": "Task Pod",
+            "value": "pod"
+          },
+          {
+            "selected": false,
+            "text": "Namespace",
+            "value": "namespace"
+          },
+          {
+            "selected": false,
+            "text": "Task Name",
+            "value": "created_by_name"
+          }
+        ],
+        "query": "Task Pod : pod, Namespace : namespace,Task Name : created_by_name",
+        "queryValue": "",
+        "skipUrlSync": false,
+        "type": "custom"
+      },
+      {
+        "current": {
+          "selected": false,
+          "text": "prometheus",
+          "value": "ceqqurbbc6ps0c"
+        },
+        "description": "Data source to query metrics from",
+        "hide": 2,
+        "includeAll": false,
+        "label": "Data Source",
+        "multi": false,
+        "name": "datasource",
+        "options": [],
+        "query": "prometheus",
+        "queryValue": "",
+        "refresh": 1,
+        "regex": "",
+        "skipUrlSync": false,
+        "type": "datasource"
+      },
+      {
+        "allValue": ".*",
+        "current": {
+          "selected": false,
+          "text": "All",
+          "value": "$__all"
+        },
+        "datasource": {
+          "type": "prometheus",
+          "uid": "${datasource}"
+        },
+        "definition": "label_values(kube_pod_info, namespace)",
+        "hide": 0,
+        "includeAll": true,
+        "label": "Namespace",
+        "multi": false,
+        "name": "namespace",
+        "options": [],
+        "query": {
+          "query": "label_values(kube_pod_info, namespace)",
+          "refId": "StandardVariableQuery"
+        },
+        "refresh": 1,
+        "regex": "",
+        "skipUrlSync": false,
+        "sort": 1,
+        "tagValuesQuery": "",
+        "tagsQuery": "",
+        "type": "query",
+        "useTags": false
+      },
+      {
+        "allValue": ".*",
+        "current": {
+          "selected": false,
+          "text": "All",
+          "value": "$__all"
+        },
+        "datasource": {
+          "type": "prometheus",
+          "uid": "${datasource}"
+        },
+        "definition": "label_values(kube_pod_info{namespace=~\"$namespace\"}, created_by_kind)",
+        "hide": 0,
+        "includeAll": true,
+        "label": "Task Type",
+        "multi": false,
+        "name": "created_by_kind",
+        "options": [],
+        "query": {
+          "query": "label_values(kube_pod_info{namespace=~\"$namespace\"}, created_by_kind)",
+          "refId": "StandardVariableQuery"
+        },
+        "refresh": 1,
+        "regex": "",
+        "skipUrlSync": false,
+        "sort": 1,
+        "tagValuesQuery": "",
+        "tagsQuery": "",
+        "type": "query",
+        "useTags": false
+      },
+      {
+        "allValue": ".*",
+        "current": {
+          "selected": false,
+          "text": "All",
+          "value": "$__all"
+        },
+        "datasource": {
+          "type": "prometheus",
+          "uid": "${datasource}"
+        },
+        "definition": "label_values(kube_pod_info{namespace=~\"$namespace\", created_by_kind=~\"$created_by_kind\"}, created_by_name)",
+        "hide": 0,
+        "includeAll": true,
+        "label": "Task Name",
+        "multi": false,
+        "name": "created_by_name",
+        "options": [],
+        "query": {
+          "query": "label_values(kube_pod_info{namespace=~\"$namespace\", created_by_kind=~\"$created_by_kind\"}, created_by_name)",
+          "refId": "StandardVariableQuery"
+        },
+        "refresh": 1,
+        "regex": "",
+        "skipUrlSync": false,
+        "sort": 1,
+        "tagValuesQuery": "",
+        "tagsQuery": "",
+        "type": "query",
+        "useTags": false
+      },
+      {
+        "allValue": ".*",
+        "current": {
+          "selected": false,
+          "text": "All",
+          "value": "$__all"
+        },
+        "datasource": {
+          "type": "prometheus",
+          "uid": "${datasource}"
+        },
+        "definition": "label_values(kube_pod_info{namespace=~\"$namespace\", created_by_kind=~\"$created_by_kind\", created_by_name=~\"$created_by_name\"}, pod)",
+        "hide": 0,
+        "includeAll": true,
+        "label": "Pod",
+        "multi": false,
+        "name": "pod",
+        "options": [],
+        "query": {
+          "query": "label_values(kube_pod_info{namespace=~\"$namespace\", created_by_kind=~\"$created_by_kind\", created_by_name=~\"$created_by_name\"}, pod)",
+          "refId": "StandardVariableQuery"
+        },
+        "refresh": 1,
+        "regex": "",
+        "skipUrlSync": false,
+        "sort": 1,
+        "tagValuesQuery": "",
+        "tagsQuery": "",
+        "type": "query",
+        "useTags": false
+      },
+      {
+        "allValue": ".*",
+        "current": {
+          "selected": false,
+          "text": "All",
+          "value": "$__all"
+        },
+        "datasource": {
+          "type": "prometheus",
+          "uid": "${datasource}"
+        },
+        "definition": "label_values(DCGM_FI_DEV_GPU_UTIL, gpu)",
+        "hide": 0,
+        "includeAll": true,
+        "label": "GPU ID",
+        "multi": false,
+        "name": "gpu",
+        "options": [],
+        "query": {
+          "query": "label_values(DCGM_FI_DEV_GPU_UTIL, gpu)",
+          "refId": "StandardVariableQuery"
+        },
+        "refresh": 1,
+        "regex": "",
+        "skipUrlSync": false,
+        "sort": 1,
+        "tagValuesQuery": "",
+        "tagsQuery": "",
+        "type": "query",
+        "useTags": false
+      }
+    ]
+  },
+  "time": {
+    "from": "now-6h",
+    "to": "now"
+  },
+  "timepicker": {},
+  "timezone": "",
+  "title": "Tasks",
+  "uid": "beqp0nlifbwg0a",
+  "version": 20,
+  "weekStart": ""
+}
