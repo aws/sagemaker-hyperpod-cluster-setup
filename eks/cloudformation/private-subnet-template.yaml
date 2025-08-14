@@ -175,6 +175,7 @@ Resources:
         Ref: VpcId
     Metadata:
       aws:cdk:path: PrivateSubnetCfnTemplate/EksPrivateRouteTable1
+    Condition: HasAZ1
   PrivateEksSubnet1RouteTableAssociation:
     Type: AWS::EC2::SubnetRouteTableAssociation
     Properties:
@@ -311,6 +312,7 @@ Resources:
         Ref: VpcId
     Metadata:
       aws:cdk:path: PrivateSubnetCfnTemplate/EksPrivateRouteTable2
+    Condition: HasAZ2
   PrivateEksSubnet2RouteTableAssociation:
     Type: AWS::EC2::SubnetRouteTableAssociation
     Properties:
@@ -327,7 +329,7 @@ Resources:
       DestinationCidrBlock: 0.0.0.0/0
       NatGatewayId:
         Fn::Select:
-          - 1
+          - 0
           - Ref: NatGatewayIds
       RouteTableId:
         Ref: PrivateRouteTable2
@@ -447,6 +449,7 @@ Resources:
         Ref: VpcId
     Metadata:
       aws:cdk:path: PrivateSubnetCfnTemplate/EksPrivateRouteTable3
+    Condition: HasAZ3
   PrivateEksSubnet3RouteTableAssociation:
     Type: AWS::EC2::SubnetRouteTableAssociation
     Properties:
@@ -463,7 +466,7 @@ Resources:
       DestinationCidrBlock: 0.0.0.0/0
       NatGatewayId:
         Fn::Select:
-          - 2
+          - 0
           - Ref: NatGatewayIds
       RouteTableId:
         Ref: PrivateRouteTable3
@@ -583,6 +586,7 @@ Resources:
         Ref: VpcId
     Metadata:
       aws:cdk:path: PrivateSubnetCfnTemplate/EksPrivateRouteTable4
+    Condition: HasAZ4
   PrivateEksSubnet4RouteTableAssociation:
     Type: AWS::EC2::SubnetRouteTableAssociation
     Properties:
@@ -599,7 +603,7 @@ Resources:
       DestinationCidrBlock: 0.0.0.0/0
       NatGatewayId:
         Fn::Select:
-          - 3
+          - 0
           - Ref: NatGatewayIds
       RouteTableId:
         Ref: PrivateRouteTable4
@@ -719,6 +723,7 @@ Resources:
         Ref: VpcId
     Metadata:
       aws:cdk:path: PrivateSubnetCfnTemplate/EksPrivateRouteTable5
+    Condition: HasAZ5
   PrivateEksSubnet5RouteTableAssociation:
     Type: AWS::EC2::SubnetRouteTableAssociation
     Properties:
@@ -735,7 +740,7 @@ Resources:
       DestinationCidrBlock: 0.0.0.0/0
       NatGatewayId:
         Fn::Select:
-          - 4
+          - 0
           - Ref: NatGatewayIds
       RouteTableId:
         Ref: PrivateRouteTable5

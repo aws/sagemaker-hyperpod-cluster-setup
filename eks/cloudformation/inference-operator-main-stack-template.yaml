@@ -1,0 +1,253 @@
+Description: Main Stack for Inference Operator Resources
+Parameters:
+  ResourceNamePrefix:
+    Type: String
+    Default: sagemaker-hyperpod-eks
+    Description: Prefix to be used for all resources created by this template.
+  AccessLogsBucketName:
+    Type: String
+    Default: sagemaker-hyperpod-eks-logs
+    Description: Name of the S3 bucket to use for access logs.
+  Stage:
+    Type: String
+    Default: gamma
+    AllowedValues:
+      - gamma
+      - prod
+    Description: Deployment stage (gamma, prod)
+  CustomBucketName:
+    Type: String
+    Default: ''
+    Description: Custom S3 bucket name for templates. If provided, will override the default bucket. Leave empty to use default.
+  EKSClusterName:
+    Type: String
+    Default: eks
+    Description: The name of the EKS cluster.
+  OIDCProviderURL:
+    Type: String
+    Default: ''
+    Description: The URL of the OIDC Provider for the EKS Cluster.
+  OIDCProviderURLWithoutProtocol:
+    Type: String
+    Default: ''
+    Description: The URL of the OIDC Provider without https:// prefix.
+  HelmRepoUrl:
+    Type: String
+    Default: https://github.com/aws/sagemaker-hyperpod-cli.git
+    Description: The URL of the Helm repo containing the HyperPod Helm chart.
+  HelmRepoPath:
+    Type: String
+    Default: helm_chart/HyperPodHelmChart/charts/inference-operator
+    Description: The path to the HyperPod Helm chart in the Helm repo.
+  Namespace:
+    Type: String
+    Default: kube-system
+    Description: The namespace to deploy the HyperPod Helm chart into.
+  HPClusterArn:
+    Type: String
+    Description: ARN of the HyperPod cluster.
+  VpcId:
+    Type: AWS::EC2::VPC::Id
+    Description: VPC ID used by the EKS cluster.
+Conditions:
+  CustomBucketCondition:
+    Fn::Not:
+      - Fn::Equals:
+          - Ref: CustomBucketName
+          - ''
+Resources:
+  TLSCertificatesS3BucketStack:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL:
+        Fn::If:
+          - CustomBucketCondition
+          - Fn::Sub: >-
+              https://${CustomBucketName}.s3.${AWS::Region}.amazonaws.com/templates/tls-certificates-s3-bucket-template.yaml
+          - Fn::Sub: >-
+              https://aws-sagemaker-hyperpod-cluster-setup-${AWS::Region}-${Stage}.s3.${AWS::Region}.amazonaws.com/templates/tls-certificates-s3-bucket-template.yaml
+      Parameters:
+        ResourceNamePrefix:
+          Ref: ResourceNamePrefix
+        AccessLogsBucketName:
+          Ref: AccessLogsBucketName
+    Metadata:
+      aws:cdk:path: InferenceOperatorMainStackCfnTemplate/TLSCertificatesS3BucketStack
+  InfOperatorIAMRoleStack:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL:
+        Fn::If:
+          - CustomBucketCondition
+          - Fn::Sub: https://${CustomBucketName}.s3.${AWS::Region}.amazonaws.com/templates/inf-operator-iam-role-template.yaml
+          - Fn::Sub: >-
+              https://aws-sagemaker-hyperpod-cluster-setup-${AWS::Region}-${Stage}.s3.${AWS::Region}.amazonaws.com/templates/inf-operator-iam-role-template.yaml
+      Parameters:
+        ResourceNamePrefix:
+          Ref: ResourceNamePrefix
+        EKSClusterName:
+          Ref: EKSClusterName
+        OIDCProviderURL:
+          Ref: OIDCProviderURL
+        OIDCProviderURLWithoutProtocol:
+          Ref: OIDCProviderURLWithoutProtocol
+        TLSCertificatesBucketName:
+          Fn::GetAtt:
+            - TLSCertificatesS3BucketStack
+            - Outputs.TLSCertificatesBucketName
+        VpcId:
+          Ref: VpcId
+    Metadata:
+      aws:cdk:path: InferenceOperatorMainStackCfnTemplate/InfOperatorIAMRoleStack
+  InferenceOperatorServiceAccountsStack:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL:
+        Fn::If:
+          - CustomBucketCondition
+          - Fn::Sub: https://${CustomBucketName}.s3.${AWS::Region}.amazonaws.com/templates/inf-sa-creation-template.yaml
+          - Fn::Sub: >-
+              https://aws-sagemaker-hyperpod-cluster-setup-${AWS::Region}-${Stage}.s3.${AWS::Region}.amazonaws.com/templates/inf-sa-creation-template.yaml
+      Parameters:
+        ResourceNamePrefix:
+          Ref: ResourceNamePrefix
+        EKSClusterName:
+          Ref: EKSClusterName
+        CustomResourceS3Bucket:
+          Fn::If:
+            - CustomBucketCondition
+            - Ref: CustomBucketName
+            - Fn::Sub: aws-sagemaker-hyperpod-cluster-setup-${AWS::Region}-${Stage}
+        OIDCProviderURLWithoutProtocol:
+          Ref: OIDCProviderURLWithoutProtocol
+        AlbControllerPolicyArn:
+          Fn::GetAtt:
+            - InfOperatorIAMRoleStack
+            - Outputs.LoadBalancerControllerPolicyArn
+        S3CsiPolicyArn:
+          Fn::GetAtt:
+            - InfOperatorIAMRoleStack
+            - Outputs.S3MountpointPolicyArn
+    DependsOn:
+      - InfOperatorIAMRoleStack
+    Metadata:
+      aws:cdk:path: InferenceOperatorMainStackCfnTemplate/InferenceOperatorServiceAccountsStack
+  InferenceOperatorHelmInstallStack:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL:
+        Fn::If:
+          - CustomBucketCondition
+          - Fn::Sub: https://${CustomBucketName}.s3.${AWS::Region}.amazonaws.com/templates/inf-helm-chart-template.yaml
+          - Fn::Sub: >-
+              https://aws-sagemaker-hyperpod-cluster-setup-${AWS::Region}-${Stage}.s3.${AWS::Region}.amazonaws.com/templates/inf-helm-chart-template.yaml
+      Parameters:
+        ResourceNamePrefix:
+          Ref: ResourceNamePrefix
+        HelmRepoUrl:
+          Ref: HelmRepoUrl
+        HelmRepoPath:
+          Ref: HelmRepoPath
+        Namespace:
+          Ref: Namespace
+        EKSClusterName:
+          Ref: EKSClusterName
+        CustomResourceS3Bucket:
+          Fn::If:
+            - CustomBucketCondition
+            - Ref: CustomBucketName
+            - Fn::Sub: aws-sagemaker-hyperpod-cluster-setup-${AWS::Region}-${Stage}
+        HPClusterArn:
+          Ref: HPClusterArn
+        HyperpodInferenceRoleArn:
+          Fn::GetAtt:
+            - InfOperatorIAMRoleStack
+            - Outputs.InfOperatorIAMRoleArn
+        JumpstartGatedModelDownloadRoleArn:
+          Fn::GetAtt:
+            - InfOperatorIAMRoleStack
+            - Outputs.GatedRoleArn
+        KedaRoleArn:
+          Fn::GetAtt:
+            - InfOperatorIAMRoleStack
+            - Outputs.KedaRoleArn
+        TLSBucketName:
+          Fn::Sub:
+            - s3://${BucketName}
+            - BucketName:
+                Fn::GetAtt:
+                  - TLSCertificatesS3BucketStack
+                  - Outputs.TLSCertificatesBucketName
+        VpcId:
+          Ref: VpcId
+    DependsOn:
+      - InferenceOperatorServiceAccountsStack
+    Metadata:
+      aws:cdk:path: InferenceOperatorMainStackCfnTemplate/InferenceOperatorHelmInstallStack
+Outputs:
+  TLSCertificatesBucketName:
+    Description: TLS Certificates S3 Bucket Name
+    Value:
+      Fn::GetAtt:
+        - TLSCertificatesS3BucketStack
+        - Outputs.TLSCertificatesBucketName
+    Export:
+      Name:
+        Fn::Sub: ${AWS::StackName}-TLSCertificatesBucketName
+  TLSCertificatesBucketArn:
+    Description: TLS Certificates S3 Bucket ARN
+    Value:
+      Fn::GetAtt:
+        - TLSCertificatesS3BucketStack
+        - Outputs.TLSCertificatesBucketArn
+    Export:
+      Name:
+        Fn::Sub: ${AWS::StackName}-TLSCertificatesBucketArn
+  InfOperatorIAMRoleArn:
+    Description: Inference Operator IAM role Arn
+    Value:
+      Fn::GetAtt:
+        - InfOperatorIAMRoleStack
+        - Outputs.InfOperatorIAMRoleArn
+    Export:
+      Name:
+        Fn::Sub: ${AWS::StackName}-InfOperatorIAMRoleArn
+  InfOperatorIAMRoleName:
+    Description: Inference Operator IAM role Name
+    Value:
+      Fn::GetAtt:
+        - InfOperatorIAMRoleStack
+        - Outputs.InfOperatorIAMRoleName
+    Export:
+      Name:
+        Fn::Sub: ${AWS::StackName}-InfOperatorIAMRoleName
+  KedaRoleArn:
+    Description: KEDA IAM role ARN
+    Value:
+      Fn::GetAtt:
+        - InfOperatorIAMRoleStack
+        - Outputs.KedaRoleArn
+  KedaRoleName:
+    Description: KEDA IAM role Name
+    Value:
+      Fn::GetAtt:
+        - InfOperatorIAMRoleStack
+        - Outputs.KedaRoleName
+  ClusterRoleAccessEntryArn:
+    Description: Cluster Role Access Entry ARN
+    Value:
+      Fn::GetAtt:
+        - InfOperatorIAMRoleStack
+        - Outputs.ClusterRoleAccessEntryArn
+  GatedRoleArn:
+    Description: Gated IAM role ARN
+    Value:
+      Fn::GetAtt:
+        - InfOperatorIAMRoleStack
+        - Outputs.GatedRoleArn
+  GatedRoleName:
+    Description: Gated IAM role Name
+    Value:
+      Fn::GetAtt:
+        - InfOperatorIAMRoleStack
+        - Outputs.GatedRoleName

@@ -107,27 +107,6 @@ Resources:
     Metadata:
       aws:cdk:path: VpcCfnTemplate/PublicSubnet1
     Condition: HasAZ1
-  NatGateway1EIP:
-    Type: AWS::EC2::EIP
-    Properties:
-      Domain: vpc
-    DependsOn:
-      - InternetGatewayAttachment
-    Metadata:
-      aws:cdk:path: VpcCfnTemplate/NatGateway1EIP
-    Condition: HasAZ1
-  NatGateway1:
-    Type: AWS::EC2::NatGateway
-    Properties:
-      AllocationId:
-        Fn::GetAtt:
-          - NatGateway1EIP
-          - AllocationId
-      SubnetId:
-        Ref: PublicSubnet1
-    Metadata:
-      aws:cdk:path: VpcCfnTemplate/NatGateway1
-    Condition: HasAZ1
   PublicSubnet1RouteTableAssociation:
     Type: AWS::EC2::SubnetRouteTableAssociation
     Properties:
@@ -177,27 +156,6 @@ Resources:
         Ref: VPC
     Metadata:
       aws:cdk:path: VpcCfnTemplate/PublicSubnet2
-    Condition: HasAZ2
-  NatGateway2EIP:
-    Type: AWS::EC2::EIP
-    Properties:
-      Domain: vpc
-    DependsOn:
-      - InternetGatewayAttachment
-    Metadata:
-      aws:cdk:path: VpcCfnTemplate/NatGateway2EIP
-    Condition: HasAZ2
-  NatGateway2:
-    Type: AWS::EC2::NatGateway
-    Properties:
-      AllocationId:
-        Fn::GetAtt:
-          - NatGateway2EIP
-          - AllocationId
-      SubnetId:
-        Ref: PublicSubnet2
-    Metadata:
-      aws:cdk:path: VpcCfnTemplate/NatGateway2
     Condition: HasAZ2
   PublicSubnet2RouteTableAssociation:
     Type: AWS::EC2::SubnetRouteTableAssociation
@@ -249,27 +207,6 @@ Resources:
     Metadata:
       aws:cdk:path: VpcCfnTemplate/PublicSubnet3
     Condition: HasAZ3
-  NatGateway3EIP:
-    Type: AWS::EC2::EIP
-    Properties:
-      Domain: vpc
-    DependsOn:
-      - InternetGatewayAttachment
-    Metadata:
-      aws:cdk:path: VpcCfnTemplate/NatGateway3EIP
-    Condition: HasAZ3
-  NatGateway3:
-    Type: AWS::EC2::NatGateway
-    Properties:
-      AllocationId:
-        Fn::GetAtt:
-          - NatGateway3EIP
-          - AllocationId
-      SubnetId:
-        Ref: PublicSubnet3
-    Metadata:
-      aws:cdk:path: VpcCfnTemplate/NatGateway3
-    Condition: HasAZ3
   PublicSubnet3RouteTableAssociation:
     Type: AWS::EC2::SubnetRouteTableAssociation
     Properties:
@@ -319,27 +256,6 @@ Resources:
         Ref: VPC
     Metadata:
       aws:cdk:path: VpcCfnTemplate/PublicSubnet4
-    Condition: HasAZ4
-  NatGateway4EIP:
-    Type: AWS::EC2::EIP
-    Properties:
-      Domain: vpc
-    DependsOn:
-      - InternetGatewayAttachment
-    Metadata:
-      aws:cdk:path: VpcCfnTemplate/NatGateway4EIP
-    Condition: HasAZ4
-  NatGateway4:
-    Type: AWS::EC2::NatGateway
-    Properties:
-      AllocationId:
-        Fn::GetAtt:
-          - NatGateway4EIP
-          - AllocationId
-      SubnetId:
-        Ref: PublicSubnet4
-    Metadata:
-      aws:cdk:path: VpcCfnTemplate/NatGateway4
     Condition: HasAZ4
   PublicSubnet4RouteTableAssociation:
     Type: AWS::EC2::SubnetRouteTableAssociation
@@ -391,27 +307,6 @@ Resources:
     Metadata:
       aws:cdk:path: VpcCfnTemplate/PublicSubnet5
     Condition: HasAZ5
-  NatGateway5EIP:
-    Type: AWS::EC2::EIP
-    Properties:
-      Domain: vpc
-    DependsOn:
-      - InternetGatewayAttachment
-    Metadata:
-      aws:cdk:path: VpcCfnTemplate/NatGateway5EIP
-    Condition: HasAZ5
-  NatGateway5:
-    Type: AWS::EC2::NatGateway
-    Properties:
-      AllocationId:
-        Fn::GetAtt:
-          - NatGateway5EIP
-          - AllocationId
-      SubnetId:
-        Ref: PublicSubnet5
-    Metadata:
-      aws:cdk:path: VpcCfnTemplate/NatGateway5
-    Condition: HasAZ5
   PublicSubnet5RouteTableAssociation:
     Type: AWS::EC2::SubnetRouteTableAssociation
     Properties:
@@ -422,6 +317,27 @@ Resources:
     Metadata:
       aws:cdk:path: VpcCfnTemplate/PublicSubnet5RouteTableAssociation
     Condition: HasAZ5
+  NatGatewayEIP:
+    Type: AWS::EC2::EIP
+    Properties:
+      Domain: vpc
+    DependsOn:
+      - InternetGatewayAttachment
+    Metadata:
+      aws:cdk:path: VpcCfnTemplate/NatGatewayEIP
+    Condition: HasAZ1
+  NatGateway:
+    Type: AWS::EC2::NatGateway
+    Properties:
+      AllocationId:
+        Fn::GetAtt:
+          - NatGatewayEIP
+          - AllocationId
+      SubnetId:
+        Ref: PublicSubnet1
+    Metadata:
+      aws:cdk:path: VpcCfnTemplate/NatGateway
+    Condition: HasAZ1
 Conditions:
   HasAZ1:
     Fn::Not:
@@ -466,25 +382,7 @@ Outputs:
   NatGatewayIds:
     Description: Comma-delimited list of created NAT Gateway IDs
     Value:
-      Fn::Join:
-        - ','
-        - - Fn::If:
-              - HasAZ1
-              - Ref: NatGateway1
-              - Ref: AWS::NoValue
-          - Fn::If:
-              - HasAZ2
-              - Ref: NatGateway2
-              - Ref: AWS::NoValue
-          - Fn::If:
-              - HasAZ3
-              - Ref: NatGateway3
-              - Ref: AWS::NoValue
-          - Fn::If:
-              - HasAZ4
-              - Ref: NatGateway4
-              - Ref: AWS::NoValue
-          - Fn::If:
-              - HasAZ5
-              - Ref: NatGateway5
-              - Ref: AWS::NoValue
+      Fn::If:
+        - HasAZ1
+        - Ref: NatGateway
+        - Ref: AWS::NoValue

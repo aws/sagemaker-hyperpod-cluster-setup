@@ -608,13 +608,9 @@ Parameters:
     Description: Boolean to Create FSx for Lustre File System Stack
 Conditions:
   EnableHPInferenceFeatureCondition:
-    Fn::And:
-      - Fn::Equals:
-          - Ref: EnableHPInferenceFeature
-          - 'true'
-      - Fn::Equals:
-          - Ref: Stage
-          - gamma
+    Fn::Equals:
+      - Ref: EnableHPInferenceFeature
+      - 'true'
   CreateVPCStackCondition:
     Fn::Equals:
       - Ref: CreateVPCStack

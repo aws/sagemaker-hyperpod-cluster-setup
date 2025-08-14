@@ -1,0 +1,92 @@
+Description: S3 Bucket Stack for TLS Certificates
+Parameters:
+  ResourceNamePrefix:
+    Type: String
+    Default: sagemaker-hyperpod-eks
+    Description: Prefix to be used for all resources created by this template.
+  AccessLogsBucketName:
+    Type: String
+    Default: sagemaker-hyperpod-eks-logs
+    Description: Name of the S3 bucket to use for access logs.
+Resources:
+  TLSCertificatesBucket98365575:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      BucketName:
+        Fn::Join:
+          - '-'
+          - - Ref: ResourceNamePrefix
+            - tls
+            - Fn::Select:
+                - 0
+                - Fn::Split:
+                    - '-'
+                    - Fn::Select:
+                        - 2
+                        - Fn::Split:
+                            - /
+                            - Ref: AWS::StackId
+      LoggingConfiguration:
+        DestinationBucketName:
+          Ref: AccessLogsBucketName
+        LogFilePrefix: tls-cert-logs/
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      Tags:
+        - Key: CreatedBy
+          Value: HyperPod-Inference
+    UpdateReplacePolicy: Retain
+    DeletionPolicy: Retain
+    Metadata:
+      aws:cdk:path: TLSCertificatesS3BucketCfnTemplate/TLSCertificatesBucket/Resource
+  TLSCertificatesBucketPolicyB83E702F:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket:
+        Ref: TLSCertificatesBucket98365575
+      PolicyDocument:
+        Statement:
+          - Action: s3:*
+            Condition:
+              Bool:
+                aws:SecureTransport: 'false'
+            Effect: Deny
+            Principal:
+              AWS: '*'
+            Resource:
+              - Fn::GetAtt:
+                  - TLSCertificatesBucket98365575
+                  - Arn
+              - Fn::Join:
+                  - ''
+                  - - Fn::GetAtt:
+                        - TLSCertificatesBucket98365575
+                        - Arn
+                    - /*
+        Version: 2012-10-17
+    Metadata:
+      aws:cdk:path: TLSCertificatesS3BucketCfnTemplate/TLSCertificatesBucket/Policy/Resource
+Outputs:
+  TLSCertificatesBucketName:
+    Description: TLS Certificates S3 Bucket Name
+    Value:
+      Ref: TLSCertificatesBucket98365575
+    Export:
+      Name:
+        Fn::Sub: ${AWS::StackName}-TLSCertificatesBucketName
+  TLSCertificatesBucketArn:
+    Description: TLS Certificates S3 Bucket ARN
+    Value:
+      Fn::GetAtt:
+        - TLSCertificatesBucket98365575
+        - Arn
+    Export:
+      Name:
+        Fn::Sub: ${AWS::StackName}-TLSCertificatesBucketArn

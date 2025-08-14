@@ -7,3 +7,4 @@ cd ../inference-k8s-service-account-creator && ./generate-inf-sa-creation-lambda
 cd ../fsx-for-lustre && ./generate-fsx-lambda-zip.sh
 cd ../hyperpod-cluster-creator && ./generate-hp-lambda-zip.sh
 cd ../private-subnet-tagging && ./generate-lambda-zip.sh
+cd ../grafana-lambda-function && ./generate-lambda-zip.sh
