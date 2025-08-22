@@ -227,7 +227,6 @@ Resources:
                   - ec2:CreateNetworkInterfacePermission
                   - ec2:DeleteNetworkInterface
                   - ec2:DeleteNetworkInterfacePermission
-                  - ec2:DetachNetworkInterface
                   - ec2:ModifyNetworkInterfaceAttribute
                   - ec2:UnassignPrivateIpAddresses
                 Resource:
@@ -239,6 +238,7 @@ Resources:
                   - ec2:DescribeVpcs
                   - ec2:DescribeDhcpOptions
                   - ec2:DescribeSecurityGroups
+                  - ec2:DetachNetworkInterface
                 Resource: '*'
               - Effect: Allow
                 Action:

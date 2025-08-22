@@ -33,7 +33,6 @@ Resources:
                   - ec2:CreateNetworkInterfacePermission
                   - ec2:DeleteNetworkInterface
                   - ec2:DeleteNetworkInterfacePermission
-                  - ec2:DetachNetworkInterface
                 Resource:
                   - Fn::Sub: arn:aws:ec2:${AWS::Region}:${AWS::AccountId}:network-interface/*
                   - Fn::Sub: arn:aws:ec2:${AWS::Region}:${AWS::AccountId}:security-group/*
@@ -47,6 +46,7 @@ Resources:
                   - ec2:DescribeSubnets
                   - ec2:DescribeSecurityGroups
                   - ec2:CreateTags
+                  - ec2:DetachNetworkInterface
                 Resource: '*'
           PolicyName: AmazonSagemakerClusterVPCPolicy
         - PolicyDocument:
