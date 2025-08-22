@@ -7,7 +7,7 @@ import yaml
 
 # env vars
 HYPERPOD_CLI_GITHUB_REPO_URL = 'HYPERPOD_CLI_GITHUB_REPO_URL'
-HYPERPOD_CLI_GITHUB_REPO_BRANCH = 'HYPERPOD_CLI_GITHUB_REPO_BRANCH'
+HYPERPOD_CLI_GITHUB_REPO_REVISION = 'HYPERPOD_CLI_GITHUB_REPO_REVISION'
 CLUSTER_NAME = 'CLUSTER_NAME'
 AWS_REGION = 'AWS_REGION'
 ACCOUNT_ID = 'ACCOUNT_ID'
@@ -146,7 +146,7 @@ def install_helm_chart():
         # Ensure required environment variables are set
         required_env_vars = [
             HYPERPOD_CLI_GITHUB_REPO_URL,
-            HYPERPOD_CLI_GITHUB_REPO_BRANCH,
+            HYPERPOD_CLI_GITHUB_REPO_REVISION,
             NAMESPACE,
             AWS_REGION,
             EKS_CLUSTER_NAME,
@@ -169,12 +169,11 @@ def install_helm_chart():
         subprocess.run(['helm', 'repo', 'update'], check=True)
 
         # Clone the GitHub repository
-        clone_cmd = [
-            'git', 'clone', '-b', os.environ[HYPERPOD_CLI_GITHUB_REPO_BRANCH],
-            os.environ[HYPERPOD_CLI_GITHUB_REPO_URL],
-            CHART_LOCAL_PATH
-        ]
+        clone_cmd = ['git', 'clone', os.environ[HYPERPOD_CLI_GITHUB_REPO_URL], CHART_LOCAL_PATH]
         subprocess.run(clone_cmd, check=True)
+
+        # Specify revision
+        subprocess.run(['git', '-C', CHART_LOCAL_PATH, 'checkout', os.environ[HYPERPOD_CLI_GITHUB_REPO_REVISION]], check=True)
 
         # Update dependencies
         subprocess.run(['helm', 'dependency', 'update', f"{CHART_LOCAL_PATH}/{CHART_PATH}"], check=True)

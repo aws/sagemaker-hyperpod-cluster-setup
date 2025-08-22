@@ -134,11 +134,11 @@ Resources:
           KUBECONFIG: /tmp/.kube/config
           GITHUB_REPO_URL:
             Ref: HelmRepoUrl
-          GITHUB_REPO_BRANCH:
+          GITHUB_REPO_REVISION:
             Fn::If:
               - CreateRIGCondition
-              - release_v2
-              - main
+              - 520886bbc1a0494c61d2c78dac6027429475d696
+              - f57185916d4f7d2fa85caf6a03c04fd17172d330
           CHART_PATH:
             Ref: HelmRepoPath
           OPERATORS:

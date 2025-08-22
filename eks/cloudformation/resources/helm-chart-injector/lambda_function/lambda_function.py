@@ -149,7 +149,7 @@ def install_helm_chart():
         # Ensure required environment variables are set
         required_env_vars = [
             'GITHUB_REPO_URL',
-            'GITHUB_REPO_BRANCH',
+            'GITHUB_REPO_REVISION',
             'CHART_PATH',
             'NAMESPACE',
             'RELEASE_NAME',
@@ -167,12 +167,11 @@ def install_helm_chart():
         subprocess.run(['helm', 'repo', 'update'], check=True)
 
         # Clone the GitHub repository
-        clone_cmd = [
-            'git', 'clone', '-b', os.environ['GITHUB_REPO_BRANCH'],
-            os.environ['GITHUB_REPO_URL'],
-            '/tmp/helm-charts'
-        ]
+        clone_cmd = ['git', 'clone', os.environ['GITHUB_REPO_URL'], '/tmp/helm-charts']
         subprocess.run(clone_cmd, check=True)
+
+        # Specify revision
+        subprocess.run(['git', '-C', '/tmp/helm-charts', 'checkout', os.environ['GITHUB_REPO_REVISION']], check=True)
 
         # Update dependencies
         subprocess.run(['helm', 'dependency', 'update', f"/tmp/helm-charts/{os.environ['CHART_PATH']}"], check=True)
@@ -253,7 +252,7 @@ def update_helm_chart():
         # Ensure required environment variables are set
         required_env_vars = [
             'GITHUB_REPO_URL',
-            'GITHUB_REPO_BRANCH',
+            'GITHUB_REPO_REVISION',
             'CHART_PATH',
             'RELEASE_NAME',
             'CREATE_RIG',
@@ -269,12 +268,11 @@ def update_helm_chart():
         subprocess.run(['helm', 'repo', 'update'], check=True)
 
         # Clone the updated chart
-        clone_cmd = [
-            'git', 'clone', '-b', os.environ['GITHUB_REPO_BRANCH'],
-            os.environ['GITHUB_REPO_URL'],
-            '/tmp/helm-charts'
-        ]
+        clone_cmd = ['git', 'clone', os.environ['GITHUB_REPO_URL'], '/tmp/helm-charts']
         subprocess.run(clone_cmd, check=True)
+
+        # Specify revision
+        subprocess.run(['git', '-C', '/tmp/helm-charts', 'checkout', os.environ['GITHUB_REPO_REVISION']], check=True)
 
         # Update dependencies if any
         subprocess.run(['helm', 'dependency', 'update', f"/tmp/helm-charts/{os.environ['CHART_PATH']}"], check=True)
