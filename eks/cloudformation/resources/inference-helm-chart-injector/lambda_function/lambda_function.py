@@ -4,6 +4,8 @@ import subprocess
 import cfnresponse
 from botocore.exceptions import ClientError
 import yaml
+import json
+import time
 
 # env vars
 HYPERPOD_CLI_GITHUB_REPO_URL = 'HYPERPOD_CLI_GITHUB_REPO_URL'
@@ -203,7 +205,6 @@ def install_helm_chart():
         # Execute the Helm install
         subprocess.run(install_cmd, check=True)
 
-
         # Clean up cloned repository
         subprocess.run(['rm', '-rf', CHART_LOCAL_PATH], check=True)
         
@@ -211,7 +212,6 @@ def install_helm_chart():
         
     except subprocess.CalledProcessError as e:
         raise Exception(f"Failed to install inference helm chart: {e.cmd}. Return code: {e.returncode}")
-
 
 def create_namespace(namespace):
     try:
@@ -229,6 +229,73 @@ def create_namespace(namespace):
         else:
             print(f"Failed to create namespace {namespace}: {str(e)}")
             return
+
+def patch_alb_deployment():
+    """
+    Patch the ALB deployment to add tolerations for SageMaker node health statuses
+    """
+    try:
+        print("Patching ALB deployment with SageMaker tolerations...")
+        # Wait for ALB deployment to be created (with timeout)
+        max_wait_time = 600  # 10 minutes acceptalbe with deep health check
+        wait_interval = 30   # 30 seconds
+        elapsed_time = 0
+        
+        print("Waiting for ALB deployment to be created...")
+        while elapsed_time < max_wait_time:
+            check_cmd = [
+                'kubectl', 'get', 'deployment', 'hyperpod-inference-operator-alb',
+                '-n', 'kube-system'
+            ]
+            
+            result = subprocess.run(check_cmd, check=False, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            if result.returncode == 0:
+                print(f"ALB deployment found after {elapsed_time} seconds")
+                break
+            
+            print(f"ALB deployment not found yet, waiting... ({elapsed_time}/{max_wait_time}s)")
+            time.sleep(wait_interval)
+            elapsed_time += wait_interval
+        else:
+            print(f"ALB deployment not found after {max_wait_time} seconds, skipping patch")
+            return
+        
+        # Define the patch JSON for tolerations
+        patch_json = {
+            "spec": {
+                "template": {
+                    "spec": {
+                        "tolerations": [
+                            {
+                                "key": "sagemaker.amazonaws.com/node-health-status",
+                                "operator": "Equal",
+                                "value": "Unschedulable",
+                                "effect": "NoSchedule"
+                            }
+                        ]
+                    }
+                }
+            }
+        }
+        
+        # Convert patch to JSON string
+        patch_str = json.dumps(patch_json)
+        
+        # Execute kubectl patch command
+        patch_cmd = [
+            'kubectl', 'patch', 'deployment', 'hyperpod-inference-operator-alb',
+            '-n', 'kube-system',
+            '-p', patch_str
+        ]
+        
+        subprocess.run(patch_cmd, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        print("Successfully patched ALB deployment with SageMaker tolerations")
+        
+    except subprocess.CalledProcessError as e:
+        print(f"Warning: Failed to patch ALB deployment: {e}")
+        # Don't raise exception - this is not critical for the main installation
+    except Exception as e:
+        print(f"Warning: Error during ALB deployment patching: {str(e)}")
 
 def on_create():
     """
@@ -279,12 +346,24 @@ def on_create():
     except subprocess.CalledProcessError as e:
         response_data["CustomInferenceChartInstalled"] = False
         response_data["Reason"] = f"Command failed: {e.cmd}. Return code: {e.returncode}"
+        # Try to patch ALB deployment even if subprocess command failed
+        try:
+            patch_alb_deployment()
+            response_data["ALBPatched"] = True
+        except Exception as patch_error:
+            print(f"Warning: ALB patching also failed: {patch_error}")
+            response_data["ALBPatched"] = False
         return response_data
     except Exception as e:
         response_data["CustomInferenceChartInstalled"] = False
         response_data["Reason"] = f"Failed to install Helm charts: {str(e)}"
+        try:
+            patch_alb_deployment()
+            response_data["ALBPatched"] = True
+        except Exception as patch_error:
+            print(f"Warning: ALB patching also failed: {patch_error}")
+            response_data["ALBPatched"] = False
         return response_data
-
 
 def update_helm_chart():
     """
