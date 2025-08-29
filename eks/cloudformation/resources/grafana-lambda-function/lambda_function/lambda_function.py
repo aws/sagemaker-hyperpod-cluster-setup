@@ -278,16 +278,25 @@ def create_folder():
                 'folderId': response_data.get('id'),
                 'folderUid': response_data.get('uid')
             }
-        elif response.status == 409:
+        elif response.status == 409 or response.status == 412:  # Add 412 status
             return {
                 'message': 'Alert folder already exists',
                 'status': 'existing'
             }
         else:
-            raise Exception(f"Failed to create folder. Status: {response.status}")
+            # Return error dict instead of raising exception
+            return {
+                'message': f'Failed to create folder',
+                'status': 'error',
+                'error': f'Status: {response.status}'
+            }
 
     except Exception as e:
-        return handle_resource_creation('Folder', lambda: raise_or_return(e))
+        return {
+            'message': 'Failed to create folder',
+            'status': 'error',
+            'error': str(e)
+        }
 
 def create_alert_rules():
     try:
@@ -303,72 +312,39 @@ def create_alert_rules():
                     {'X-Disable-Provenance': 'true'}
                 )
 
-                if response.status in [200, 201]:
-                    results.append({
-                        'message': f'Alert rule {rule["title"]} created successfully',
-                        'ruleId': json.loads(response.data.decode('utf-8')).get('id')
-                    })
-                elif response.status == 409:
-                    results.append({
+                if (response.status == 400 and 
+                    'conflict' in response.data.decode('utf-8').lower()):
+                    
+                    logger.info(f"Alert rule {rule['title']} already exists - skipping")
+                    result = {
                         'message': f'Alert rule {rule["title"]} already exists',
                         'status': 'existing'
-                    })
+                    }
+                elif response.status in [200, 201]:
+                    result = {
+                        'message': f'Alert rule {rule["title"]} created successfully',
+                        'ruleId': json.loads(response.data.decode('utf-8')).get('id')
+                    }
                 else:
-                    raise Exception(f"Failed to create alert rule. Status: {response.status}")
+                    result = {
+                        'message': f'Failed to create alert rule {rule["title"]}',
+                        'status': response.status
+                    }
+
+                results.append(result)
 
             except Exception as e:
-                logger.error(f"Error creating alert rule {rule['title']}: {str(e)}")
+                logger.error(f"Error creating alert rule {rule.get('title')}: {str(e)}")
                 results.append({
-                    'title': rule['title'],
+                    'message': f'Error creating alert rule {rule["title"]}',
                     'error': str(e)
                 })
 
         return results
 
     except Exception as e:
-        return handle_resource_creation('Alert Rules', lambda: raise_or_return(e))
-
-def create_all_resources():
-    try:
-        validate_env_vars()
-
-        results = {
-            'grafanaDatasource': create_grafana_datasource(),
-            'prometheusDatasource': create_prometheus_datasource(),
-            'folder': create_folder(),
-            'dashboards': [],
-            'alertRules': []
-        }
-
-        dashboard_errors = []
-        
-        for template in DASHBOARD_UIDS.keys():
-            try:
-                result = create_dashboard(template)
-                results['dashboards'].append({
-                    'template': template,
-                    'result': result
-                })
-            except Exception as e:
-                error_msg = f"Error creating dashboard {template}: {str(e)}"
-                logger.error(error_msg)
-                dashboard_errors.append(error_msg)
-                results['dashboards'].append({
-                    'template': template,
-                    'error': str(e)
-                })
-
-        # Create alert rules after folder is created
-        results['alertRules'] = create_alert_rules()
-
-        if dashboard_errors:
-            raise Exception(f"Failed to create one or more dashboards:\n" + "\n".join(dashboard_errors))
-
-        return results
-
-    except Exception as e:
-        logger.error(f"Error creating resources: {str(e)}")
-        raise
+        logger.error(f"Error in create_alert_rules: {str(e)}")
+        return [{'message': f'Alert rules processing failed: {str(e)}'}]
 
 def lambda_handler(event, context):
     """Main Lambda handler"""
@@ -389,7 +365,7 @@ def lambda_handler(event, context):
         cfnresponse.send(
             event,
             context,
-            cfnresponse.SUCCESS,
+            cfnresponse.SUCCESS if response_data.get("Status") == "SUCCESS" else cfnresponse.FAILED,
             response_data
         )
 
@@ -407,12 +383,64 @@ def lambda_handler(event, context):
 
 def on_create():
     """Handle Create request"""
-    result = create_all_resources()
-    return {
-        "Status": "SUCCESS",
-        "Reason": "Grafana resources created successfully",
-        **result
-    }
+    try:
+        response_data = {
+            "Status": "SUCCESS",
+            "Reason": "Grafana resources created successfully",
+            "resources": {
+                'grafanaDatasource': None,
+                'prometheusDatasource': None,
+                'folder': None,
+                'dashboards': [],
+                'alertRules': []
+            }
+        }
+
+        # Validate environment variables
+        validate_env_vars()
+
+        # Create data sources with logging
+        datasource_result = create_grafana_datasource()
+        response_data["resources"]["grafanaDatasource"] = datasource_result
+
+        prometheus_result = create_prometheus_datasource()
+        response_data["resources"]["prometheusDatasource"] = prometheus_result
+        
+        # Create folder
+        folder_result = create_folder()
+        response_data["resources"]["folder"] = folder_result
+
+        # Create dashboards
+        for template in DASHBOARD_UIDS.keys():
+            try:
+                result = create_dashboard(template)
+                
+                dashboard_entry = {
+                    'template': template,
+                    'status': 'success' if result.get('status') != 'existing' else 'existing',
+                    'result': result
+                }
+                response_data["resources"]["dashboards"].append(dashboard_entry)
+            except Exception as e:
+                logger.error(f"Error creating dashboard {template}: {str(e)}")
+                response_data["resources"]["dashboards"].append({
+                    'template': template,
+                    'status': 'error',
+                    'error': str(e)
+                })
+
+        # Create alert rules
+        alert_rules_result = create_alert_rules()
+        response_data["resources"]["alertRules"] = alert_rules_result
+
+        return response_data
+
+    except Exception as e:
+        logger.error(f"Error in on_create: {str(e)}")
+        return {
+            "Status": "FAILED",
+            "Reason": str(e)
+        }
 
 def on_update():
     """Handle Update request"""
