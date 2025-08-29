@@ -65,7 +65,6 @@ Metadata:
           - FsxFileSystemId
           - FsxSubnetId
           - FsxAvailabilityZoneId
-          - DeploymentType
           - StorageCapacity
           - PerUnitStorageThroughput
           - DataCompressionType
@@ -197,8 +196,6 @@ Metadata:
         default: FSx Subnet ID
       FsxAvailabilityZoneId:
         default: FSx Availability Zone
-      DeploymentType:
-        default: Deployment type
       StorageCapacity:
         default: Storage Capacity (GB)
       PerUnitStorageThroughput:
@@ -535,10 +532,6 @@ Parameters:
     Type: Number
     Default: 1200
     Description: Storage capacity for the FSx file system in GiB
-  DeploymentType:
-    Type: String
-    Default: PERSISTENT_2
-    Description: Deployment type for the FSx file system
   FsxFileSystemId:
     Type: String
     Default: ''
@@ -1185,8 +1178,6 @@ Resources:
           Ref: FsxSubnetId
         FsxAvailabilityZoneId:
           Ref: FsxAvailabilityZoneId
-        DeploymentType:
-          Ref: DeploymentType
         SecurityGroupIds:
           Fn::If:
             - CreateSecurityGroupStackCondition

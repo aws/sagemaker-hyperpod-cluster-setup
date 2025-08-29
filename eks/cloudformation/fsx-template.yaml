@@ -63,10 +63,6 @@ Parameters:
     Type: Number
     Default: 1200
     Description: Storage capacity for the FSx file system in GiB
-  DeploymentType:
-    Type: String
-    Default: PERSISTENT_2
-    Description: Deployment type for the FSx file system
   FsxFileSystemId:
     Type: String
     Default: ''
@@ -129,7 +125,6 @@ Resources:
                   - cloudformation:DescribeStackResource
                   - cloudformation:DescribeStackResources
                   - cloudformation:SignalResource
-                  - cloudformation:DeleteStack
                 Resource:
                   Fn::Sub: arn:aws:cloudformation:${AWS::Region}:${AWS::AccountId}:stack/*
           PolicyName:
@@ -217,8 +212,6 @@ Resources:
             Ref: FileSystemTypeVersion
           STORAGE_CAPACITY:
             Ref: StorageCapacity
-          DEPLOYMENT_TYPE:
-            Ref: DeploymentType
           FSX_FILE_SYSTEM_ID:
             Ref: FsxFileSystemId
           PATH: /opt/python/bin:/var/lang/bin:/usr/local/bin:/usr/bin/:/bin
@@ -255,7 +248,6 @@ Resources:
       AddonName: aws-fsx-csi-driver
       ClusterName:
         Ref: EKSClusterName
-      PreserveOnDelete: false
       ResolveConflicts: OVERWRITE
     DependsOn:
       - FsxCustomResourceStep1
