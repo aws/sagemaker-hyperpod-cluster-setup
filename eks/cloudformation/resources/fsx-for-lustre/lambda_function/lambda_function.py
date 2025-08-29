@@ -221,7 +221,7 @@ provisioner: fsx.csi.aws.com
 parameters:
   subnetId: {subnet_id}
   securityGroupIds: {os.environ['SECURITY_GROUP_ID']}
-  deploymentType: PERSISTENT_2
+  deploymentType: {os.environ['DEPLOYMENT_TYPE']}
   automaticBackupRetentionDays: "0"
   copyTagsToBackups: "true"
   perUnitStorageThroughput: "{os.environ['PER_UNIT_STORAGE_THROUGHPUT']}"

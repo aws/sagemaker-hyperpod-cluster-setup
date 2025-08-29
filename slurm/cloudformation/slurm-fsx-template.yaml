@@ -24,6 +24,10 @@ Parameters:
     Type: CommaDelimitedList
     Default: ''
     Description: Comma-separated list of security group IDs for the FSx file system
+  DeploymentType:
+    Type: String
+    Default: PERSISTENT_2
+    Description: Deployment type for the FSx file system
   StorageCapacity:
     Type: Number
     Default: 1200
@@ -31,11 +35,6 @@ Parameters:
   PerUnitStorageThroughput:
     Type: Number
     Default: 250
-    AllowedValues:
-      - '125'
-      - '250'
-      - '500'
-      - '1000'
     Description: Provisioned Read/Write throughput (MB/s/TiB)
   DataCompressionType:
     Type: String
@@ -58,6 +57,10 @@ Conditions:
     Fn::Equals:
       - Ref: FsxSubnetId
       - ''
+  IsPersistent2DeploymentTypeCondition:
+    Fn::Equals:
+      - Ref: DeploymentType
+      - PERSISTENT_2
   CreateNewFsxCondition:
     Fn::Not:
       - Condition: UseFsxFileSystemIdCondition
@@ -212,7 +215,7 @@ Resources:
         Ref: FsxAvailabilityZoneId
       PrivateSubnetIds:
         Ref: PrivateSubnetIds
-      Timestamp: '1756225885290'
+      Timestamp: '1756424240041'
     Metadata:
       aws:cdk:path: SlurmFsxCfnTemplate/FsxHelperResource
   FSxLustreFileSystem:
@@ -224,9 +227,13 @@ Resources:
       LustreConfiguration:
         DataCompressionType:
           Ref: DataCompressionType
-        DeploymentType: PERSISTENT_2
+        DeploymentType:
+          Ref: DeploymentType
         MetadataConfiguration:
-          Mode: AUTOMATIC
+          Fn::If:
+            - IsPersistent2DeploymentTypeCondition
+            - Mode: AUTOMATIC
+            - Ref: AWS::NoValue
         PerUnitStorageThroughput:
           Ref: PerUnitStorageThroughput
       SecurityGroupIds:
