@@ -4,6 +4,7 @@
 # Create and activate a temporary virtual environment
 python3 -m venv venv
 source venv/bin/activate
+pip install --upgrade pip
 
 # Install dependencies from requirements.txt
 pip install -r lambda_function/requirements.txt -t package/

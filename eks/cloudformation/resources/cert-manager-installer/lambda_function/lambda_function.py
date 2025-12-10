@@ -5,25 +5,23 @@ import cfnresponse
 from botocore.exceptions import ClientError
 import yaml
 import time
+import json
 
 # Environment variables
-HYPERPOD_CLI_GITHUB_REPO_URL = 'HYPERPOD_CLI_GITHUB_REPO_URL'
-HYPERPOD_CLI_GITHUB_REPO_REVISION = 'HYPERPOD_CLI_GITHUB_REPO_REVISION'
 EKS_CLUSTER_NAME = 'EKS_CLUSTER_NAME'
+CERT_MANAGER_ADDON_VERSION = 'CERT_MANAGER_ADDON_VERSION'
 AWS_REGION = 'AWS_REGION'
-CHART_PATH = 'helm_chart/HyperPodHelmChart'
-CHART_LOCAL_PATH = '/tmp/hyperpod-helm-charts'
 
-# Namespace for cert-manager
+# Constants
+CERT_MANAGER_ADDON_NAME = "cert-manager"
 CERT_MANAGER_NAMESPACE = "cert-manager"
-RELEASE_NAME = 'cert-manager'
 
 
 def lambda_handler(event, context):
     """
-    Handle CloudFormation custom resource requests for managing cert-manager via HyperPod Helm Chart
+    Handle CloudFormation custom resource requests for managing cert-manager EKS add-on
     """
-    try: 
+    try:
         request_type = event['RequestType']
 
         if request_type == 'Create':
@@ -127,21 +125,19 @@ def write_kubeconfig(cluster_name, region):
 
 def check_cert_manager_exists():
     """
-    Cert-manager existence detection based on deployments using labels
+    Cert-manager existence detection based on deployments
+    Returns True if cert-manager deployments exist, regardless of pod status
     """
     try:
         result = subprocess.run([
             'kubectl', 'get', 'deployments', '-n', 'cert-manager',
-            '-l', 'app.kubernetes.io/name=cert-manager',
-            '-o', 'jsonpath={.items[*].status.readyReplicas}'
+            '-o', 'jsonpath={.items[*].metadata.name}'
         ], capture_output=True, text=True, timeout=5)
         
         if result.returncode == 0 and result.stdout.strip():
-            ready_replicas = result.stdout.strip().split()
-            total_ready = sum(int(r) for r in ready_replicas if r.isdigit())
-            if total_ready > 0:
-                print(f"cert-manager found with {total_ready} ready replicas")
-                return True
+            deployment_names = result.stdout.strip()
+            print(f"cert-manager deployments found: {deployment_names}")
+            return True
         
         return False
         
@@ -150,141 +146,325 @@ def check_cert_manager_exists():
         return False
 
 
-def install_cert_manager():
+def get_addon_status(eks_client, cluster_name):
     """
-    Install cert-manager using the HyperPod Helm Chart with only cert-manager enabled
-    """
-    try:
-        print("Installing cert-manager via HyperPod Helm Chart...")
-        
-        # Ensure required environment variables are set
-        required_env_vars = [
-            HYPERPOD_CLI_GITHUB_REPO_URL,
-            HYPERPOD_CLI_GITHUB_REPO_REVISION,
-        ]
-        
-        for var in required_env_vars:
-            if var not in os.environ:
-                raise ValueError(f"Missing required environment variable: {var}")
-        
-        # Clone the GitHub repository
-        clone_cmd = ['git', 'clone', os.environ[HYPERPOD_CLI_GITHUB_REPO_URL], CHART_LOCAL_PATH]
-        subprocess.run(clone_cmd, check=True)
-
-        # Checkout specific revision
-        subprocess.run(['git', '-C', CHART_LOCAL_PATH, 'checkout', os.environ[HYPERPOD_CLI_GITHUB_REPO_REVISION]], check=True)
-
-        # Update dependencies to download cert-manager chart
-        subprocess.run(['helm', 'dependency', 'update', f"{CHART_LOCAL_PATH}/{CHART_PATH}"], check=True)
-
-        # Create cert-manager namespace
-        create_namespace(CERT_MANAGER_NAMESPACE)
-
-        # Install only cert-manager from the HyperPod Helm Chart
-        # We disable all other components and only enable cert-manager
-        install_cmd = [
-            'helm', 'install',
-            RELEASE_NAME,
-            f'{CHART_LOCAL_PATH}/{CHART_PATH}',
-            '--namespace', CERT_MANAGER_NAMESPACE,
-            '--set', 'cert-manager.enabled=true',
-            # Disable all other components
-            '--set', 'trainingOperators.enabled=false',
-            '--set', 'mlflow.enabled=false',
-            '--set', 'nvidia-device-plugin.devicePlugin.enabled=false',
-            '--set', 'aws-efa-k8s-device-plugin.devicePlugin.enabled=false',
-            '--set', 'neuron-device-plugin.devicePlugin.enabled=false',
-            '--set', 'storage.enabled=false',
-            '--set', 'health-monitoring-agent.enabled=false',
-            '--set', 'mpi-operator.enabled=false',
-            '--set', 'deep-health-check.enabled=false',
-            '--set', 'job-auto-restart.enabled=false',
-            '--set', 'cluster-role-and-bindings.enabled=false',
-            '--set', 'namespaced-role-and-bindings.enabled=false',
-            '--set', 'team-role-and-bindings.enabled=false',
-            '--set', 'inferenceOperators.enabled=false',
-            '--set', 'hyperpod-patching.enabled=false'
-        ]
-
-        # Execute the Helm install
-        subprocess.run(install_cmd, check=True)
-
-        # Wait for cert-manager to be ready
-        wait_for_cert_manager_ready()
-
-        # Clean up cloned repository
-        subprocess.run(['rm', '-rf', CHART_LOCAL_PATH], check=True)
-        
-        print("cert-manager installed successfully via HyperPod Helm Chart")
-        return True
-        
-    except subprocess.CalledProcessError as e:
-        raise Exception(f"Failed to install cert-manager via HyperPod Helm Chart: {e.cmd}. Return code: {e.returncode}")
-
-
-def wait_for_cert_manager_ready():
-    """
-    Wait for cert-manager deployments to be ready
+    Get current status of cert-manager add-on if it exists
+    Returns: tuple (addon_arn, addon_status) or (None, None) if not found
     """
     try:
-        print("Waiting for cert-manager deployments to be ready...")
+        addon_info = eks_client.describe_addon(
+            clusterName=cluster_name,
+            addonName=CERT_MANAGER_ADDON_NAME
+        )
+        return addon_info['addon']['addonArn'], addon_info['addon']['status']
+    except ClientError as e:
+        if e.response['Error']['Code'] == 'ResourceNotFoundException':
+            return None, None
+        raise
+
+
+def wait_for_addon_terminal_state(eks_client, cluster_name, max_wait_time=300):
+    """
+    Wait for cert-manager add-on to reach a terminal state
+    Returns: tuple (addon_arn, addon_status)
+    """
+    start_time = time.time()
+    
+    while time.time() - start_time < max_wait_time:
+        addon_arn, status = get_addon_status(eks_client, cluster_name)
         
+        if not addon_arn:
+            # Add-on was deleted during wait
+            print("Add-on no longer exists")
+            return None, "DELETED"
+        
+        print(f"Cert-manager add-on status: {status}")
+        
+        # Terminal states - stop waiting
+        if status in ['ACTIVE', 'CREATE_FAILED', 'DEGRADED', 'UPDATE_FAILED']:
+            print(f"Cert-manager add-on reached terminal state: {status}")
+            return addon_arn, status
+        
+        time.sleep(30)
+    
+    # Timeout reached - get final status
+    addon_arn, status = get_addon_status(eks_client, cluster_name)
+    if addon_arn:
+        print(f"Timeout waiting for terminal state, current status: {status}")
+        return addon_arn, status
+    else:
+        print("Timeout reached and add-on no longer exists")
+        return None, "DELETED"
+
+
+def get_addon_configuration_values():
+    """
+    Returns standard cert-manager configuration with tolerations for all node taints
+    """
+    return {
+        # Set single replica for cert-manager controller
+        "replicaCount": 1,
+        # Global tolerations for cert-manager controller
+        "tolerations": [
+            {
+                "operator": "Exists",
+                "effect": "NoSchedule",
+            },
+            {
+                "operator": "Exists",
+                "effect": "NoExecute",
+            },
+            {
+                "operator": "Exists",
+                "effect": "PreferNoSchedule",
+            },
+        ],
+        # Webhook configuration
+        "webhook": {
+            "replicaCount": 1,
+            "tolerations": [
+                {
+                    "operator": "Exists",
+                    "effect": "NoSchedule",
+                },
+                {
+                    "operator": "Exists",
+                    "effect": "NoExecute",
+                },
+                {
+                    "operator": "Exists",
+                    "effect": "PreferNoSchedule",
+                },
+            ],
+        },
+        # Cainjector configuration
+        "cainjector": {
+            "replicaCount": 1,
+            "tolerations": [
+                {
+                    "operator": "Exists",
+                    "effect": "NoSchedule",
+                },
+                {
+                    "operator": "Exists",
+                    "effect": "NoExecute",
+                },
+                {
+                    "operator": "Exists",
+                    "effect": "PreferNoSchedule",
+                },
+            ],
+        },
+    }
+
+
+def remove_addon(eks_client, cluster_name):
+    """
+    Remove cert-manager EKS add-on and wait for deletion to complete
+    Returns: (success: bool, message: str)
+    """
+    try:
+        print("Removing cert-manager add-on...")
+        eks_client.delete_addon(
+            clusterName=cluster_name,
+            addonName=CERT_MANAGER_ADDON_NAME
+        )
+        
+        # Wait for deletion
+        start_time = time.time()
+        while time.time() - start_time < 300:
+            check_arn, _ = get_addon_status(eks_client, cluster_name)
+            if not check_arn:
+                print("Add-on removed successfully")
+                return True, "Add-on deleted"
+            time.sleep(10)
+        
+        return True, "Add-on deletion initiated (may still be in progress)"
+        
+    except Exception as e:
+        print(f"Error removing add-on: {str(e)}")
+        return False, str(e)
+
+
+def delete_self_managed_cert_manager():
+    """
+    Delete self-managed cert-manager installation including webhooks and CRDs
+    Returns: (success: bool, message: str)
+    """
+    try:
+        print("Attempting to delete self-managed cert-manager...")
+        
+        # Step 1: Delete cert-manager namespace and all its resources
+        print("Deleting cert-manager namespace...")
+        namespace_result = subprocess.run([
+            'kubectl', 'delete', 'namespace', CERT_MANAGER_NAMESPACE, '--wait=true'
+        ], capture_output=True, text=True, timeout=180)
+        
+        if namespace_result.returncode != 0:
+            print(f"Failed to delete namespace: {namespace_result.stderr}")
+            return False, f"Namespace deletion failed: {namespace_result.stderr}"
+        
+        print("Namespace deleted successfully")
+        
+        # Step 2: Delete webhook configurations (cluster-scoped)
+        print("Deleting cert-manager webhook configurations...")
+        webhook_result = subprocess.run([
+            'kubectl', 'delete', 'mutatingwebhookconfiguration,validatingwebhookconfiguration',
+            'cert-manager-webhook', '--ignore-not-found=true'
+        ], capture_output=True, text=True, timeout=30)
+        
+        if webhook_result.returncode == 0:
+            print("Webhook configurations deleted")
+        else:
+            print(f"Warning: Failed to delete webhooks: {webhook_result.stderr}")
+        
+        # Step 3: Get and delete cert-manager CRDs
+        print("Getting cert-manager CRDs...")
+        crd_list_result = subprocess.run(
+            'kubectl get crd | grep cert-manager | awk \'{print $1}\'',
+            shell=True,
+            capture_output=True,
+            text=True,
+            timeout=30
+        )
+        
+        if crd_list_result.returncode == 0 and crd_list_result.stdout.strip():
+            crds = crd_list_result.stdout.strip().split('\n')
+            crds = [crd.strip() for crd in crds if crd.strip()]
+            print(f"Found {len(crds)} cert-manager CRDs: {crds}")
+            
+            # Delete each CRD
+            print("Deleting cert-manager CRDs...")
+            for crd in crds:
+                crd_result = subprocess.run([
+                    'kubectl', 'delete', 'crd', crd, '--ignore-not-found=true'
+                ], capture_output=True, text=True, timeout=30)
+                
+                if crd_result.returncode == 0:
+                    print(f"CRD {crd} deleted")
+                else:
+                    print(f"Warning: Failed to delete CRD {crd}: {crd_result.stderr}")
+        else:
+            print("No cert-manager CRDs found")
+        
+        # Wait for all resources to fully clean up
+        print("Waiting for cleanup to complete...")
+        time.sleep(30)
+        
+        return True, "Self-managed cert-manager fully deleted"
+            
+    except Exception as e:
+        print(f"Error deleting self-managed cert-manager: {str(e)}")
+        return False, str(e)
+
+
+def create_cert_manager_addon(cluster_name, addon_version):
+    """
+    Create NEW cert-manager EKS add-on
+    Assumes: EKS add-on does not exist, but self-managed may have been cleaned up
+    Returns: tuple (addon_arn, addon_status)
+    """
+    try:
+        eks = boto3.client('eks')
+        configuration_values = get_addon_configuration_values()
+        
+        print(f"Creating cert-manager EKS add-on on cluster {cluster_name} with version {addon_version}...")
+        response = eks.create_addon(
+            clusterName=cluster_name,
+            addonName=CERT_MANAGER_ADDON_NAME,
+            addonVersion=addon_version,
+            configurationValues=json.dumps(configuration_values),
+            resolveConflicts='OVERWRITE'
+        )
+        
+        print(f"Cert-manager add-on creation initiated: {response['addon']['addonArn']}")
+        
+        # Wait for terminal state
+        return wait_for_addon_terminal_state(eks, cluster_name, max_wait_time=300)
+        
+    except Exception as e:
+        print(f"Error creating cert-manager add-on: {str(e)}")
+        raise
+
+
+def update_cert_manager_addon(cluster_name, addon_version):
+    """
+    Update EXISTING cert-manager EKS add-on
+    Assumes: EKS add-on already exists
+    Returns: tuple (addon_arn, addon_status)
+    """
+    try:
+        eks = boto3.client('eks')
+        configuration_values = get_addon_configuration_values()
+        
+        print(f"Updating cert-manager EKS add-on to version {addon_version} with tolerations...")
+        eks.update_addon(
+            clusterName=cluster_name,
+            addonName=CERT_MANAGER_ADDON_NAME,
+            addonVersion=addon_version,
+            configurationValues=json.dumps(configuration_values),
+            resolveConflicts='OVERWRITE'
+        )
+        
+        print("Add-on update initiated")
+        # Wait for update to complete
+        return wait_for_addon_terminal_state(eks, cluster_name, max_wait_time=300)
+        
+    except Exception as e:
+        print(f"Error updating cert-manager add-on: {str(e)}")
+        raise
+
+
+def check_cert_manager_pods_ready():
+    """
+    Check if cert-manager pods are ready
+    Returns True if all cert-manager deployments have ready replicas
+    """
+    try:
         deployments = [
-            RELEASE_NAME,
-            f'{RELEASE_NAME}-cainjector',
-            f'{RELEASE_NAME}-webhook'
+            'cert-manager',
+            'cert-manager-cainjector',
+            'cert-manager-webhook'
         ]
         
         for deployment in deployments:
-            wait_cmd = [
-                'kubectl', 'wait', '--for=condition=available',
-                f'deployment/{deployment}',
+            result = subprocess.run([
+                'kubectl', 'get', 'deployment', deployment,
                 '-n', CERT_MANAGER_NAMESPACE,
-                '--timeout=300s'
-            ]
-            subprocess.run(wait_cmd, check=True)
-            print(f"Deployment {deployment} is ready")
+                '-o', 'jsonpath={.status.readyReplicas}'
+            ], capture_output=True, text=True, timeout=10)
+            
+            if result.returncode != 0:
+                print(f"Failed to check deployment {deployment}: {result.stderr}")
+                return False
+            
+            ready_replicas = result.stdout.strip()
+            if not ready_replicas or int(ready_replicas) == 0:
+                print(f"Deployment {deployment} has no ready replicas")
+                return False
         
         print("All cert-manager deployments are ready")
+        return True
         
-    except subprocess.CalledProcessError as e:
-        raise Exception(f"cert-manager deployments failed to become ready: {e}")
-
-
-def create_namespace(namespace):
-    """
-    Create a Kubernetes namespace if it doesn't exist
-    """
-    try:
-        subprocess.run(
-            ["kubectl", "create", "namespace", namespace],
-            check=True,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            text=True
-        )
-        print(f"Namespace '{namespace}' created.")
-    except subprocess.CalledProcessError as e:
-        if "AlreadyExists" in e.stderr:
-            print(f"Namespace '{namespace}' already exists. Skipping.")
-        else:
-            print(f"Failed to create namespace {namespace}: {str(e)}")
-            raise
+    except Exception as e:
+        print(f"Error checking cert-manager pods: {str(e)}")
+        return False
 
 
 def on_create():
     """
-    Handle Create request to install cert-manager via HyperPod Helm Chart
+    Handle Create request to install cert-manager EKS add-on
     """
     response_data = {
         "Status": "SUCCESS",
-        "Reason": "cert-manager installation completed successfully"
+        "Reason": "Cert-manager add-on successfully installed"
     }
 
     try:
         # Ensure required environment variables are set
         required_env_vars = [
             'EKS_CLUSTER_NAME',
+            'CERT_MANAGER_ADDON_VERSION',
             'AWS_REGION'
         ]
         
@@ -292,127 +472,81 @@ def on_create():
             if var not in os.environ:
                 raise ValueError(f"Missing required environment variable: {var}")
 
-        # Set HELM_CACHE_HOME and HELM_CONFIG_HOME
-        os.environ['HELM_CACHE_HOME'] = '/tmp/.helm/cache'
-        os.environ['HELM_CONFIG_HOME'] = '/tmp/.helm/config'
-        
-        # Create directories
-        os.makedirs('/tmp/.helm/cache', exist_ok=True)
-        os.makedirs('/tmp/.helm/config', exist_ok=True)
+        cluster_name = os.environ['EKS_CLUSTER_NAME']
+        addon_version = os.environ['CERT_MANAGER_ADDON_VERSION']
+        region = os.environ['AWS_REGION']
 
-        # Configure kubectl using boto3
-        write_kubeconfig(os.environ[EKS_CLUSTER_NAME], os.environ['AWS_REGION'])
+        # Configure kubectl
+        write_kubeconfig(cluster_name, region)
 
-        # Check if cert-manager already exists
-        if check_cert_manager_exists():
-            print("cert-manager already exists, skipping installation")
+        try:
+            eks = boto3.client('eks')
+            
+            # Check if EKS add-on already exists
+            addon_arn, addon_status = get_addon_status(eks, cluster_name)
+            if addon_arn:
+                # Check if add-on is in a failed or stuck state that requires deletion
+                if addon_status in ['CREATE_FAILED', 'UPDATE_FAILED', 'CREATING']:
+                    print(f"Add-on in failed/stuck state ({addon_status}), deleting before recreating...")
+                    remove_addon(eks, cluster_name)
+                    # Create new add-on after deletion
+                    addon_arn, addon_status = create_cert_manager_addon(cluster_name, addon_version)
+                else:
+                    # Update if in healthy state
+                    print(f"Cert-manager EKS add-on already exists with status {addon_status}, updating...")
+                    addon_arn, addon_status = update_cert_manager_addon(cluster_name, addon_version)
+            else:
+                # Check if self-managed cert-manager exists
+                if check_cert_manager_exists():
+                    print("Self-managed cert-manager detected, cleaning up...")
+                    success, msg = delete_self_managed_cert_manager()
+                    if not success:
+                        raise Exception(f"Self-managed cleanup failed: {msg}")
+                
+                # Create new EKS add-on
+                addon_arn, addon_status = create_cert_manager_addon(cluster_name, addon_version)
+            
+            # CertManagerInstalled is True only if addon is in a successful state
+            is_installed = addon_status in ['ACTIVE', 'DEGRADED']
+            
+            response_data["AddonArn"] = addon_arn
+            response_data["CertManagerInstalled"] = is_installed
+            response_data["AddonStatus"] = addon_status
+            response_data["Reason"] = f"Cert-manager add-on installation attempted, status: {addon_status}"
+            
+        except Exception as e:
+            print(f"Failed to install cert-manager add-on: {str(e)}")
             response_data["CertManagerInstalled"] = False
-            response_data["CertManagerExists"] = True
-            response_data["Reason"] = "cert-manager already exists, skipped installation"
-        else:
-            # Install cert-manager via HyperPod Helm Chart
-            install_cert_manager()
-            response_data["CertManagerInstalled"] = True
-            response_data["CertManagerExists"] = False
-            response_data["Reason"] = "cert-manager installed successfully via HyperPod Helm Chart"
+            response_data["AddonStatus"] = "N/A"
+            response_data["AddonArn"] = "N/A"
+            response_data["Reason"] = f"Failed to install cert-manager add-on: {str(e)}"
 
         return response_data
 
-    except subprocess.CalledProcessError as e:
-        print(f"Warning: Command failed during cert-manager installation: {e.cmd}. Return code: {e.returncode}")
-        response_data["CertManagerInstalled"] = False
-        response_data["Reason"] = "cert-manager installation failed but continuing to prevent main stack rollback"
-        return response_data
-    
     except Exception as e:
-        print(f"Warning: Failed to handle cert-manager installation: {str(e)}")
+        print(f"Error in on_create: {str(e)}")
+        response_data["AddonStatus"] = "N/A"
+        response_data["AddonArn"] = "N/A"
+        response_data["Reason"] = str(e)
         response_data["CertManagerInstalled"] = False
-        response_data["Reason"] = "cert-manager installation failed but continuing to prevent main stack rollback"
         return response_data
-
-
-def update_cert_manager():
-    """
-    Update cert-manager using the HyperPod Helm Chart with only cert-manager enabled
-    """
-    try:
-        print("Updating cert-manager via HyperPod Helm Chart...")
-        
-        # Ensure required environment variables are set
-        required_env_vars = [
-            HYPERPOD_CLI_GITHUB_REPO_URL,
-            HYPERPOD_CLI_GITHUB_REPO_REVISION,
-        ]
-        
-        for var in required_env_vars:
-            if var not in os.environ:
-                raise ValueError(f"Missing required environment variable: {var}")
-        
-        # Clone the updated GitHub repository
-        clone_cmd = ['git', 'clone', os.environ[HYPERPOD_CLI_GITHUB_REPO_URL], CHART_LOCAL_PATH]
-        subprocess.run(clone_cmd, check=True)
-
-        # Checkout specific revision
-        subprocess.run(['git', '-C', CHART_LOCAL_PATH, 'checkout', os.environ[HYPERPOD_CLI_GITHUB_REPO_REVISION]], check=True)
-
-        # Update dependencies to download updated cert-manager chart
-        subprocess.run(['helm', 'dependency', 'update', f"{CHART_LOCAL_PATH}/{CHART_PATH}"], check=True)
-
-        # Upgrade cert-manager using helm upgrade --install
-        # This will update existing installation or install if not present
-        upgrade_cmd = [
-            'helm', 'upgrade', '--install',
-            RELEASE_NAME,
-            f'{CHART_LOCAL_PATH}/{CHART_PATH}',
-            '--namespace', CERT_MANAGER_NAMESPACE,
-            '--set', 'cert-manager.enabled=true',
-            # Disable all other components
-            '--set', 'trainingOperators.enabled=false',
-            '--set', 'mlflow.enabled=false',
-            '--set', 'nvidia-device-plugin.devicePlugin.enabled=false',
-            '--set', 'aws-efa-k8s-device-plugin.devicePlugin.enabled=false',
-            '--set', 'neuron-device-plugin.devicePlugin.enabled=false',
-            '--set', 'storage.enabled=false',
-            '--set', 'health-monitoring-agent.enabled=false',
-            '--set', 'mpi-operator.enabled=false',
-            '--set', 'deep-health-check.enabled=false',
-            '--set', 'job-auto-restart.enabled=false',
-            '--set', 'cluster-role-and-bindings.enabled=false',
-            '--set', 'namespaced-role-and-bindings.enabled=false',
-            '--set', 'team-role-and-bindings.enabled=false',
-            '--set', 'inferenceOperators.enabled=false',
-            '--set', 'hyperpod-patching.enabled=false'
-        ]
-
-        # Execute the Helm upgrade
-        subprocess.run(upgrade_cmd, check=True)
-
-        # Wait for cert-manager to be ready after update
-        wait_for_cert_manager_ready()
-
-        # Clean up cloned repository
-        subprocess.run(['rm', '-rf', CHART_LOCAL_PATH], check=True)
-        
-        print("cert-manager updated successfully via HyperPod Helm Chart")
-        return True
-        
-    except subprocess.CalledProcessError as e:
-        raise Exception(f"Failed to update cert-manager via HyperPod Helm Chart: {e.cmd}. Return code: {e.returncode}")
 
 
 def on_update():
     """
-    Handle Update request to upgrade existing cert-manager installation
+    Handle Update request for cert-manager EKS add-on
+    Orchestrates: Check if exists → Update or Create
     """
     response_data = {
         "Status": "SUCCESS",
-        "Reason": "cert-manager update completed successfully"
+        "Reason": "Cert-manager add-on update completed"
     }
 
     try:
         # Ensure required environment variables are set
         required_env_vars = [
             'EKS_CLUSTER_NAME',
+            'CERT_MANAGER_ADDON_VERSION',
             'AWS_REGION'
         ]
         
@@ -420,127 +554,110 @@ def on_update():
             if var not in os.environ:
                 raise ValueError(f"Missing required environment variable: {var}")
 
-        # Set HELM_CACHE_HOME and HELM_CONFIG_HOME
-        os.environ['HELM_CACHE_HOME'] = '/tmp/.helm/cache'
-        os.environ['HELM_CONFIG_HOME'] = '/tmp/.helm/config'
-        
-        # Create directories
-        os.makedirs('/tmp/.helm/cache', exist_ok=True)
-        os.makedirs('/tmp/.helm/config', exist_ok=True)
+        cluster_name = os.environ['EKS_CLUSTER_NAME']
+        addon_version = os.environ['CERT_MANAGER_ADDON_VERSION']
+        region = os.environ['AWS_REGION']
 
-        # Configure kubectl using boto3
-        write_kubeconfig(os.environ[EKS_CLUSTER_NAME], os.environ['AWS_REGION'])
+        # Configure kubectl
+        write_kubeconfig(cluster_name, region)
 
-        # Check if cert-manager exists before updating
-        if check_cert_manager_exists():
-            # Update cert-manager via HyperPod Helm Chart
-            update_cert_manager()
-            response_data["CertManagerUpdated"] = True
-            response_data["Reason"] = "cert-manager updated successfully via HyperPod Helm Chart"
-        else:
-            # If cert-manager doesn't exist, install it (upgrade --install handles this)
-            update_cert_manager()
-            response_data["CertManagerUpdated"] = True
-            response_data["Reason"] = "cert-manager installed successfully via HyperPod Helm Chart (was not present)"
+        try:
+            eks = boto3.client('eks')
+            
+            # Check if EKS add-on exists
+            addon_arn, addon_status = get_addon_status(eks, cluster_name)
+            if addon_arn:
+                # Check if add-on is in a failed or stuck state that requires deletion
+                if addon_status in ['CREATE_FAILED', 'UPDATE_FAILED', 'CREATING']:
+                    print(f"Add-on in failed/stuck state ({addon_status}), deleting before recreating...")
+                    remove_addon(eks, cluster_name)
+                    # Create new add-on after deletion
+                    addon_arn, addon_status = create_cert_manager_addon(cluster_name, addon_version)
+                else:
+                    # Update if in healthy state
+                    print(f"Cert-manager EKS add-on exists with status {addon_status}, updating...")
+                    addon_arn, addon_status = update_cert_manager_addon(cluster_name, addon_version)
+            else:
+                print("Cert-manager EKS add-on not found, creating...")
+                
+                # Check if self-managed cert-manager exists
+                if check_cert_manager_exists():
+                    print("Self-managed cert-manager detected, cleaning up...")
+                    success, msg = delete_self_managed_cert_manager()
+                    if not success:
+                        raise Exception(f"Self-managed cleanup failed: {msg}")
+                
+                # Create new EKS add-on
+                addon_arn, addon_status = create_cert_manager_addon(cluster_name, addon_version)
+            
+            is_installed = addon_status in ['ACTIVE', 'DEGRADED']
+            
+            response_data["AddonArn"] = addon_arn
+            response_data["CertManagerInstalled"] = is_installed
+            response_data["AddonStatus"] = addon_status
+            response_data["Reason"] = f"Cert-manager add-on update attempted, status: {addon_status}"
+            
+        except Exception as e:
+            print(f"Failed to update cert-manager add-on: {str(e)}")
+            response_data["CertManagerInstalled"] = False
+            response_data["AddonStatus"] = "N/A"
+            response_data["AddonArn"] = "N/A"
+            response_data["Reason"] = f"Failed to update cert-manager add-on: {str(e)}"
 
         return response_data
 
-    except subprocess.CalledProcessError as e:
-        raise Exception(f"Command failed: {e.cmd}. Return code: {e.returncode}")
     except Exception as e:
-        raise Exception(f"Failed to update cert-manager: {str(e)}")
+        print(f"Error in on_update: {str(e)}")
+        response_data["AddonArn"] = "N/A"
+        response_data["AddonStatus"] = "N/A"
+        response_data["Reason"] = str(e)
+        response_data["CertManagerInstalled"] = False
+        return response_data
 
 
 def on_delete():
     """
-    Handle Delete request to uninstall cert-manager helm release
+    Handle Delete request to uninstall cert-manager EKS add-on
     """
     try:
         response_data = {
             "Status": "SUCCESS",
-            "Reason": "cert-manager uninstall completed successfully"
+            "Reason": "Cert-manager add-on uninstall completed"
         }
 
-        # Ensure required environment variables are set
-        required_env_vars = [
-            'EKS_CLUSTER_NAME',
-            'AWS_REGION'
-        ]
-
-        for var in required_env_vars:
-            if var not in os.environ:
-                print(f"Warning: Missing environment variable {var}, skipping cleanup")
-                return response_data
-
-        try:
-            # Set HELM_CACHE_HOME and HELM_CONFIG_HOME
-            os.environ['HELM_CACHE_HOME'] = '/tmp/.helm/cache'
-            os.environ['HELM_CONFIG_HOME'] = '/tmp/.helm/config'
-            
-            # Create directories
-            os.makedirs('/tmp/.helm/cache', exist_ok=True)
-            os.makedirs('/tmp/.helm/config', exist_ok=True)
-
-            # Configure kubectl using boto3
-            write_kubeconfig(os.environ[EKS_CLUSTER_NAME], os.environ['AWS_REGION'])
-        except Exception as e:
-            print(f"Warning: Failed to configure kubectl/helm, cluster may already be deleted: {str(e)}")
+        cluster_name = os.environ.get(EKS_CLUSTER_NAME)
+        if not cluster_name:
+            print("Cluster name not found, skipping cleanup")
+            response_data["AddonArn"] = "N/A"
+            response_data["AddonStatus"] = "N/A"
             return response_data
 
-        # Check if our Helm release exists and uninstall it
-        try:
-            print(f"Checking for Helm release: {RELEASE_NAME}")
-            
-            # Check if the release exists
-            list_cmd = ['helm', 'list', '-n', CERT_MANAGER_NAMESPACE, '-q']
-            result = subprocess.run(list_cmd, check=True, capture_output=True, text=True)
-            releases = result.stdout.strip().split('\n') if result.stdout.strip() else []
-            
-            if RELEASE_NAME in releases:
-                # Uninstall the Helm release
-                uninstall_cmd = [
-                    'helm', 'uninstall', RELEASE_NAME,
-                    '--namespace', CERT_MANAGER_NAMESPACE,
-                    '--wait'
-                ]
-                subprocess.run(uninstall_cmd, check=True, capture_output=True, text=True)
-                print(f"Successfully uninstalled Helm release: {RELEASE_NAME}")
+        eks = boto3.client('eks')
 
-                # Sleep time to allow for resources to be deleted before checking namespace
-                time.sleep(10)
-                
-                # Check if namespace is empty and delete it
-                check_cmd = ['kubectl', 'get', 'all', '-n', CERT_MANAGER_NAMESPACE, '--no-headers']
-                result = subprocess.run(check_cmd, capture_output=True, text=True)
-                
-                if result.returncode == 0 and not result.stdout.strip():
-                    delete_ns_cmd = ['kubectl', 'delete', 'namespace', CERT_MANAGER_NAMESPACE, '--ignore-not-found=true']
-                    subprocess.run(delete_ns_cmd, check=True, capture_output=True, text=True)
-                    print(f"Successfully deleted namespace: {CERT_MANAGER_NAMESPACE}")
-                else:
-                    print(f"Namespace {CERT_MANAGER_NAMESPACE} contains resources, skipping deletion")
-            else:
-                print(f"Helm release {RELEASE_NAME} not found, skipping uninstall")
-                
-        except subprocess.CalledProcessError as e:
-            print(f"Warning: Failed to uninstall Helm release {RELEASE_NAME}: {e}")
+        # Check if add-on exists before attempting deletion
+        addon_arn, addon_status = get_addon_status(eks, cluster_name)
+        if not addon_arn:
+            print("Cert-manager add-on not found, already deleted")
+            response_data["CertManagerUninstalled"] = True
+            response_data["AddonArn"] = "N/A"
+            response_data["AddonStatus"] = "DELETED"
+            return response_data
 
-        # Clean up any temporary files
-        try:
-            if os.path.exists(CHART_LOCAL_PATH):
-                subprocess.run(['rm', '-rf', CHART_LOCAL_PATH], check=True)
-                print("Cleaned up temporary chart files")
-        except Exception as e:
-            print(f"Warning: Failed to clean up temporary files: {str(e)}")
+        # Delete add-on
+        print(f"Deleting cert-manager add-on from cluster {cluster_name}...")
+        remove_addon(eks, cluster_name)
 
         response_data["CertManagerUninstalled"] = True
+        response_data["AddonArn"] = "N/A"
+        response_data["AddonStatus"] = "DELETED"
         return response_data
 
     except Exception as e:
-        # For delete operations, we generally want to succeed even if cleanup fails
-        # to avoid blocking stack deletion
-        print(f"Warning: Error during cert-manager uninstallation: {str(e)}")
+        print(f"Error in on_delete: {str(e)}")
+        # Return SUCCESS anyway to not block stack deletion
         return {
-            "Status": "SUCCESS", 
+            "Status": "SUCCESS",
+            "AddonArn": "N/A",
+            "AddonStatus": "N/A",
             "Reason": f"Proceeding with deletion despite error: {str(e)}"
         }

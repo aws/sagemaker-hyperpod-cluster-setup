@@ -1,132 +1,50 @@
 #!/bin/bash
-set -e  # Exit on any error
-# set -x  # Print commands as they are executed
 
-echo "Starting layer build..."
+# Build script for cert-manager Lambda layer
+# This layer includes kubectl and AWS IAM authenticator for EKS operations
 
-# Create directory structure for Python runtime
-mkdir -p cert-manager-lambda-layer/python/bin
-mkdir -p cert-manager-lambda-layer/python/lib
-mkdir -p cert-manager-lambda-layer/python/libexec/git-core
+set -e
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+LAYER_DIR="${SCRIPT_DIR}/cert-manager-lambda-layer"
+PYTHON_DIR="${LAYER_DIR}/python"
 
 # Set versions
 KUBECTL_VERSION="v1.31.2"
-HELM_VERSION="v3.15.3"
 AUTH_VERSION="0.6.11"
 
-# Download and install kubectl (compressed version)
+echo "Building cert-manager Lambda layer..."
+
+# Clean up previous builds
+rm -rf "${LAYER_DIR}"
+mkdir -p "${PYTHON_DIR}"
+
+# Create bin directory
+mkdir -p "${PYTHON_DIR}/bin"
+
+# Create a temporary directory for downloads
+TEMP_DIR=$(mktemp -d)
+trap "rm -rf ${TEMP_DIR}" EXIT
+
+cd "${TEMP_DIR}"
+
+# Download kubectl
+echo "Downloading kubectl..."
 curl -LO "https://dl.k8s.io/release/${KUBECTL_VERSION}/bin/linux/amd64/kubectl"
 chmod +x kubectl
-mv kubectl cert-manager-lambda-layer/python/bin/
-
-# Download and install Helm (using minimal tarball)
-curl -LO "https://get.helm.sh/helm-${HELM_VERSION}-linux-amd64.tar.gz"
-tar -zxvf helm-${HELM_VERSION}-linux-amd64.tar.gz --strip-components=1 linux-amd64/helm
-mv helm cert-manager-lambda-layer/python/bin/
-rm -f helm-${HELM_VERSION}-linux-amd64.tar.gz
+mv kubectl "${PYTHON_DIR}/bin/"
 
 # Download and install aws-iam-authenticator 
 echo "Downloading aws-iam-authenticator..."
-curl -Lo cert-manager-lambda-layer/python/bin/aws-iam-authenticator \
+curl -Lo ${PYTHON_DIR}/bin/aws-iam-authenticator \
     "https://github.com/kubernetes-sigs/aws-iam-authenticator/releases/download/v${AUTH_VERSION}/aws-iam-authenticator_${AUTH_VERSION}_linux_amd64" \
     --fail \
     --verbose 
+chmod +x ${PYTHON_DIR}/bin/aws-iam-authenticator
 
-# Verify the download
-if [ ! -s cert-manager-lambda-layer/python/bin/aws-iam-authenticator ]; then
-    echo "Error: aws-iam-authenticator download failed or file is empty"
-    exit 1
-fi
+# Create the layer zip
+cd "${LAYER_DIR}"
+echo "Creating layer zip file..."
+zip -r "${SCRIPT_DIR}/cert-manager-lambda-layer.zip" .
 
-echo "Making aws-iam-authenticator executable..."
-chmod +x cert-manager-lambda-layer/python/bin/aws-iam-authenticator
-
-# Verify the file
-echo "Checking aws-iam-authenticator..."
-file cert-manager-lambda-layer/python/bin/aws-iam-authenticator
-ls -l cert-manager-lambda-layer/python/bin/aws-iam-authenticator
-
-# Install minimal git
-echo "Installing git..."
-yum install -y git-core expat
-yum list installed | grep git
-
-echo "Checking git binary location..."
-which git
-ls -l $(which git)
-
-# Copy git binary and make it executable
-echo "Copying git binary..."
-cp /usr/bin/git cert-manager-lambda-layer/python/bin/
-chmod +x cert-manager-lambda-layer/python/bin/git
-
-# Copy essential git commands and make them executable
-echo "Copying git components..."
-essential_git_commands=(
-    "git-remote-https"
-    "git-clone"
-)
-
-for cmd in "${essential_git_commands[@]}"; do
-    echo "Copying $cmd..."
-    if [ -f "/usr/libexec/git-core/$cmd" ]; then
-        cp "/usr/libexec/git-core/$cmd" cert-manager-lambda-layer/python/libexec/git-core/
-        chmod +x "cert-manager-lambda-layer/python/libexec/git-core/$cmd"
-    else
-        echo "WARNING: $cmd not found in /usr/libexec/git-core/"
-        # Check if it exists elsewhere
-        find / -name "$cmd" 2>/dev/null || echo "Could not find $cmd anywhere"
-    fi
-done
-
-# Copy shared libraries
-echo "Copying shared libraries..."
-echo "Finding and copying required libraries (excluding libc.so.6)..."
-for binary in cert-manager-lambda-layer/python/bin/* cert-manager-lambda-layer/python/libexec/git-core/*; do
-    if [ -f "$binary" ] && [ -x "$binary" ]; then
-        echo "Analyzing dependencies for $binary..."
-        ldd "$binary" 2>/dev/null | \
-            grep "=> /" | \
-            awk '{print $3}' | \
-            grep -v 'libc.so.6' | \
-            while read -r lib; do
-                if [ -f "$lib" ]; then
-                    echo "Copying $lib..."
-                    cp -L "$lib" cert-manager-lambda-layer/python/lib/
-                fi
-            done
-    fi
-done
-
-echo "Verifying layer contents..."
-echo "=== Contents of python/bin ==="
-ls -la cert-manager-lambda-layer/python/bin/
-echo "=== Contents of python/libexec/git-core ==="
-ls -la cert-manager-lambda-layer/python/libexec/git-core/
-echo "=== Contents of python/lib ==="
-ls -la cert-manager-lambda-layer/python/lib/
-
-# Show component sizes before zipping
-echo "=== Component sizes ==="
-du -sh cert-manager-lambda-layer/python/bin/*
-du -sh cert-manager-lambda-layer/python/libexec/git-core
-du -sh cert-manager-lambda-layer/python/lib
-
-echo "Creating zip file..."
-# Create the layer zip file with maximum compression
-cd cert-manager-lambda-layer
-zip -9 -r ../cert-manager-lambda-layer.zip .
-cd ..
-
-# Show final zip size
-echo "=== Final zip size ==="
-du -sh cert-manager-lambda-layer.zip
-
-# Show uncompressed size for verification
-echo "=== Uncompressed size ==="
-unzip -l cert-manager-lambda-layer.zip | tail -1 | awk '{print $1}'
-
-echo "Verifying zip contents..."
-unzip -l cert-manager-lambda-layer.zip | grep git
-
-echo "Layer build complete!"
+echo "Layer build complete: ${SCRIPT_DIR}/cert-manager-lambda-layer.zip"
