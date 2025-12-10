@@ -1778,8 +1778,12 @@ Resources:
                 - EKSClusterStack
                 - Outputs.EKSClusterName
             - Ref: EKSClusterName
+        CustomResourceS3Bucket:
+          Fn::If:
+            - CustomBucketCondition
+            - Ref: CustomBucketName
+            - Fn::Sub: aws-sagemaker-hyperpod-cluster-setup-${AWS::Region}-${Stage}
     DependsOn:
-      - EKSClusterStack
       - HyperPodClusterStack
     Metadata:
       aws:cdk:path: MainEksBasedCfnTemplate/CertManagerStack
@@ -2348,7 +2352,6 @@ Resources:
             - Ref: EKSClusterName
     DependsOn:
       - CertManagerStack
-      - EKSClusterStack
       - HyperPodClusterStack
     Metadata:
       aws:cdk:path: MainEksBasedCfnTemplate/HPTrainingOperatorMainStack
