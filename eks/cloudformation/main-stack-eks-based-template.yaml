@@ -889,30 +889,51 @@ Parameters:
   TrainingMetricLevel:
     Type: String
     Default: BASIC
+    AllowedValues:
+      - BASIC
+      - ADVANCED
     Description: The level of training metric for EKS AddOn.
   TaskGovernanceMetricLevel:
     Type: String
     Default: DISABLED
+    AllowedValues:
+      - DISABLED
+      - ADVANCED
     Description: The level of task governance metric for EKS AddOn.
   ClusterMetricLevel:
     Type: String
     Default: BASIC
+    AllowedValues:
+      - BASIC
+      - ADVANCED
     Description: The level of cluster metric for EKS AddOn.
   NodeMetricLevel:
     Type: String
     Default: BASIC
+    AllowedValues:
+      - BASIC
+      - ADVANCED
     Description: The level of node metric for EKS AddOn.
   AcceleratedComputeMetricLevel:
     Type: String
     Default: BASIC
+    AllowedValues:
+      - BASIC
+      - ADVANCED
     Description: The level of accelerated compute metric for EKS AddOn.
   ScalingMetricLevel:
     Type: String
     Default: DISABLED
+    AllowedValues:
+      - DISABLED
+      - ADVANCED
     Description: The level of scaling metric for EKS AddOn.
   NetworkMetricLevel:
     Type: String
     Default: DISABLED
+    AllowedValues:
+      - DISABLED
+      - ADVANCED
     Description: The level of network metric for EKS AddOn.
   GrafanaWorkspaceName:
     Type: String
@@ -2247,6 +2268,7 @@ Resources:
       CreateGrafanaWorkspace:
         Ref: CreateGrafanaWorkspace
     DependsOn:
+      - HyperPodClusterStack
       - ObservabilityCustomResourceFunction
     Metadata:
       aws:cdk:path: MainEksBasedCfnTemplate/ObservabilityCustomResource

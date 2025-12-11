@@ -89,30 +89,51 @@ Parameters:
   TrainingMetricLevel:
     Type: String
     Default: BASIC
+    AllowedValues:
+      - BASIC
+      - ADVANCED
     Description: The level of training metric for EKS AddOn.
   TaskGovernanceMetricLevel:
     Type: String
     Default: DISABLED
+    AllowedValues:
+      - DISABLED
+      - ADVANCED
     Description: The level of task governance metric for EKS AddOn.
   ScalingMetricLevel:
     Type: String
     Default: DISABLED
+    AllowedValues:
+      - DISABLED
+      - ADVANCED
     Description: The level of scaling metric for EKS AddOn.
   ClusterMetricLevel:
     Type: String
     Default: BASIC
+    AllowedValues:
+      - BASIC
+      - ADVANCED
     Description: The level of cluster metric for EKS AddOn.
   NodeMetricLevel:
     Type: String
     Default: BASIC
+    AllowedValues:
+      - BASIC
+      - ADVANCED
     Description: The level of node metric for EKS AddOn.
   NetworkMetricLevel:
     Type: String
     Default: DISABLED
+    AllowedValues:
+      - DISABLED
+      - ADVANCED
     Description: The level of network metric for EKS AddOn.
   AcceleratedComputeMetricLevel:
     Type: String
     Default: BASIC
+    AllowedValues:
+      - BASIC
+      - ADVANCED
     Description: The level of accelerated compute metric for EKS AddOn.
   Logging:
     Type: String
@@ -307,7 +328,15 @@ Resources:
                 Action:
                   - aps:RemoteWrite
                 Resource:
-                  Fn::Sub: arn:aws:aps:${AWS::Region}:${AWS::AccountId}:workspace/*
+                  Fn::Sub:
+                    - arn:aws:aps:${AWS::Region}:${AWS::AccountId}:workspace/${PrometheusWorkspaceId}
+                    - PrometheusWorkspaceId:
+                        Fn::If:
+                          - PrometheusNewWorkspaceCondition
+                          - Fn::GetAtt:
+                              - PrometheusWorkspace
+                              - WorkspaceId
+                          - Ref: PrometheusWorkspaceId
               - Sid: CloudwatchLogsAccess
                 Effect: Allow
                 Action:
@@ -448,9 +477,12 @@ Resources:
                 Action:
                   - iam:PassRole
                 Resource:
-                  Fn::GetAtt:
-                    - GrafanaWorkspaceRole
-                    - Arn
+                  Fn::If:
+                    - CreateGrafanaRoleCondition
+                    - Fn::GetAtt:
+                        - GrafanaWorkspaceRole
+                        - Arn
+                    - Ref: GrafanaRole
           PolicyName:
             Fn::Sub: ${ResourceNamePrefix}-AMGIAM
         - PolicyDocument:
@@ -560,9 +592,12 @@ Resources:
           - - '{"ampWorkspace":{"prometheusEndpoint":"https://aps-workspaces.'
             - Fn::Sub: ${AWS::Region}
             - .amazonaws.com/workspaces/
-            - Fn::GetAtt:
-                - PrometheusWorkspace
-                - WorkspaceId
+            - Fn::If:
+                - PrometheusNewWorkspaceCondition
+                - Fn::GetAtt:
+                    - PrometheusWorkspace
+                    - WorkspaceId
+                - Ref: PrometheusWorkspaceId
             - '","arn":"'
             - Fn::If:
                 - PrometheusNewWorkspaceCondition
@@ -628,9 +663,12 @@ Resources:
           - - '{"ampWorkspace":{"prometheusEndpoint":"https://aps-workspaces.'
             - Fn::Sub: ${AWS::Region}
             - .amazonaws.com/workspaces/
-            - Fn::GetAtt:
-                - PrometheusWorkspace
-                - WorkspaceId
+            - Fn::If:
+                - PrometheusNewWorkspaceCondition
+                - Fn::GetAtt:
+                    - PrometheusWorkspace
+                    - WorkspaceId
+                - Ref: PrometheusWorkspaceId
             - '","arn":"'
             - Fn::If:
                 - PrometheusNewWorkspaceCondition
@@ -696,9 +734,12 @@ Resources:
           - - '{"ampWorkspace":{"prometheusEndpoint":"https://aps-workspaces.'
             - Fn::Sub: ${AWS::Region}
             - .amazonaws.com/workspaces/
-            - Fn::GetAtt:
-                - PrometheusWorkspace
-                - WorkspaceId
+            - Fn::If:
+                - PrometheusNewWorkspaceCondition
+                - Fn::GetAtt:
+                    - PrometheusWorkspace
+                    - WorkspaceId
+                - Ref: PrometheusWorkspaceId
             - '","arn":"'
             - Fn::If:
                 - PrometheusNewWorkspaceCondition
@@ -750,9 +791,12 @@ Resources:
           - - '{"ampWorkspace":{"prometheusEndpoint":"https://aps-workspaces.'
             - Fn::Sub: ${AWS::Region}
             - .amazonaws.com/workspaces/
-            - Fn::GetAtt:
-                - PrometheusWorkspace
-                - WorkspaceId
+            - Fn::If:
+                - PrometheusNewWorkspaceCondition
+                - Fn::GetAtt:
+                    - PrometheusWorkspace
+                    - WorkspaceId
+                - Ref: PrometheusWorkspaceId
             - '","arn":"'
             - Fn::If:
                 - PrometheusNewWorkspaceCondition
