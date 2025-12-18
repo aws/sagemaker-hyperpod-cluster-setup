@@ -23,6 +23,8 @@ Metadata:
           - CreateHyperPodClusterStack
           - HyperPodClusterName
           - CreateTaskGovernanceClusterPolicyStack
+          - PriorityClasses
+          - FairShare
           - TieredStorageConfig
           - TieredKVCacheConfig
       - Label:
@@ -321,6 +323,10 @@ Metadata:
         default: HyperPod Cluster Name
       CreateTaskGovernanceClusterPolicyStack:
         default: Create Cluster Policy
+      PriorityClasses:
+        default: Task Governence Priority Classes Configuration
+      FairShare:
+        default: Fair Share Setting
       TieredStorageConfig:
         default: Tiered Storage Configuration
       TieredKVCacheConfig:
@@ -711,6 +717,19 @@ Parameters:
     Description: >-
       JSON string containing tiered KV cache configuration. Format: {"KVCacheMode": "Enable", "InstanceGroup": ["ig-1",
       "ig-2"], "NVMeMode": "Enable"}. Only applicable for EKS-based clusters with P-series instances.
+  PriorityClasses:
+    Type: String
+    Default: ''
+    Description: >-
+      JSON string containing priority classes configuration for task governance. Format: [{"Name": "inference",
+      "Weight": 100}, {"Name": "training", "Weight": 80}]. Leave empty to use default priority classes.
+  FairShare:
+    Type: String
+    Default: Disabled
+    AllowedValues:
+      - Enabled
+      - Disabled
+    Description: Fair share setting for the scheduler configuration
   DataScientistRole1:
     Type: String
     Default: ''
@@ -1857,6 +1876,10 @@ Resources:
                 - HyperPodClusterStack
                 - Outputs.HyperPodClusterName
             - Ref: HyperPodClusterName
+        PriorityClasses:
+          Ref: PriorityClasses
+        FairShare:
+          Ref: FairShare
     DependsOn:
       - EKSClusterStack
       - HyperPodClusterStack

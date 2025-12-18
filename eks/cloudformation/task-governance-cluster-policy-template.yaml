@@ -5,6 +5,22 @@ Parameters:
   HyperPodClusterName:
     Type: String
     Description: Name of the HyperPod cluster
+  PriorityClasses:
+    Type: String
+    Default: ''
+    Description: JSON string containing priority classes configuration. Leave empty to use default priority classes.
+  FairShare:
+    Type: String
+    Default: Disabled
+    AllowedValues:
+      - Enabled
+      - Disabled
+    Description: Fair share setting for the scheduler configuration
+Conditions:
+  UseDefaultPriorityClassesCondition:
+    Fn::Equals:
+      - Ref: PriorityClasses
+      - ''
 Resources:
   TaskGovernanceAddOn:
     Type: AWS::EKS::Addon
@@ -38,18 +54,25 @@ Resources:
         Cluster configuration policy to streamline priority for tasks and idle compute management with first-come,
         first-served allocation for idle compute
       SchedulerConfig:
-        FairShare: Disabled
-        PriorityClasses:
-          - Name: inference
-            Weight: 100
-          - Name: experimentation
-            Weight: 90
-          - Name: training
-            Weight: 80
-          - Name: fine-tuning
-            Weight: 70
-          - Name: interactive
-            Weight: 60
+        Fn::If:
+          - UseDefaultPriorityClassesCondition
+          - FairShare:
+              Ref: FairShare
+            PriorityClasses:
+              - Name: inference
+                Weight: 100
+              - Name: experimentation
+                Weight: 90
+              - Name: training
+                Weight: 80
+              - Name: fine-tuning
+                Weight: 70
+              - Name: interactive
+                Weight: 60
+          - FairShare:
+              Ref: FairShare
+            PriorityClasses:
+              Ref: PriorityClasses
     DependsOn:
       - TaskGovernanceAddOn
     Metadata:
