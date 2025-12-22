@@ -23,11 +23,22 @@ def handler(event, context):
         cluster_arn = resource_properties['ClusterArn']
         scheduler_config = resource_properties['SchedulerConfig']
         
+        # Parse PriorityClasses if it's a JSON string (from CloudFormation parameter)
+        if 'PriorityClasses' in scheduler_config and isinstance(scheduler_config['PriorityClasses'], str):
+            try:
+                logger.info(f"Parsing PriorityClasses JSON string: {scheduler_config['PriorityClasses']}")
+                scheduler_config['PriorityClasses'] = json.loads(scheduler_config['PriorityClasses'])
+            except json.JSONDecodeError as e:
+                # only log the error because we dont want to fail the function
+                logger.error(f"Failed to parse PriorityClasses JSON: {e}")
+        
         # Convert Weight values from strings to integers in PriorityClasses
-        if 'PriorityClasses' in scheduler_config:
+        if 'PriorityClasses' in scheduler_config and isinstance(scheduler_config['PriorityClasses'], list):
             for priority_class in scheduler_config['PriorityClasses']:
                 if 'Weight' in priority_class and isinstance(priority_class['Weight'], str):
                     priority_class['Weight'] = int(priority_class['Weight'])
+                    
+        logger.info(f"Final scheduler_config: {json.dumps(scheduler_config, indent=2)}")
         
         config_name = resource_properties['Name']
         description = resource_properties.get('Description', 'HyperPod cluster scheduler configuration')
@@ -53,7 +64,15 @@ def handler(event, context):
 
             except Exception as create_error:
                 logger.error(f"Create error: {str(create_error)}")
-                cfnresponse.send(event, context, cfnresponse.FAILED, {}, physical_id)
+                # Always return SUCCESS to avoid rollback, but include error details
+                error_response_data = {
+                    'ClusterSchedulerConfigArn': '',
+                    'ClusterSchedulerConfigId': physical_id or f"failed-{config_name}",
+                    'OperationStatus': 'FAILED',
+                    'ErrorMessage': str(create_error),
+                    'ErrorType': type(create_error).__name__
+                }
+                cfnresponse.send(event, context, cfnresponse.SUCCESS, error_response_data, physical_id or f"failed-{config_name}")
 
         elif request_type == 'Update':
             if physical_id:
@@ -70,10 +89,26 @@ def handler(event, context):
                     cfnresponse.send(event, context, cfnresponse.SUCCESS, response_data, physical_id)
                 except Exception as update_error:
                     logger.error(f"Update error: {str(update_error)}")
-                    cfnresponse.send(event, context, cfnresponse.FAILED, {}, physical_id)
+                    # Always return SUCCESS to avoid rollback, but include error details
+                    error_response_data = {
+                        'ClusterSchedulerConfigArn': '',
+                        'ClusterSchedulerConfigId': physical_id,
+                        'OperationStatus': 'FAILED',
+                        'ErrorMessage': str(update_error),
+                        'ErrorType': type(update_error).__name__
+                    }
+                    cfnresponse.send(event, context, cfnresponse.SUCCESS, error_response_data, physical_id)
             else:
                 logger.error("No physical resource ID provided for update")
-                cfnresponse.send(event, context, cfnresponse.FAILED, {}, physical_id)
+                # Always return SUCCESS to avoid rollback, but include error details
+                error_response_data = {
+                    'ClusterSchedulerConfigArn': '',
+                    'ClusterSchedulerConfigId': physical_id or 'unknown',
+                    'OperationStatus': 'FAILED',
+                    'ErrorMessage': 'No physical resource ID provided for update',
+                    'ErrorType': 'ValidationError'
+                }
+                cfnresponse.send(event, context, cfnresponse.SUCCESS, error_response_data, physical_id or 'unknown')
 
         elif request_type == 'Delete':
             if physical_id:
@@ -96,4 +131,12 @@ def handler(event, context):
     except Exception as e:
         logger.error(f"Error: {str(e)}")
         logger.error(traceback.format_exc())
-        cfnresponse.send(event, context, cfnresponse.FAILED, {}, physical_id)
+        # Always return SUCCESS to avoid rollback, but include error details
+        error_response_data = {
+            'ClusterSchedulerConfigArn': '',
+            'ClusterSchedulerConfigId': physical_id or 'unknown',
+            'OperationStatus': 'FAILED',
+            'ErrorMessage': f'Unexpected error in cluster scheduler config handler: {str(e)}',
+            'ErrorType': type(e).__name__
+        }
+        cfnresponse.send(event, context, cfnresponse.SUCCESS, error_response_data, physical_id or 'unknown')
