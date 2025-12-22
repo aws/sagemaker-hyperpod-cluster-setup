@@ -70,4 +70,5 @@ Outputs:
         - TaskGovernancePolicyLambda
         - Arn
     Export:
-      Name: TaskGovernanceAddonLambdaArn
+      Name:
+        Fn::Sub: TaskGovernanceAddonLambdaArn-${AWS::StackName}
