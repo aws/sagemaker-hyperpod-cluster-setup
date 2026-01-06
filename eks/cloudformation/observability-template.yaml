@@ -1,5 +1,6 @@
 Description: Sagemaker Hyperpod Observability Stack
-Transform: AWS::LanguageExtensions
+Transform:
+  - AWS::LanguageExtensions
 Parameters:
   ResourceNamePrefix:
     Type: String
@@ -25,6 +26,14 @@ Parameters:
     Type: String
     Default: resources/artifacts/grafana-service-token-lambda-function.zip
     Description: The S3 key for the lambda function zip file.
+  AddonUpdateFunctionS3Key:
+    Type: String
+    Default: resources/artifacts/observability-eksaddon-update-lambda-function.zip
+    Description: The S3 key for the addon update lambda function zip file.
+  ObservabilityAssetsS3Key:
+    Type: String
+    Default: resources/artifacts/observability-assets.zip
+    Description: The S3 key for observability assets zip file.
   CreateHyperPodObservabilityRole:
     Type: String
     Default: 'false'
@@ -164,13 +173,9 @@ Mappings:
       isAllowed: 'true'
     ap-northeast-1:
       isAllowed: 'true'
-    ap-northeast-2:
-      isAllowed: 'true'
     ap-southeast-1:
       isAllowed: 'true'
     ap-southeast-2:
-      isAllowed: 'true'
-    ca-central-1:
       isAllowed: 'true'
     eu-central-1:
       isAllowed: 'true'
@@ -197,33 +202,28 @@ Conditions:
       - Ref: CreatePrometheusWorkspace
       - 'true'
   GrafanaNewWorkspaceCondition:
-    Fn::Equals:
-      - Ref: CreateGrafanaWorkspace
-      - 'true'
+    Fn::And:
+      - Fn::Equals:
+          - Fn::FindInMap:
+              - AMGRegionMapping
+              - Ref: AWS::Region
+              - isAllowed
+              - DefaultValue: 'false'
+          - 'true'
+      - Fn::Not:
+          - Fn::Equals:
+              - Ref: CreateGrafanaWorkspace
+              - disabled
+      - Fn::Equals:
+          - Ref: CreateGrafanaWorkspace
+          - 'true'
   EnableLoggingCondition:
     Fn::Equals:
       - Ref: Logging
       - 'true'
-  EksAddOnWithAmgWithLoggingCondition:
-    Fn::And:
+  DisableLoggingCondition:
+    Fn::Not:
       - Condition: EnableLoggingCondition
-      - Condition: IsAmgAllowed
-  EksAddOnWithoutAmgWithLoggingCondition:
-    Fn::And:
-      - Condition: EnableLoggingCondition
-      - Fn::Not:
-          - Condition: IsAmgAllowed
-  EksAddOnWithAmgWithoutLoggingCondition:
-    Fn::And:
-      - Fn::Not:
-          - Condition: EnableLoggingCondition
-      - Condition: IsAmgAllowed
-  EksAddOnWithoutAmgWithoutLoggingCondition:
-    Fn::And:
-      - Fn::Not:
-          - Condition: EnableLoggingCondition
-      - Fn::Not:
-          - Condition: IsAmgAllowed
   CreateHyperPodObservabilityRoleCondition:
     Fn::Equals:
       - Ref: CreateHyperPodObservabilityRole
@@ -456,6 +456,120 @@ Resources:
     Metadata:
       aws:cdk:path: ObservabilityCfnTemplate/GrafanaWorkspaceRole
     Condition: CreateGrafanaRoleCondition
+  EksAddOnWithoutAmgWithLogging:
+    Type: AWS::EKS::Addon
+    Properties:
+      AddonName: amazon-sagemaker-hyperpod-observability
+      ClusterName:
+        Ref: EKSClusterName
+      ConfigurationValues:
+        Fn::Join:
+          - ''
+          - - '{"ampWorkspace":{"prometheusEndpoint":"https://aps-workspaces.'
+            - Fn::Sub: ${AWS::Region}
+            - .amazonaws.com/workspaces/
+            - Fn::If:
+                - PrometheusNewWorkspaceCondition
+                - Fn::GetAtt:
+                    - PrometheusWorkspace
+                    - WorkspaceId
+                - Ref: PrometheusWorkspaceId
+            - '","arn":"'
+            - Fn::If:
+                - PrometheusNewWorkspaceCondition
+                - Fn::GetAtt:
+                    - PrometheusWorkspace
+                    - Arn
+                - Ref: PrometheusWorkspaceArn
+            - '"},"metricsProvider":{"trainingMetrics":{"level":"'
+            - Ref: TrainingMetricLevel
+            - >-
+              ","scrapeInterval":30},"inferenceMetrics":{"level":"BASIC","scrapeInterval":30},"taskGovernanceMetrics":{"level":"
+            - Ref: TaskGovernanceMetricLevel
+            - '","scrapeInterval":30},"scalingMetrics":{"level":"'
+            - Ref: ScalingMetricLevel
+            - '","scrapeInterval":30},"customMetrics":{"level":"'
+            - Ref: ClusterMetricLevel
+            - '","scrapeInterval":30},"nodeMetrics":{"level":"'
+            - Ref: NodeMetricLevel
+            - '","scrapeInterval":30},"acceleratedComputeMetrics":{"level":"'
+            - Ref: AcceleratedComputeMetricLevel
+            - '","scrapeInterval":30},"networkMetrics":{"level":"'
+            - Ref: NetworkMetricLevel
+            - '","scrapeInterval":30}},"logging":{"enabled":true}}'
+      PodIdentityAssociations:
+        - RoleArn:
+            Fn::If:
+              - CreateHyperPodObservabilityRoleCondition
+              - Fn::GetAtt:
+                  - HyperPodObservabilityAddonRole
+                  - Arn
+              - Ref: HyperPodObservabilityRole
+          ServiceAccount: hyperpod-observability-operator-otel-collector
+      ResolveConflicts: OVERWRITE
+      Tags:
+        - Key: SageMaker
+          Value: 'true'
+    Metadata:
+      aws:cdk:path: ObservabilityCfnTemplate/EksAddOnWithoutAmgWithLogging
+    Condition: EnableLoggingCondition
+  EksAddOnWithoutAmgWithoutLogging:
+    Type: AWS::EKS::Addon
+    Properties:
+      AddonName: amazon-sagemaker-hyperpod-observability
+      ClusterName:
+        Ref: EKSClusterName
+      ConfigurationValues:
+        Fn::Join:
+          - ''
+          - - '{"ampWorkspace":{"prometheusEndpoint":"https://aps-workspaces.'
+            - Fn::Sub: ${AWS::Region}
+            - .amazonaws.com/workspaces/
+            - Fn::If:
+                - PrometheusNewWorkspaceCondition
+                - Fn::GetAtt:
+                    - PrometheusWorkspace
+                    - WorkspaceId
+                - Ref: PrometheusWorkspaceId
+            - '","arn":"'
+            - Fn::If:
+                - PrometheusNewWorkspaceCondition
+                - Fn::GetAtt:
+                    - PrometheusWorkspace
+                    - Arn
+                - Ref: PrometheusWorkspaceArn
+            - '"},"metricsProvider":{"trainingMetrics":{"level":"'
+            - Ref: TrainingMetricLevel
+            - >-
+              ","scrapeInterval":30},"inferenceMetrics":{"level":"BASIC","scrapeInterval":30},"taskGovernanceMetrics":{"level":"
+            - Ref: TaskGovernanceMetricLevel
+            - '","scrapeInterval":30},"scalingMetrics":{"level":"'
+            - Ref: ScalingMetricLevel
+            - '","scrapeInterval":30},"customMetrics":{"level":"'
+            - Ref: ClusterMetricLevel
+            - '","scrapeInterval":30},"nodeMetrics":{"level":"'
+            - Ref: NodeMetricLevel
+            - '","scrapeInterval":30},"acceleratedComputeMetrics":{"level":"'
+            - Ref: AcceleratedComputeMetricLevel
+            - '","scrapeInterval":30},"networkMetrics":{"level":"'
+            - Ref: NetworkMetricLevel
+            - '","scrapeInterval":30}},"logging":{"enabled":false}}'
+      PodIdentityAssociations:
+        - RoleArn:
+            Fn::If:
+              - CreateHyperPodObservabilityRoleCondition
+              - Fn::GetAtt:
+                  - HyperPodObservabilityAddonRole
+                  - Arn
+              - Ref: HyperPodObservabilityRole
+          ServiceAccount: hyperpod-observability-operator-otel-collector
+      ResolveConflicts: OVERWRITE
+      Tags:
+        - Key: SageMaker
+          Value: 'true'
+    Metadata:
+      aws:cdk:path: ObservabilityCfnTemplate/EksAddOnWithoutAmgWithoutLogging
+    Condition: DisableLoggingCondition
   GrafanaWorkspaceCustomResourceRole:
     Type: AWS::IAM::Role
     Properties:
@@ -569,7 +683,7 @@ Resources:
       Timeout: 900
     Metadata:
       aws:cdk:path: ObservabilityCfnTemplate/GrafanaWorkspaceCustomResourceFunction
-    Condition: IsAmgAllowed
+    Condition: GrafanaNewWorkspaceCondition
   GrafanaWorkspaceCustomResource:
     Type: AWS::CloudFormation::CustomResource
     Properties:
@@ -579,263 +693,96 @@ Resources:
           - Arn
     Metadata:
       aws:cdk:path: ObservabilityCfnTemplate/GrafanaWorkspaceCustomResource
+    Condition: GrafanaNewWorkspaceCondition
+  AddOnUpdateLambdaRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Statement:
+          - Action: sts:AssumeRole
+            Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+        Version: 2012-10-17
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+        - arn:aws:iam::aws:policy/AmazonSageMakerHyperPodObservabilityAdminAccess
+      Policies:
+        - PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action:
+                  - eks:UpdateAddon
+                  - eks:DescribeAddon
+                Resource:
+                  - Fn::Sub: arn:${AWS::Partition}:eks:${AWS::Region}:${AWS::AccountId}:addon/${EKSClusterName}/*/*
+                  - Fn::If:
+                      - EnableLoggingCondition
+                      - Fn::GetAtt:
+                          - EksAddOnWithoutAmgWithLogging
+                          - Arn
+                      - Fn::GetAtt:
+                          - EksAddOnWithoutAmgWithoutLogging
+                          - Arn
+          PolicyName: EKSAddOnUpdatePolicy
+      RoleName:
+        Fn::Sub: ${ResourceNamePrefix}-AddOnUpdate
+    Metadata:
+      aws:cdk:path: ObservabilityCfnTemplate/AddOnUpdateLambdaRole
     Condition: IsAmgAllowed
-  EksAddOnWithAmgWithLogging:
-    Type: AWS::EKS::Addon
+  AddOnUpdateLambdaFunction:
+    Type: AWS::Lambda::Function
     Properties:
-      AddonName: amazon-sagemaker-hyperpod-observability
-      ClusterName:
-        Ref: EKSClusterName
-      ConfigurationValues:
-        Fn::Join:
-          - ''
-          - - '{"ampWorkspace":{"prometheusEndpoint":"https://aps-workspaces.'
-            - Fn::Sub: ${AWS::Region}
-            - .amazonaws.com/workspaces/
-            - Fn::If:
-                - PrometheusNewWorkspaceCondition
-                - Fn::GetAtt:
-                    - PrometheusWorkspace
-                    - WorkspaceId
-                - Ref: PrometheusWorkspaceId
-            - '","arn":"'
-            - Fn::If:
-                - PrometheusNewWorkspaceCondition
-                - Fn::GetAtt:
-                    - PrometheusWorkspace
-                    - Arn
-                - Ref: PrometheusWorkspaceArn
-            - '"},"metricsProvider":{"trainingMetrics":{"level":"'
-            - Ref: TrainingMetricLevel
-            - >-
-              ","scrapeInterval":30},"inferenceMetrics":{"level":"BASIC","scrapeInterval":30},"taskGovernanceMetrics":{"level":"
-            - Ref: TaskGovernanceMetricLevel
-            - '","scrapeInterval":30},"scalingMetrics":{"level":"'
-            - Ref: ScalingMetricLevel
-            - '","scrapeInterval":30},"customMetrics":{"level":"'
-            - Ref: ClusterMetricLevel
-            - '","scrapeInterval":30},"nodeMetrics":{"level":"'
-            - Ref: NodeMetricLevel
-            - '","scrapeInterval":30},"acceleratedComputeMetrics":{"level":"'
-            - Ref: AcceleratedComputeMetricLevel
-            - '","scrapeInterval":30},"networkMetrics":{"level":"'
-            - Ref: NetworkMetricLevel
-            - '","scrapeInterval":30}},"amgWorkspace":{"workspaceName":"'
-            - Fn::If:
-                - GrafanaNewWorkspaceCondition
-                - Fn::GetAtt:
-                    - GrafanaWorkspaceCustomResource
-                    - Name
-                - Ref: GrafanaWorkspaceName
-            - '","arn":"'
-            - Fn::If:
-                - GrafanaNewWorkspaceCondition
-                - Fn::GetAtt:
-                    - GrafanaWorkspaceCustomResource
-                    - Arn
-                - Ref: GrafanaWorkspaceArn
-            - '"},"logging":{"enabled":true}}'
-      PodIdentityAssociations:
-        - RoleArn:
+      Code:
+        S3Bucket:
+          Ref: CustomResourceS3Bucket
+        S3Key:
+          Ref: AddonUpdateFunctionS3Key
+      Environment:
+        Variables:
+          CLUSTER_NAME:
+            Ref: EKSClusterName
+          GRAFANA_WORKSPACE_NAME:
             Fn::If:
-              - CreateHyperPodObservabilityRoleCondition
+              - GrafanaNewWorkspaceCondition
               - Fn::GetAtt:
-                  - HyperPodObservabilityAddonRole
+                  - GrafanaWorkspaceCustomResource
+                  - Name
+              - Ref: GrafanaWorkspaceName
+          GRAFANA_WORKSPACE_ARN:
+            Fn::If:
+              - GrafanaNewWorkspaceCondition
+              - Fn::GetAtt:
+                  - GrafanaWorkspaceCustomResource
                   - Arn
-              - Ref: HyperPodObservabilityRole
-          ServiceAccount: hyperpod-observability-operator-otel-collector
-      ResolveConflicts: OVERWRITE
+              - Ref: GrafanaWorkspaceArn
+      FunctionName:
+        Fn::Sub: ${ResourceNamePrefix}-AddOnUpdate
+      Handler: lambda_function.lambda_handler
+      MemorySize: 2048
+      Role:
+        Fn::GetAtt:
+          - AddOnUpdateLambdaRole
+          - Arn
+      Runtime: python3.12
       Tags:
         - Key: SageMaker
           Value: 'true'
+      Timeout: 900
     Metadata:
-      aws:cdk:path: ObservabilityCfnTemplate/EksAddOnWithAmgWithLogging
-    Condition: EksAddOnWithAmgWithLoggingCondition
-  EksAddOnWithAmgWithoutLogging:
-    Type: AWS::EKS::Addon
+      aws:cdk:path: ObservabilityCfnTemplate/AddOnUpdateLambdaFunction
+    Condition: IsAmgAllowed
+  AddOnUpdateCustomResource:
+    Type: AWS::CloudFormation::CustomResource
     Properties:
-      AddonName: amazon-sagemaker-hyperpod-observability
-      ClusterName:
-        Ref: EKSClusterName
-      ConfigurationValues:
-        Fn::Join:
-          - ''
-          - - '{"ampWorkspace":{"prometheusEndpoint":"https://aps-workspaces.'
-            - Fn::Sub: ${AWS::Region}
-            - .amazonaws.com/workspaces/
-            - Fn::If:
-                - PrometheusNewWorkspaceCondition
-                - Fn::GetAtt:
-                    - PrometheusWorkspace
-                    - WorkspaceId
-                - Ref: PrometheusWorkspaceId
-            - '","arn":"'
-            - Fn::If:
-                - PrometheusNewWorkspaceCondition
-                - Fn::GetAtt:
-                    - PrometheusWorkspace
-                    - Arn
-                - Ref: PrometheusWorkspaceArn
-            - '"},"metricsProvider":{"trainingMetrics":{"level":"'
-            - Ref: TrainingMetricLevel
-            - >-
-              ","scrapeInterval":30},"inferenceMetrics":{"level":"BASIC","scrapeInterval":30},"taskGovernanceMetrics":{"level":"
-            - Ref: TaskGovernanceMetricLevel
-            - '","scrapeInterval":30},"scalingMetrics":{"level":"'
-            - Ref: ScalingMetricLevel
-            - '","scrapeInterval":30},"customMetrics":{"level":"'
-            - Ref: ClusterMetricLevel
-            - '","scrapeInterval":30},"nodeMetrics":{"level":"'
-            - Ref: NodeMetricLevel
-            - '","scrapeInterval":30},"acceleratedComputeMetrics":{"level":"'
-            - Ref: AcceleratedComputeMetricLevel
-            - '","scrapeInterval":30},"networkMetrics":{"level":"'
-            - Ref: NetworkMetricLevel
-            - '","scrapeInterval":30}},"amgWorkspace":{"workspaceName":"'
-            - Fn::If:
-                - GrafanaNewWorkspaceCondition
-                - Fn::GetAtt:
-                    - GrafanaWorkspaceCustomResource
-                    - Name
-                - Ref: GrafanaWorkspaceName
-            - '","arn":"'
-            - Fn::If:
-                - GrafanaNewWorkspaceCondition
-                - Fn::GetAtt:
-                    - GrafanaWorkspaceCustomResource
-                    - Arn
-                - Ref: GrafanaWorkspaceArn
-            - '"},"logging":{"enabled":false}}'
-      PodIdentityAssociations:
-        - RoleArn:
-            Fn::If:
-              - CreateHyperPodObservabilityRoleCondition
-              - Fn::GetAtt:
-                  - HyperPodObservabilityAddonRole
-                  - Arn
-              - Ref: HyperPodObservabilityRole
-          ServiceAccount: hyperpod-observability-operator-otel-collector
-      ResolveConflicts: OVERWRITE
-      Tags:
-        - Key: SageMaker
-          Value: 'true'
+      ServiceToken:
+        Fn::GetAtt:
+          - AddOnUpdateLambdaFunction
+          - Arn
     Metadata:
-      aws:cdk:path: ObservabilityCfnTemplate/EksAddOnWithAmgWithoutLogging
-    Condition: EksAddOnWithAmgWithoutLoggingCondition
-  EksAddOnWithoutAmgWithLogging:
-    Type: AWS::EKS::Addon
-    Properties:
-      AddonName: amazon-sagemaker-hyperpod-observability
-      ClusterName:
-        Ref: EKSClusterName
-      ConfigurationValues:
-        Fn::Join:
-          - ''
-          - - '{"ampWorkspace":{"prometheusEndpoint":"https://aps-workspaces.'
-            - Fn::Sub: ${AWS::Region}
-            - .amazonaws.com/workspaces/
-            - Fn::If:
-                - PrometheusNewWorkspaceCondition
-                - Fn::GetAtt:
-                    - PrometheusWorkspace
-                    - WorkspaceId
-                - Ref: PrometheusWorkspaceId
-            - '","arn":"'
-            - Fn::If:
-                - PrometheusNewWorkspaceCondition
-                - Fn::GetAtt:
-                    - PrometheusWorkspace
-                    - Arn
-                - Ref: PrometheusWorkspaceArn
-            - '"},"metricsProvider":{"trainingMetrics":{"level":"'
-            - Ref: TrainingMetricLevel
-            - >-
-              ","scrapeInterval":30},"inferenceMetrics":{"level":"BASIC","scrapeInterval":30},"taskGovernanceMetrics":{"level":"
-            - Ref: TaskGovernanceMetricLevel
-            - '","scrapeInterval":30},"scalingMetrics":{"level":"'
-            - Ref: ScalingMetricLevel
-            - '","scrapeInterval":30},"customMetrics":{"level":"'
-            - Ref: ClusterMetricLevel
-            - '","scrapeInterval":30},"nodeMetrics":{"level":"'
-            - Ref: NodeMetricLevel
-            - '","scrapeInterval":30},"acceleratedComputeMetrics":{"level":"'
-            - Ref: AcceleratedComputeMetricLevel
-            - '","scrapeInterval":30},"networkMetrics":{"level":"'
-            - Ref: NetworkMetricLevel
-            - '","scrapeInterval":30}},"logging":{"enabled":true}}'
-      PodIdentityAssociations:
-        - RoleArn:
-            Fn::If:
-              - CreateHyperPodObservabilityRoleCondition
-              - Fn::GetAtt:
-                  - HyperPodObservabilityAddonRole
-                  - Arn
-              - Ref: HyperPodObservabilityRole
-          ServiceAccount: hyperpod-observability-operator-otel-collector
-      ResolveConflicts: OVERWRITE
-      Tags:
-        - Key: SageMaker
-          Value: 'true'
-    Metadata:
-      aws:cdk:path: ObservabilityCfnTemplate/EksAddOnWithoutAmgWithLogging
-    Condition: EksAddOnWithoutAmgWithLoggingCondition
-  EksAddOnWithoutAmgWithoutLogging:
-    Type: AWS::EKS::Addon
-    Properties:
-      AddonName: amazon-sagemaker-hyperpod-observability
-      ClusterName:
-        Ref: EKSClusterName
-      ConfigurationValues:
-        Fn::Join:
-          - ''
-          - - '{"ampWorkspace":{"prometheusEndpoint":"https://aps-workspaces.'
-            - Fn::Sub: ${AWS::Region}
-            - .amazonaws.com/workspaces/
-            - Fn::If:
-                - PrometheusNewWorkspaceCondition
-                - Fn::GetAtt:
-                    - PrometheusWorkspace
-                    - WorkspaceId
-                - Ref: PrometheusWorkspaceId
-            - '","arn":"'
-            - Fn::If:
-                - PrometheusNewWorkspaceCondition
-                - Fn::GetAtt:
-                    - PrometheusWorkspace
-                    - Arn
-                - Ref: PrometheusWorkspaceArn
-            - '"},"metricsProvider":{"trainingMetrics":{"level":"'
-            - Ref: TrainingMetricLevel
-            - >-
-              ","scrapeInterval":30},"inferenceMetrics":{"level":"BASIC","scrapeInterval":30},"taskGovernanceMetrics":{"level":"
-            - Ref: TaskGovernanceMetricLevel
-            - '","scrapeInterval":30},"scalingMetrics":{"level":"'
-            - Ref: ScalingMetricLevel
-            - '","scrapeInterval":30},"customMetrics":{"level":"'
-            - Ref: ClusterMetricLevel
-            - '","scrapeInterval":30},"nodeMetrics":{"level":"'
-            - Ref: NodeMetricLevel
-            - '","scrapeInterval":30},"acceleratedComputeMetrics":{"level":"'
-            - Ref: AcceleratedComputeMetricLevel
-            - '","scrapeInterval":30},"networkMetrics":{"level":"'
-            - Ref: NetworkMetricLevel
-            - '","scrapeInterval":30}},"logging":{"enabled":false}}'
-      PodIdentityAssociations:
-        - RoleArn:
-            Fn::If:
-              - CreateHyperPodObservabilityRoleCondition
-              - Fn::GetAtt:
-                  - HyperPodObservabilityAddonRole
-                  - Arn
-              - Ref: HyperPodObservabilityRole
-          ServiceAccount: hyperpod-observability-operator-otel-collector
-      ResolveConflicts: OVERWRITE
-      Tags:
-        - Key: SageMaker
-          Value: 'true'
-    Metadata:
-      aws:cdk:path: ObservabilityCfnTemplate/EksAddOnWithoutAmgWithoutLogging
-    Condition: EksAddOnWithoutAmgWithoutLoggingCondition
+      aws:cdk:path: ObservabilityCfnTemplate/AddOnUpdateCustomResource
+    Condition: IsAmgAllowed
   GrafanaServiceAccountLambdaRole:
     Type: AWS::IAM::Role
     Properties:
@@ -898,8 +845,6 @@ Resources:
         Fn::GetAtt:
           - GrafanaServiceAccountLambdaFunction
           - Arn
-    DependsOn:
-      - GrafanaWorkspaceCustomResource
     Metadata:
       aws:cdk:path: ObservabilityCfnTemplate/GrafanaServiceAccountCustomResource
     Condition: IsAmgAllowed
@@ -940,6 +885,37 @@ Resources:
                   - ec2:DescribeSubnets
                   - ec2:DescribeSecurityGroups
                 Resource: '*'
+              - Effect: Allow
+                Action:
+                  - grafana:DeleteWorkspaceServiceAccount
+                Resource:
+                  Fn::Sub:
+                    - arn:${AWS::Partition}:grafana:${AWS::Region}:${AWS::AccountId}:/workspaces/${GrafanaWorkspaceId}
+                    - GrafanaWorkspaceId:
+                        Fn::If:
+                          - GrafanaNewWorkspaceCondition
+                          - Fn::GetAtt:
+                              - GrafanaWorkspaceCustomResource
+                              - WorkspaceId
+                          - Ref: GrafanaWorkspaceId
+              - Effect: Allow
+                Action:
+                  - s3:ListBucket
+                Resource:
+                  Fn::Sub:
+                    - arn:aws:s3:::${CustomResourceS3Bucket}
+                    - CustomResourceS3Bucket:
+                        Ref: CustomResourceS3Bucket
+              - Effect: Allow
+                Action:
+                  - s3:GetObject
+                Resource:
+                  Fn::Sub:
+                    - arn:aws:s3:::${CustomResourceS3Bucket}/${ObservabilityAssetsS3Key}
+                    - CustomResourceS3Bucket:
+                        Ref: CustomResourceS3Bucket
+                      ObservabilityAssetsS3Key:
+                        Ref: ObservabilityAssetsS3Key
           PolicyName:
             Fn::Sub: ${ResourceNamePrefix}-AMGCR
       RoleName:
@@ -975,8 +951,16 @@ Resources:
             Fn::GetAtt:
               - GrafanaServiceAccountCustomResource
               - ServiceAccountTokenKey
+          SERVICE_ACCOUNT_ID:
+            Fn::GetAtt:
+              - GrafanaServiceAccountCustomResource
+              - ServiceAccountId
           REGION:
             Fn::Sub: ${AWS::Region}
+          S3_BUCKET:
+            Ref: CustomResourceS3Bucket
+          DASHBOARD_PREFIX_S3_KEY:
+            Ref: ObservabilityAssetsS3Key
       FunctionName:
         Fn::Sub: ${ResourceNamePrefix}-grafunc
       Handler: lambda_function.lambda_handler
@@ -1121,23 +1105,13 @@ Outputs:
     Description: Observability AddOn ARN
     Value:
       Fn::If:
-        - IsAmgAllowed
-        - Fn::If:
-            - EnableLoggingCondition
-            - Fn::GetAtt:
-                - EksAddOnWithAmgWithLogging
-                - Arn
-            - Fn::GetAtt:
-                - EksAddOnWithAmgWithoutLogging
-                - Arn
-        - Fn::If:
-            - EnableLoggingCondition
-            - Fn::GetAtt:
-                - EksAddOnWithoutAmgWithLogging
-                - Arn
-            - Fn::GetAtt:
-                - EksAddOnWithoutAmgWithoutLogging
-                - Arn
+        - EnableLoggingCondition
+        - Fn::GetAtt:
+            - EksAddOnWithoutAmgWithLogging
+            - Arn
+        - Fn::GetAtt:
+            - EksAddOnWithoutAmgWithoutLogging
+            - Arn
     Export:
       Name:
         Fn::Sub: ${AWS::StackName}-AddOnArn
