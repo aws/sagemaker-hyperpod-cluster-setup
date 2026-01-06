@@ -20,21 +20,12 @@ fi
 # Create build directories
 echo "Preparing build directory..."
 rm -rf "${BUILD_DIR}"
-mkdir -p "${BUILD_DIR}/dashboards/templates"
-mkdir -p "${BUILD_DIR}/rules/templates"  # Add rules directory
+mkdir -p "${BUILD_DIR}"
 
 # Copy Lambda function files
 echo "Copying Lambda function files..."
 cp "${LAMBDA_DIR}/lambda_function.py" "${BUILD_DIR}/"
 cp "${LAMBDA_DIR}/requirements.txt" "${BUILD_DIR}/"
-
-# Copy dashboard templates
-echo "Copying dashboard templates..."
-cp -r "${LAMBDA_DIR}/dashboards/templates"/*.json "${BUILD_DIR}/dashboards/templates/" 2>/dev/null || true
-
-# Copy rules template
-echo "Copying rules template..."
-cp -r "${LAMBDA_DIR}/rules/templates"/*.yaml "${BUILD_DIR}/rules/templates/" 2>/dev/null || true
 
 # Install dependencies
 echo "Installing dependencies..."
@@ -55,9 +46,5 @@ mv ../grafana-lambda-function.zip "${ARTIFACTS_DIR}/"
 echo "Cleaning up..."
 cd ..
 rm -rf "${BUILD_DIR}"
-
-# List contents of zip file to verify
-echo "Contents of zip file:"
-unzip -l "${ARTIFACTS_DIR}/grafana-lambda-function.zip" | grep -E "dashboards/|rules/"
 
 echo "Build complete. Artifact created at: ${ARTIFACTS_DIR}/grafana-lambda-function.zip"

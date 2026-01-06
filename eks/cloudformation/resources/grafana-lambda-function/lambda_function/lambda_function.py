@@ -5,21 +5,17 @@ import urllib3
 import logging
 import cfnresponse
 import yaml
+import zipfile
+import tempfile
+from botocore.exceptions import ClientError
 
 GRAFANA_WORKSPACE_ID = 'GRAFANA_WORKSPACE_ID'
 PROMETHEUS_WORKSPACE_ID = 'PROMETHEUS_WORKSPACE_ID'
 GRAFANA_WORKSPACE_TOKEN_KEY = 'GRAFANA_WORKSPACE_TOKEN_KEY'
 REGION = 'REGION'
-DASHBOARD_TEMPLATES_DIR = 'dashboards/templates'
-RULES_TEMPLATE_PATH = 'rules/templates/alert-rules.yaml'
+S3_BUCKET = 'S3_BUCKET'
+DASHBOARD_PREFIX_S3_KEY = 'DASHBOARD_PREFIX_S3_KEY'
 
-DASHBOARD_UIDS = {
-    'cluster': 'aws-sm-hp-observability-cluster-v1_0',
-    'efa': 'aws-sm-hp-observability-efa-v1_0',
-    'training': 'aws-sm-hp-observability-training-v1_0',
-    'inference': 'aws-sm-hp-observability-inference-v1_0',
-    'tasks': 'aws-sm-hp-observability-task-v1_0'
-}
 
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
@@ -30,7 +26,9 @@ def validate_env_vars():
         GRAFANA_WORKSPACE_ID,
         PROMETHEUS_WORKSPACE_ID,
         GRAFANA_WORKSPACE_TOKEN_KEY,
-        REGION
+        REGION,
+        S3_BUCKET,
+        DASHBOARD_PREFIX_S3_KEY
     ]
     
     for var in required_env_vars:
@@ -43,9 +41,37 @@ def get_workspace_endpoint():
     region = os.environ[REGION]
     return f"{workspace_id}.grafana-workspace.{region}.amazonaws.com"
 
+def download_and_extract_assets():
+    """Download and extract observability assets zip from S3"""
+    try:
+        s3 = boto3.client('s3')
+        bucket = os.environ[S3_BUCKET]
+        key = os.environ[DASHBOARD_PREFIX_S3_KEY]
+        
+        # Create temporary directory
+        temp_dir = tempfile.mkdtemp()
+        zip_path = os.path.join(temp_dir, 'assets.zip')
+        
+        # Download zip file
+        logger.info(f"Downloading assets from s3://{bucket}/{key}")
+        s3.download_file(bucket, key, zip_path)
+        
+        # Extract zip file
+        extract_dir = os.path.join(temp_dir, 'extracted')
+        with zipfile.ZipFile(zip_path, 'r') as zip_ref:
+            zip_ref.extractall(extract_dir)
+        
+        return extract_dir
+    except Exception as e:
+        logger.error(f"Error downloading/extracting assets: {str(e)}")
+        raise
+
 def convert_rules_to_json():
     try:
-        with open(RULES_TEMPLATE_PATH, 'r', encoding='utf-8') as f:
+        extract_dir = download_and_extract_assets()
+        rules_path = os.path.join(extract_dir, 'alerts', 'alert-rules.yaml')
+        
+        with open(rules_path, 'r', encoding='utf-8') as f:
             data = yaml.safe_load(f)
 
         rules = []
@@ -222,27 +248,29 @@ def create_prometheus_datasource():
 
 def create_dashboard(template_name):
     try:
-        template_path = f"{DASHBOARD_TEMPLATES_DIR}/{template_name}.json"
-        logger.info(f"Loading dashboard template from: {template_path}")
+        extract_dir = download_and_extract_assets()
+        dashboard_path = os.path.join(extract_dir, 'dashboards', 'templates', f'{template_name}.json')
+        logger.info(f"Loading dashboard template from: {dashboard_path}")
 
-        with open(template_path, 'r', encoding='utf-8') as f:
-            dashboard_content = json.load(f)
+        with open(dashboard_path, 'r', encoding='utf-8') as f:
+            dashboard_data = json.load(f)
 
-        dashboard_uid = DASHBOARD_UIDS.get(template_name)
-        if not dashboard_uid:
-            raise ValueError(f"No UID defined for dashboard: {template_name}")
+        # Extract dashboard content from wrapper if it exists
+        if 'dashboard' in dashboard_data:
+            dashboard_content = dashboard_data['dashboard']
+        else:
+            dashboard_content = dashboard_data
 
         payload = {
             "dashboard": {
-                **dashboard_content,
-                "version": 1,
-                "uid": dashboard_uid,
-                "id": None
+                **dashboard_content
             },
             "overwrite": True
         }
-
+        
+        logger.info(f"Making POST request to dashboards/db")
         response = make_grafana_request('dashboards/db', 'POST', payload)
+        logger.info(f"Response status: {response.status}")
 
         if response.status in [200, 201]:
             response_data = json.loads(response.data.decode('utf-8'))
@@ -257,10 +285,16 @@ def create_dashboard(template_name):
                 'status': 'existing'
             }
         else:
-            raise Exception(f"Failed to create dashboard. Status: {response.status}")
+            error_msg = response.data.decode('utf-8')
+            logger.error(f"Dashboard creation failed. Status: {response.status}, Error: {error_msg}")
+            raise Exception(f"Failed to create dashboard. Status: {response.status}, Error: {error_msg}")
 
     except Exception as e:
-        return handle_resource_creation('Dashboard', lambda: raise_or_return(e))
+        logger.error(f"Error creating dashboard {template_name}: {str(e)}")
+        return {
+            'message': f'Failed to create dashboard {template_name}',
+            'error': str(e)
+        }
 
 def create_folder():
     try:
@@ -346,6 +380,38 @@ def create_alert_rules():
         logger.error(f"Error in create_alert_rules: {str(e)}")
         return [{'message': f'Alert rules processing failed: {str(e)}'}]
 
+def cleanup_service_account():
+    """Cleanup Grafana service account (tokens are deleted automatically)"""
+    try:
+        workspace_id = os.environ.get('GRAFANA_WORKSPACE_ID')
+        service_account_id = os.environ.get('SERVICE_ACCOUNT_ID')
+        
+        if not all([workspace_id, service_account_id]):
+            missing = []
+            if not workspace_id:
+                missing.append('GRAFANA_WORKSPACE_ID')
+            if not service_account_id:
+                missing.append('SERVICE_ACCOUNT_ID')
+            raise ValueError(f"Missing required environment variables: {', '.join(missing)}")
+        
+        grafana = boto3.client('grafana')
+        
+        # Delete service account (this will automatically delete associated tokens)
+        try:
+            grafana.delete_workspace_service_account(
+                workspaceId=workspace_id,
+                serviceAccountId=service_account_id
+            )
+            logger.info(f"Successfully deleted service account {service_account_id}")
+        except ClientError as e:
+            if e.response['Error']['Code'] == 'ResourceNotFoundException':
+                logger.info(f"Service account {service_account_id} not found, may already be deleted")
+            else:
+                logger.error(f"Failed to delete service account: {str(e)}")
+
+    except Exception as e:
+        logger.error(f"Error during service account cleanup: {str(e)}")
+
 def lambda_handler(event, context):
     """Main Lambda handler"""
     logger.info(f"Received event: {json.dumps(event)}")
@@ -411,7 +477,8 @@ def on_create():
         response_data["resources"]["folder"] = folder_result
 
         # Create dashboards
-        for template in DASHBOARD_UIDS.keys():
+        dashboard_templates = ['cluster', 'efa', 'training', 'inference', 'tasks']
+        for template in dashboard_templates:
             try:
                 result = create_dashboard(template)
                 
@@ -441,6 +508,9 @@ def on_create():
             "Status": "FAILED",
             "Reason": str(e)
         }
+    finally:
+        # Cleanup service account
+        cleanup_service_account()
 
 def on_update():
     """Handle Update request"""
@@ -459,3 +529,4 @@ def raise_or_return(error):
     if isinstance(error, ValueError):
         raise error
     return error
+    
