@@ -26,7 +26,7 @@ Resources:
     Properties:
       AssumeRolePolicyDocument:
         Fn::Sub: >-
-          {"Version":"2012-10-17","Statement":[{"Effect":"Allow","Principal":{"Service":["sagemaker.amazonaws.com"]},"Action":["sts:AssumeRole"]},{"Effect":"Allow","Principal":{"Federated":"arn:aws:iam::${AWS::AccountId}:oidc-provider/${OIDCProviderURLWithoutProtocol}"},"Action":["sts:AssumeRoleWithWebIdentity"],"Condition":{"StringLike":{"${OIDCProviderURLWithoutProtocol}:aud":"sts.amazonaws.com","${OIDCProviderURLWithoutProtocol}:sub":"system:serviceaccount:*:*"}}}]}
+          {"Version":"2012-10-17","Statement":[{"Effect":"Allow","Principal":{"Service":["sagemaker.amazonaws.com"]},"Action":["sts:AssumeRole"]},{"Effect":"Allow","Principal":{"Federated":"arn:aws:iam::${AWS::AccountId}:oidc-provider/${OIDCProviderURLWithoutProtocol}"},"Action":["sts:AssumeRoleWithWebIdentity"],"Condition":{"StringLike":{"${OIDCProviderURLWithoutProtocol}:aud":"sts.amazonaws.com","${OIDCProviderURLWithoutProtocol}:sub":"system:serviceaccount:hyperpod-inference-system:hyperpod-inference-controller-manager"}}}]}
       Path: /
       Policies:
         - PolicyDocument:
