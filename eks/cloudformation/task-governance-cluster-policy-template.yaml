@@ -35,7 +35,8 @@ Resources:
     Type: Custom::ClusterSchedulerConfig
     Properties:
       ServiceToken:
-        Fn::ImportValue: TaskGovernanceAddonLambdaArn
+        Fn::ImportValue:
+          Fn::Sub: TaskGovernanceAddonLambdaArn-${EKSClusterName}
       ClusterArn:
         Fn::Sub:
           - arn:aws:sagemaker:${AWS::Region}:${AWS::AccountId}:cluster/${ClusterName}

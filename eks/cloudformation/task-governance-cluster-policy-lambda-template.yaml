@@ -6,6 +6,9 @@ Parameters:
       - gamma
       - prod
     Description: Deployment stage (gamma, prod)
+  EKSClusterName:
+    Type: String
+    Description: Name of the EKS cluster
   CustomResourceS3Bucket:
     Type: String
     Default: aws-sagemaker-hyperpod-cluster-setup-us-east-2-prod
@@ -71,4 +74,4 @@ Outputs:
         - Arn
     Export:
       Name:
-        Fn::Sub: TaskGovernanceAddonLambdaArn-${AWS::StackName}
+        Fn::Sub: TaskGovernanceAddonLambdaArn-${EKSClusterName}

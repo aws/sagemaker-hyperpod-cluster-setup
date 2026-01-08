@@ -1837,6 +1837,13 @@ Resources:
       Parameters:
         Stage:
           Ref: Stage
+        EKSClusterName:
+          Fn::If:
+            - CreateEKSClusterStackCondition
+            - Fn::GetAtt:
+                - EKSClusterStack
+                - Outputs.EKSClusterName
+            - Ref: EKSClusterName
         CustomResourceS3Bucket:
           Fn::If:
             - CustomBucketCondition
