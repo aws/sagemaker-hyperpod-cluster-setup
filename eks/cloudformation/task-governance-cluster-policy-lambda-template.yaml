@@ -46,6 +46,8 @@ Resources:
               - Effect: Allow
                 Action:
                   - eks:DescribeCluster
+                  - eks:AssociateAccessPolicy
+                  - eks:AssociateIdentityProviderConfig
                 Resource: '*'
     Metadata:
       aws:cdk:path: TaskGovernanceClusterPolicyLambdaCfnTemplate/TaskGovernancePolicyLambdaRole
