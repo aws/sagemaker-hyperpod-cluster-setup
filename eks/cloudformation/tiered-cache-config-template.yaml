@@ -47,6 +47,13 @@ Parameters:
       - gamma
       - prod
     Description: Deployment stage (gamma, prod)
+  IsInfOperatorAddOnEnabled:
+    Type: String
+    Default: 'false'
+    AllowedValues:
+      - 'true'
+      - 'false'
+    Description: Flag to enable inference operator addon integration. When true, update_cluster will be called on Create.
 Conditions:
   IsGammaStage:
     Fn::Equals:
@@ -98,6 +105,7 @@ Resources:
                 Action:
                   - sagemaker:DescribeCluster
                   - sagemaker:ListClusterNodes
+                  - sagemaker:UpdateCluster
                 Resource:
                   Fn::Sub: arn:aws:sagemaker:${AWS::Region}:${AWS::AccountId}:cluster/*
               - Effect: Allow
@@ -163,6 +171,8 @@ Resources:
               - IsGammaStage
               - 'true'
               - 'false'
+          IS_INF_OPERATOR_ADDON_ENABLED:
+            Ref: IsInfOperatorAddOnEnabled
       FunctionName:
         Fn::Sub: ${ResourceNamePrefix}-TieredCacheConfig
       Handler: lambda_function.lambda_handler

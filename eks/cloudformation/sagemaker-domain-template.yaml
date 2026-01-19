@@ -1,0 +1,192 @@
+Description: SageMaker Domain and User Profile Stack for HyperPod Inference Operator
+Parameters:
+  ResourceNamePrefix:
+    Type: String
+    Default: sagemaker-hyperpod-eks
+    Description: Prefix to be used for all resources created by this template.
+  DomainUserProfileRoleArn:
+    Type: String
+    Default: ''
+    Description: IAM role ARN for SageMaker Domain user profile execution (optional, will be created if not provided).
+  EKSClusterName:
+    Type: String
+    Description: Name of the EKS cluster for data scientist access.
+  DomainName:
+    Type: String
+    Default: ''
+    Description: Name for the SageMaker Domain (optional, auto-generated if not provided).
+  UserProfileName:
+    Type: String
+    Default: ''
+    Description: Name for the SageMaker User Profile (optional, auto-generated if not provided).
+  DomainVpcId:
+    Type: String
+    Description: VPC ID for the SageMaker Domain.
+  DomainSubnetIds:
+    Type: CommaDelimitedList
+    Description: Comma-separated list of subnet IDs for the SageMaker Domain.
+Conditions:
+  HasDomainNameCondition:
+    Fn::Not:
+      - Fn::Equals:
+          - Ref: DomainName
+          - ''
+  HasUserProfileNameCondition:
+    Fn::Not:
+      - Fn::Equals:
+          - Ref: UserProfileName
+          - ''
+  ShouldCreateExecutionRole:
+    Fn::Equals:
+      - Ref: DomainUserProfileRoleArn
+      - ''
+Resources:
+  SageMakerExecutionPolicy:
+    Type: AWS::IAM::ManagedPolicy
+    Properties:
+      ManagedPolicyName:
+        Fn::Sub: ${ResourceNamePrefix}-sagemaker-execution-policy
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Action:
+              - s3:ListBucket
+            Resource:
+              - arn:aws:s3:::SageMaker
+          - Effect: Allow
+            Action:
+              - s3:GetObject
+              - s3:PutObject
+              - s3:DeleteObject
+            Resource:
+              - arn:aws:s3:::SageMaker/*
+    Metadata:
+      aws:cdk:path: SageMakerDomainCfnTemplate/SageMakerExecutionPolicy
+    Condition: ShouldCreateExecutionRole
+  SageMakerExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: sagemaker.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AmazonSageMakerFullAccess
+        - arn:aws:iam::aws:policy/AmazonSageMakerCanvasFullAccess
+        - arn:aws:iam::aws:policy/AmazonSageMakerCanvasAIServicesAccess
+        - arn:aws:iam::aws:policy/AmazonSageMakerCanvasDataPrepFullAccess
+        - arn:aws:iam::aws:policy/AmazonSageMakerCanvasSMDataScienceAssistantAccess
+        - Ref: SageMakerExecutionPolicy
+      Path: /
+      RoleName:
+        Fn::Sub: ${ResourceNamePrefix}-sagemaker-execution-role
+    Metadata:
+      aws:cdk:path: SageMakerDomainCfnTemplate/SageMakerExecutionRole
+    Condition: ShouldCreateExecutionRole
+  SageMakerDomain:
+    Type: AWS::SageMaker::Domain
+    Properties:
+      AppNetworkAccessType: PublicInternetOnly
+      AuthMode: IAM
+      DefaultUserSettings:
+        ExecutionRole:
+          Fn::If:
+            - ShouldCreateExecutionRole
+            - Fn::GetAtt:
+                - SageMakerExecutionRole
+                - Arn
+            - Ref: DomainUserProfileRoleArn
+      DomainName:
+        Fn::If:
+          - HasDomainNameCondition
+          - Ref: DomainName
+          - Fn::Sub: ${ResourceNamePrefix}-sagemaker-domain
+      SubnetIds:
+        Ref: DomainSubnetIds
+      Tags:
+        - Key: Name
+          Value:
+            Fn::Sub: ${ResourceNamePrefix}-sagemaker-domain
+      VpcId:
+        Ref: DomainVpcId
+    Metadata:
+      aws:cdk:path: SageMakerDomainCfnTemplate/SageMakerDomain
+  SageMakerUserProfile:
+    Type: AWS::SageMaker::UserProfile
+    Properties:
+      DomainId:
+        Fn::GetAtt:
+          - SageMakerDomain
+          - DomainId
+      Tags:
+        - Key: Name
+          Value:
+            Fn::Sub: ${ResourceNamePrefix}-user-profile
+      UserProfileName:
+        Fn::If:
+          - HasUserProfileNameCondition
+          - Ref: UserProfileName
+          - Fn::Sub: ${ResourceNamePrefix}-user-profile
+      UserSettings:
+        ExecutionRole:
+          Fn::If:
+            - ShouldCreateExecutionRole
+            - Fn::GetAtt:
+                - SageMakerExecutionRole
+                - Arn
+            - Ref: DomainUserProfileRoleArn
+    Metadata:
+      aws:cdk:path: SageMakerDomainCfnTemplate/SageMakerUserProfile
+Outputs:
+  DomainArn:
+    Description: SageMaker Domain ARN
+    Value:
+      Fn::GetAtt:
+        - SageMakerDomain
+        - DomainArn
+    Export:
+      Name:
+        Fn::Sub: ${AWS::StackName}-DomainArn
+  UserProfileArn:
+    Description: SageMaker User Profile ARN
+    Value:
+      Fn::GetAtt:
+        - SageMakerUserProfile
+        - UserProfileArn
+    Export:
+      Name:
+        Fn::Sub: ${AWS::StackName}-UserProfileArn
+  ExecutionRoleArn:
+    Description: SageMaker Execution Role ARN (created or provided)
+    Value:
+      Fn::If:
+        - ShouldCreateExecutionRole
+        - Fn::GetAtt:
+            - SageMakerExecutionRole
+            - Arn
+        - Ref: DomainUserProfileRoleArn
+    Export:
+      Name:
+        Fn::Sub: ${AWS::StackName}-ExecutionRoleArn
+  ExecutionRoleName:
+    Description: SageMaker Execution Role Name
+    Value:
+      Fn::If:
+        - ShouldCreateExecutionRole
+        - Ref: SageMakerExecutionRole
+        - Fn::Select:
+            - 1
+            - Fn::Split:
+                - /
+                - Fn::Select:
+                    - 5
+                    - Fn::Split:
+                        - ':'
+                        - Ref: DomainUserProfileRoleArn
+    Export:
+      Name:
+        Fn::Sub: ${AWS::StackName}-ExecutionRoleName

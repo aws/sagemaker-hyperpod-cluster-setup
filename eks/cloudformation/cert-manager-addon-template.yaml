@@ -1,0 +1,212 @@
+Description: Cert-Manager EKS Add-on for HyperPod Inference Operator
+Parameters:
+  ResourceNamePrefix:
+    Type: String
+    Default: sagemaker-hyperpod-eks
+    Description: Prefix to be used for all resources created by this template.
+  EKSClusterName:
+    Type: String
+    Description: The name of the EKS cluster where the add-on will be installed.
+  AddonName:
+    Type: String
+    Default: cert-manager
+    Description: The name of the EKS add-on to install
+  AddonVersion:
+    Type: String
+    Default: v1.18.2-eksbuild.2
+    Description: Version of the cert-manager EKS add-on to install
+  AddonConfiguration:
+    Type: String
+    Default: >-
+      {"replicaCount":1,"tolerations":[{"operator":"Exists","effect":"NoSchedule"},{"operator":"Exists","effect":"NoExecute"},{"operator":"Exists","effect":"PreferNoSchedule"}],"webhook":{"replicaCount":1,"tolerations":[{"operator":"Exists","effect":"NoSchedule"},{"operator":"Exists","effect":"NoExecute"},{"operator":"Exists","effect":"PreferNoSchedule"}]},"cainjector":{"replicaCount":1,"tolerations":[{"operator":"Exists","effect":"NoSchedule"},{"operator":"Exists","effect":"NoExecute"},{"operator":"Exists","effect":"PreferNoSchedule"}]}}
+    Description: JSON configuration for the cert-manager add-on (optional)
+  ServiceAccountRoleArn:
+    Type: String
+    Default: ''
+    Description: IAM role ARN for service account (optional, for addons that require it)
+  CustomResourceS3Bucket:
+    Type: String
+    Default: aws-sagemaker-hyperpod-cluster-setup-us-east-2-prod
+    Description: The name of the S3 bucket containing the custom resource.
+  LayerS3Key:
+    Type: String
+    Default: resources/artifacts/common-eks-addon-lambda-layer.zip
+    Description: The S3 key for the lambda layer zip file.
+  FunctionS3Key:
+    Type: String
+    Default: resources/artifacts/common-eks-addon-lambda-function.zip
+    Description: The S3 key for the lambda function zip file.
+Conditions:
+  HasServiceAccountRole:
+    Fn::Not:
+      - Fn::Equals:
+          - Ref: ServiceAccountRoleArn
+          - ''
+  NoServiceAccountRole:
+    Fn::Equals:
+      - Ref: ServiceAccountRoleArn
+      - ''
+Resources:
+  AddonCustomResourceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Statement:
+          - Action: sts:AssumeRole
+            Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+        Version: 2012-10-17
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        - PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action:
+                  - eks:DescribeCluster
+                  - eks:DescribeAddon
+                  - eks:CreateAddon
+                  - eks:DeleteAddon
+                  - eks:UpdateAddon
+                  - eks:TagResource
+                  - eks:ListTagsForResource
+                Resource:
+                  - Fn::Sub: arn:aws:eks:${AWS::Region}:${AWS::AccountId}:cluster/${EKSClusterName}
+                  - Fn::Sub: arn:aws:eks:${AWS::Region}:${AWS::AccountId}:addon/${EKSClusterName}/${AddonName}/*
+          PolicyName:
+            Fn::Sub: ${ResourceNamePrefix}-${AddonName}-Addon-Access
+    Metadata:
+      aws:cdk:path: CertManagerAddonCfnTemplate/AddonCustomResourceRole
+    Condition: NoServiceAccountRole
+  AddonCustomResourceRoleWithPassRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Statement:
+          - Action: sts:AssumeRole
+            Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+        Version: 2012-10-17
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        - PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action:
+                  - eks:DescribeCluster
+                  - eks:DescribeAddon
+                  - eks:CreateAddon
+                  - eks:DeleteAddon
+                  - eks:UpdateAddon
+                  - eks:TagResource
+                  - eks:ListTagsForResource
+                Resource:
+                  - Fn::Sub: arn:aws:eks:${AWS::Region}:${AWS::AccountId}:cluster/${EKSClusterName}
+                  - Fn::Sub: arn:aws:eks:${AWS::Region}:${AWS::AccountId}:addon/${EKSClusterName}/${AddonName}/*
+              - Effect: Allow
+                Action:
+                  - iam:PassRole
+                Resource:
+                  Ref: ServiceAccountRoleArn
+                Condition:
+                  StringEquals:
+                    iam:PassedToService: eks.amazonaws.com
+          PolicyName:
+            Fn::Sub: ${ResourceNamePrefix}-${AddonName}-Addon-Access
+    Metadata:
+      aws:cdk:path: CertManagerAddonCfnTemplate/AddonCustomResourceRoleWithPassRole
+    Condition: HasServiceAccountRole
+  AddonCustomResourceLayer:
+    Type: AWS::Lambda::LayerVersion
+    Properties:
+      CompatibleArchitectures:
+        - x86_64
+      CompatibleRuntimes:
+        - python3.9
+        - python3.10
+        - python3.11
+        - python3.12
+      Content:
+        S3Bucket:
+          Ref: CustomResourceS3Bucket
+        S3Key:
+          Ref: LayerS3Key
+      Description: Lambda Layer for cert-manager installation (boto3 dependencies)
+      LayerName:
+        Fn::Sub: ${ResourceNamePrefix}-${AddonName}-layer
+    Metadata:
+      aws:cdk:path: CertManagerAddonCfnTemplate/AddonCustomResourceLayer
+  AddonCustomResourceFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      Code:
+        S3Bucket:
+          Ref: CustomResourceS3Bucket
+        S3Key:
+          Ref: FunctionS3Key
+      Environment:
+        Variables:
+          EKS_CLUSTER_NAME:
+            Ref: EKSClusterName
+          ADDON_NAME:
+            Ref: AddonName
+          ADDON_VERSION:
+            Ref: AddonVersion
+          ADDON_CONFIGURATION:
+            Ref: AddonConfiguration
+          SERVICE_ACCOUNT_ROLE_ARN:
+            Ref: ServiceAccountRoleArn
+      FunctionName:
+        Fn::Sub: ${ResourceNamePrefix}-${AddonName}-func
+      Handler: lambda_function.lambda_handler
+      Layers:
+        - Ref: AddonCustomResourceLayer
+      MemorySize: 1024
+      Role:
+        Fn::If:
+          - HasServiceAccountRole
+          - Fn::GetAtt:
+              - AddonCustomResourceRoleWithPassRole
+              - Arn
+          - Fn::GetAtt:
+              - AddonCustomResourceRole
+              - Arn
+      Runtime: python3.12
+      Timeout: 900
+    Metadata:
+      aws:cdk:path: CertManagerAddonCfnTemplate/AddonCustomResourceFunction
+  AddonCustomResource:
+    Type: AWS::CloudFormation::CustomResource
+    Properties:
+      ServiceToken:
+        Fn::GetAtt:
+          - AddonCustomResourceFunction
+          - Arn
+    DependsOn:
+      - AddonCustomResourceFunction
+    Metadata:
+      aws:cdk:path: CertManagerAddonCfnTemplate/AddonCustomResource
+Outputs:
+  AddonStatus:
+    Description: Status of cert-manager add-on installation
+    Value:
+      Fn::GetAtt:
+        - AddonCustomResource
+        - AddonStatus
+    Export:
+      Name:
+        Fn::Sub: ${AWS::StackName}-AddonStatus
+  AddonArn:
+    Description: ARN of the EKS Add-on
+    Value:
+      Fn::GetAtt:
+        - AddonCustomResource
+        - AddonArn
+    Export:
+      Name:
+        Fn::Sub: ${AWS::StackName}-AddonArn

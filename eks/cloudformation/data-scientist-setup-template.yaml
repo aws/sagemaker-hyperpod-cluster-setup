@@ -130,6 +130,18 @@ Parameters:
     Description: >-
       Comma-separated list of Kubernetes namespaces for DataScientistRole10. Model deployment permissions will be scoped
       to these namespaces. (optional)
+  DomainUserProfileRole:
+    Type: String
+    Default: ''
+    Description: >-
+      IAM role name for SageMaker Domain user profile. If provided, will receive same EKS access as data scientist
+      roles. (optional)
+  DomainUserProfileRoleNamespaces:
+    Type: String
+    Default: ''
+    Description: >-
+      Comma-separated list of Kubernetes namespaces for DomainUserProfileRole. Model deployment permissions will be
+      scoped to these namespaces. (optional)
   CustomResourceS3Bucket:
     Type: String
     Default: aws-sagemaker-hyperpod-cluster-setup-us-east-2-prod
@@ -192,6 +204,11 @@ Conditions:
     Fn::Not:
       - Fn::Equals:
           - Ref: DataScientistRole10
+          - ''
+  DomainRoleProvidedCondition:
+    Fn::Not:
+      - Fn::Equals:
+          - Ref: DomainUserProfileRole
           - ''
 Resources:
   DataScientistSetupCustomResourceRole:
@@ -277,6 +294,11 @@ Resources:
                       - Role10ProvidedCondition
                       - Fn::Sub: >-
                           arn:aws:eks:${AWS::Region}:${AWS::AccountId}:access-entry/${EKSClusterName}/role/${AWS::AccountId}/${DataScientistRole10}/*
+                      - Ref: AWS::NoValue
+                  - Fn::If:
+                      - DomainRoleProvidedCondition
+                      - Fn::Sub: >-
+                          arn:aws:eks:${AWS::Region}:${AWS::AccountId}:access-entry/${EKSClusterName}/role/${AWS::AccountId}/${DomainUserProfileRole}/*
                       - Ref: AWS::NoValue
           PolicyName:
             Fn::Sub: ${ResourceNamePrefix}-DataScientistSetup-EKSAccessEntryAccess
@@ -369,6 +391,14 @@ Resources:
                   - Fn::If:
                       - Role10ProvidedCondition
                       - Fn::Sub: arn:aws:iam::${AWS::AccountId}:role/*/${DataScientistRole10}
+                      - Ref: AWS::NoValue
+                  - Fn::If:
+                      - DomainRoleProvidedCondition
+                      - Fn::Sub: arn:aws:iam::${AWS::AccountId}:role/${DomainUserProfileRole}
+                      - Ref: AWS::NoValue
+                  - Fn::If:
+                      - DomainRoleProvidedCondition
+                      - Fn::Sub: arn:aws:iam::${AWS::AccountId}:role/*/${DomainUserProfileRole}
                       - Ref: AWS::NoValue
           PolicyName:
             Fn::Sub: ${ResourceNamePrefix}-DataScientistSetup-IAMAccess
@@ -469,6 +499,10 @@ Resources:
             Ref: DataScientistRole10
           DATA_SCIENTIST_ROLE_10_NAMESPACES:
             Ref: DataScientistRole10Namespaces
+          DOMAIN_USER_PROFILE_ROLE:
+            Ref: DomainUserProfileRole
+          DOMAIN_USER_PROFILE_ROLE_NAMESPACES:
+            Ref: DomainUserProfileRoleNamespaces
           PATH: /opt/python/bin:/var/lang/bin:/usr/local/bin:/usr/bin/:/bin
           KUBECONFIG: /tmp/.kube/config
           LD_LIBRARY_PATH: /opt/python/lib

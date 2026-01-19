@@ -2443,6 +2443,7 @@ Resources:
           Ref: AWS::Region
         Stage:
           Ref: Stage
+        IsInfOperatorAddOnEnabled: 'false'
     DependsOn:
       - EKSClusterStack
       - HyperPodClusterStack

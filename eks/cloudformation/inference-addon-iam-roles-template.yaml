@@ -1,0 +1,514 @@
+Description: IAM Roles for Inference Operator Addon
+Parameters:
+  ResourceNamePrefix:
+    Type: String
+    Default: sagemaker-hyperpod-eks
+    Description: Prefix to be used for all resources created by this template.
+  OIDCProviderURLWithoutProtocol:
+    Type: String
+    Description: The URL of the OIDC Provider without https:// prefix.
+  CreateS3CsiDriverRole:
+    Type: String
+    Default: 'true'
+    AllowedValues:
+      - 'true'
+      - 'false'
+    Description: Whether to create IAM role for S3 CSI Driver
+  CreateFsxCsiDriverRole:
+    Type: String
+    Default: 'true'
+    AllowedValues:
+      - 'true'
+      - 'false'
+    Description: Whether to create IAM role for FSx CSI Driver
+  CreateKedaRole:
+    Type: String
+    Default: 'true'
+    AllowedValues:
+      - 'true'
+      - 'false'
+    Description: Whether to create IAM role for KEDA
+  CreateAlbControllerRole:
+    Type: String
+    Default: 'true'
+    AllowedValues:
+      - 'true'
+      - 'false'
+    Description: Whether to create IAM role for ALB Controller
+  BootstrapVersion:
+    Type: AWS::SSM::Parameter::Value<String>
+    Default: /cdk-bootstrap/hnb659fds/version
+    Description: >-
+      Version of the CDK Bootstrap resources in this environment, automatically retrieved from SSM Parameter Store.
+      [cdk:skip]
+Conditions:
+  ShouldCreateS3Role:
+    Fn::Equals:
+      - Ref: CreateS3CsiDriverRole
+      - 'true'
+  ShouldCreateFsxRole:
+    Fn::Equals:
+      - Ref: CreateFsxCsiDriverRole
+      - 'true'
+  ShouldCreateKedaRole:
+    Fn::Equals:
+      - Ref: CreateKedaRole
+      - 'true'
+  ShouldCreateAlbControllerRole:
+    Fn::Equals:
+      - Ref: CreateAlbControllerRole
+      - 'true'
+  CDKMetadataAvailable:
+    Fn::Or:
+      - Fn::Or:
+          - Fn::Equals:
+              - Ref: AWS::Region
+              - af-south-1
+          - Fn::Equals:
+              - Ref: AWS::Region
+              - ap-east-1
+          - Fn::Equals:
+              - Ref: AWS::Region
+              - ap-northeast-1
+          - Fn::Equals:
+              - Ref: AWS::Region
+              - ap-northeast-2
+          - Fn::Equals:
+              - Ref: AWS::Region
+              - ap-northeast-3
+          - Fn::Equals:
+              - Ref: AWS::Region
+              - ap-south-1
+          - Fn::Equals:
+              - Ref: AWS::Region
+              - ap-south-2
+          - Fn::Equals:
+              - Ref: AWS::Region
+              - ap-southeast-1
+          - Fn::Equals:
+              - Ref: AWS::Region
+              - ap-southeast-2
+          - Fn::Equals:
+              - Ref: AWS::Region
+              - ap-southeast-3
+      - Fn::Or:
+          - Fn::Equals:
+              - Ref: AWS::Region
+              - ap-southeast-4
+          - Fn::Equals:
+              - Ref: AWS::Region
+              - ca-central-1
+          - Fn::Equals:
+              - Ref: AWS::Region
+              - ca-west-1
+          - Fn::Equals:
+              - Ref: AWS::Region
+              - cn-north-1
+          - Fn::Equals:
+              - Ref: AWS::Region
+              - cn-northwest-1
+          - Fn::Equals:
+              - Ref: AWS::Region
+              - eu-central-1
+          - Fn::Equals:
+              - Ref: AWS::Region
+              - eu-central-2
+          - Fn::Equals:
+              - Ref: AWS::Region
+              - eu-north-1
+          - Fn::Equals:
+              - Ref: AWS::Region
+              - eu-south-1
+          - Fn::Equals:
+              - Ref: AWS::Region
+              - eu-south-2
+      - Fn::Or:
+          - Fn::Equals:
+              - Ref: AWS::Region
+              - eu-west-1
+          - Fn::Equals:
+              - Ref: AWS::Region
+              - eu-west-2
+          - Fn::Equals:
+              - Ref: AWS::Region
+              - eu-west-3
+          - Fn::Equals:
+              - Ref: AWS::Region
+              - il-central-1
+          - Fn::Equals:
+              - Ref: AWS::Region
+              - me-central-1
+          - Fn::Equals:
+              - Ref: AWS::Region
+              - me-south-1
+          - Fn::Equals:
+              - Ref: AWS::Region
+              - sa-east-1
+          - Fn::Equals:
+              - Ref: AWS::Region
+              - us-east-1
+          - Fn::Equals:
+              - Ref: AWS::Region
+              - us-east-2
+          - Fn::Equals:
+              - Ref: AWS::Region
+              - us-west-1
+      - Fn::Equals:
+          - Ref: AWS::Region
+          - us-west-2
+Resources:
+  S3MountpointPolicy:
+    Type: AWS::IAM::ManagedPolicy
+    Properties:
+      ManagedPolicyName:
+        Fn::Sub: ${ResourceNamePrefix}-s3-csi-driver-policy
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Sid: MountpointFullBucketAccess
+            Effect: Allow
+            Action:
+              - s3:ListBucket
+            Resource:
+              - arn:aws:s3:::*
+          - Sid: MountpointObjectReadAccess
+            Effect: Allow
+            Action:
+              - s3:GetObject
+              - s3:PutObject
+              - s3:AbortMultipartUpload
+              - s3:DeleteObject
+            Resource:
+              - arn:aws:s3:::*/*
+    Metadata:
+      aws:cdk:path: InferenceAddonIamRolesCfnTemplate/S3MountpointPolicy
+    Condition: ShouldCreateS3Role
+  S3CsiDriverRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Fn::Sub: >-
+          {"Version":"2012-10-17","Statement":[{"Effect":"Allow","Principal":{"Federated":"arn:aws:iam::${AWS::AccountId}:oidc-provider/${OIDCProviderURLWithoutProtocol}"},"Action":["sts:AssumeRoleWithWebIdentity"],"Condition":{"StringEquals":{"${OIDCProviderURLWithoutProtocol}:aud":"sts.amazonaws.com","${OIDCProviderURLWithoutProtocol}:sub":"system:serviceaccount:kube-system:s3-csi-driver-sa"}}}]}
+      ManagedPolicyArns:
+        - Ref: S3MountpointPolicy
+      Path: /
+      RoleName:
+        Fn::Sub: ${ResourceNamePrefix}-s3-csi-driver-role
+    Metadata:
+      aws:cdk:path: InferenceAddonIamRolesCfnTemplate/S3CsiDriverRole
+    Condition: ShouldCreateS3Role
+  FsxCsiDriverRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Fn::Sub: >-
+          {"Version":"2012-10-17","Statement":[{"Effect":"Allow","Principal":{"Federated":"arn:aws:iam::${AWS::AccountId}:oidc-provider/${OIDCProviderURLWithoutProtocol}"},"Action":["sts:AssumeRoleWithWebIdentity"],"Condition":{"StringEquals":{"${OIDCProviderURLWithoutProtocol}:aud":"sts.amazonaws.com","${OIDCProviderURLWithoutProtocol}:sub":"system:serviceaccount:kube-system:fsx-csi-controller-sa"}}}]}
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AmazonFSxFullAccess
+      Path: /
+      RoleName:
+        Fn::Sub: ${ResourceNamePrefix}-fsx-csi-driver-role
+    Metadata:
+      aws:cdk:path: InferenceAddonIamRolesCfnTemplate/FsxCsiDriverRole
+    Condition: ShouldCreateFsxRole
+  KedaPolicy:
+    Type: AWS::IAM::ManagedPolicy
+    Properties:
+      ManagedPolicyName:
+        Fn::Sub: ${ResourceNamePrefix}-keda-policy
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Action:
+              - cloudwatch:GetMetricData
+              - cloudwatch:GetMetricStatistics
+              - cloudwatch:ListMetrics
+            Resource: '*'
+          - Effect: Allow
+            Action:
+              - aps:QueryMetrics
+              - aps:GetLabels
+              - aps:GetSeries
+              - aps:GetMetricMetadata
+            Resource: '*'
+    Metadata:
+      aws:cdk:path: InferenceAddonIamRolesCfnTemplate/KedaPolicy
+    Condition: ShouldCreateKedaRole
+  KedaRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Fn::Sub: >-
+          {"Version":"2012-10-17","Statement":[{"Effect":"Allow","Principal":{"Federated":"arn:aws:iam::${AWS::AccountId}:oidc-provider/${OIDCProviderURLWithoutProtocol}"},"Action":["sts:AssumeRoleWithWebIdentity"],"Condition":{"StringEquals":{"${OIDCProviderURLWithoutProtocol}:aud":"sts.amazonaws.com","${OIDCProviderURLWithoutProtocol}:sub":"system:serviceaccount:hyperpod-inference-system:keda-operator"}}}]}
+      ManagedPolicyArns:
+        - Ref: KedaPolicy
+      Path: /
+      RoleName:
+        Fn::Sub: ${ResourceNamePrefix}-keda-role
+    Metadata:
+      aws:cdk:path: InferenceAddonIamRolesCfnTemplate/KedaRole
+    Condition: ShouldCreateKedaRole
+  AlbControllerPolicy:
+    Type: AWS::IAM::ManagedPolicy
+    Properties:
+      ManagedPolicyName:
+        Fn::Sub: ${ResourceNamePrefix}-alb-controller-policy
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Action:
+              - iam:CreateServiceLinkedRole
+            Resource: '*'
+            Condition:
+              StringEquals:
+                iam:AWSServiceName: elasticloadbalancing.amazonaws.com
+          - Effect: Allow
+            Action:
+              - ec2:DescribeAccountAttributes
+              - ec2:DescribeAddresses
+              - ec2:DescribeAvailabilityZones
+              - ec2:DescribeInternetGateways
+              - ec2:DescribeVpcs
+              - ec2:DescribeVpcPeeringConnections
+              - ec2:DescribeSubnets
+              - ec2:DescribeSecurityGroups
+              - ec2:DescribeInstances
+              - ec2:DescribeNetworkInterfaces
+              - ec2:DescribeTags
+              - ec2:GetCoipPoolUsage
+              - ec2:DescribeCoipPools
+              - ec2:GetSecurityGroupsForVpc
+              - ec2:DescribeIpamPools
+              - ec2:DescribeRouteTables
+              - elasticloadbalancing:DescribeLoadBalancers
+              - elasticloadbalancing:DescribeLoadBalancerAttributes
+              - elasticloadbalancing:DescribeListeners
+              - elasticloadbalancing:DescribeListenerCertificates
+              - elasticloadbalancing:DescribeSSLPolicies
+              - elasticloadbalancing:DescribeRules
+              - elasticloadbalancing:DescribeTargetGroups
+              - elasticloadbalancing:DescribeTargetGroupAttributes
+              - elasticloadbalancing:DescribeTargetHealth
+              - elasticloadbalancing:DescribeTags
+              - elasticloadbalancing:DescribeTrustStores
+              - elasticloadbalancing:DescribeListenerAttributes
+              - elasticloadbalancing:DescribeCapacityReservation
+            Resource: '*'
+          - Effect: Allow
+            Action:
+              - cognito-idp:DescribeUserPoolClient
+              - acm:ListCertificates
+              - acm:DescribeCertificate
+              - iam:ListServerCertificates
+              - iam:GetServerCertificate
+              - waf-regional:GetWebACL
+              - waf-regional:GetWebACLForResource
+              - waf-regional:AssociateWebACL
+              - waf-regional:DisassociateWebACL
+              - wafv2:GetWebACL
+              - wafv2:GetWebACLForResource
+              - wafv2:AssociateWebACL
+              - wafv2:DisassociateWebACL
+              - shield:GetSubscriptionState
+              - shield:DescribeProtection
+              - shield:CreateProtection
+              - shield:DeleteProtection
+            Resource: '*'
+          - Effect: Allow
+            Action:
+              - ec2:AuthorizeSecurityGroupIngress
+              - ec2:RevokeSecurityGroupIngress
+            Resource: '*'
+          - Effect: Allow
+            Action:
+              - ec2:CreateSecurityGroup
+            Resource: '*'
+          - Effect: Allow
+            Action:
+              - ec2:CreateTags
+            Resource: arn:aws:ec2:*:*:security-group/*
+            Condition:
+              StringEquals:
+                ec2:CreateAction: CreateSecurityGroup
+              'Null':
+                aws:RequestTag/elbv2.k8s.aws/cluster: 'false'
+          - Effect: Allow
+            Action:
+              - ec2:CreateTags
+              - ec2:DeleteTags
+            Resource: arn:aws:ec2:*:*:security-group/*
+            Condition:
+              'Null':
+                aws:RequestTag/elbv2.k8s.aws/cluster: 'true'
+                aws:ResourceTag/elbv2.k8s.aws/cluster: 'false'
+          - Effect: Allow
+            Action:
+              - ec2:AuthorizeSecurityGroupIngress
+              - ec2:RevokeSecurityGroupIngress
+              - ec2:DeleteSecurityGroup
+            Resource: '*'
+            Condition:
+              'Null':
+                aws:ResourceTag/elbv2.k8s.aws/cluster: 'false'
+          - Effect: Allow
+            Action:
+              - elasticloadbalancing:CreateLoadBalancer
+              - elasticloadbalancing:CreateTargetGroup
+            Resource: '*'
+            Condition:
+              'Null':
+                aws:RequestTag/elbv2.k8s.aws/cluster: 'false'
+          - Effect: Allow
+            Action:
+              - elasticloadbalancing:CreateListener
+              - elasticloadbalancing:DeleteListener
+              - elasticloadbalancing:CreateRule
+              - elasticloadbalancing:DeleteRule
+            Resource: '*'
+          - Effect: Allow
+            Action:
+              - elasticloadbalancing:AddTags
+              - elasticloadbalancing:RemoveTags
+            Resource:
+              - arn:aws:elasticloadbalancing:*:*:targetgroup/*/*
+              - arn:aws:elasticloadbalancing:*:*:loadbalancer/net/*/*
+              - arn:aws:elasticloadbalancing:*:*:loadbalancer/app/*/*
+            Condition:
+              'Null':
+                aws:RequestTag/elbv2.k8s.aws/cluster: 'true'
+                aws:ResourceTag/elbv2.k8s.aws/cluster: 'false'
+          - Effect: Allow
+            Action:
+              - elasticloadbalancing:AddTags
+              - elasticloadbalancing:RemoveTags
+            Resource:
+              - arn:aws:elasticloadbalancing:*:*:listener/net/*/*/*
+              - arn:aws:elasticloadbalancing:*:*:listener/app/*/*/*
+              - arn:aws:elasticloadbalancing:*:*:listener-rule/net/*/*/*
+              - arn:aws:elasticloadbalancing:*:*:listener-rule/app/*/*/*
+          - Effect: Allow
+            Action:
+              - elasticloadbalancing:ModifyLoadBalancerAttributes
+              - elasticloadbalancing:SetIpAddressType
+              - elasticloadbalancing:SetSecurityGroups
+              - elasticloadbalancing:SetSubnets
+              - elasticloadbalancing:DeleteLoadBalancer
+              - elasticloadbalancing:ModifyTargetGroup
+              - elasticloadbalancing:ModifyTargetGroupAttributes
+              - elasticloadbalancing:DeleteTargetGroup
+              - elasticloadbalancing:ModifyListenerAttributes
+              - elasticloadbalancing:ModifyCapacityReservation
+              - elasticloadbalancing:ModifyIpPools
+            Resource: '*'
+            Condition:
+              'Null':
+                aws:ResourceTag/elbv2.k8s.aws/cluster: 'false'
+          - Effect: Allow
+            Action:
+              - elasticloadbalancing:AddTags
+            Resource:
+              - arn:aws:elasticloadbalancing:*:*:targetgroup/*/*
+              - arn:aws:elasticloadbalancing:*:*:loadbalancer/net/*/*
+              - arn:aws:elasticloadbalancing:*:*:loadbalancer/app/*/*
+            Condition:
+              StringEquals:
+                elasticloadbalancing:CreateAction:
+                  - CreateTargetGroup
+                  - CreateLoadBalancer
+              'Null':
+                aws:RequestTag/elbv2.k8s.aws/cluster: 'false'
+          - Effect: Allow
+            Action:
+              - elasticloadbalancing:RegisterTargets
+              - elasticloadbalancing:DeregisterTargets
+            Resource: arn:aws:elasticloadbalancing:*:*:targetgroup/*/*
+          - Effect: Allow
+            Action:
+              - elasticloadbalancing:SetWebAcl
+              - elasticloadbalancing:ModifyListener
+              - elasticloadbalancing:AddListenerCertificates
+              - elasticloadbalancing:RemoveListenerCertificates
+              - elasticloadbalancing:ModifyRule
+              - elasticloadbalancing:SetRulePriorities
+            Resource: '*'
+    Metadata:
+      aws:cdk:path: InferenceAddonIamRolesCfnTemplate/AlbControllerPolicy
+    Condition: ShouldCreateAlbControllerRole
+  AlbControllerRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Fn::Sub: >-
+          {"Version":"2012-10-17","Statement":[{"Effect":"Allow","Principal":{"Federated":"arn:aws:iam::${AWS::AccountId}:oidc-provider/${OIDCProviderURLWithoutProtocol}"},"Action":["sts:AssumeRoleWithWebIdentity"],"Condition":{"StringEquals":{"${OIDCProviderURLWithoutProtocol}:aud":"sts.amazonaws.com","${OIDCProviderURLWithoutProtocol}:sub":"system:serviceaccount:hyperpod-inference-system:aws-load-balancer-controller"}}}]}
+      ManagedPolicyArns:
+        - Ref: AlbControllerPolicy
+      Path: /
+      RoleName:
+        Fn::Sub: ${ResourceNamePrefix}-alb-controller-role
+    Metadata:
+      aws:cdk:path: InferenceAddonIamRolesCfnTemplate/AlbControllerRole
+    Condition: ShouldCreateAlbControllerRole
+  CDKMetadata:
+    Type: AWS::CDK::Metadata
+    Properties:
+      Analytics: >-
+        v2:deflate64:H4sIAAAAAAAA/yWKywrCMBAAv6X3dG1zUDznLJb6AbImqWybbEoeFin9dwmeZgZGguwv0DW4pVabpXX0gv2RUS9CTTxgRG+zjTVUYEOZAgvc0pPQw64mviHj25ohONLfuo3B2aPKveS15ENwMBbmdPrIDvornJs5EbWxcCZvYfzzB95w9XOIAAAA
+    Metadata:
+      aws:cdk:path: InferenceAddonIamRolesCfnTemplate/CDKMetadata/Default
+    Condition: CDKMetadataAvailable
+Outputs:
+  S3CsiDriverRoleArn:
+    Description: ARN of the IAM role for S3 CSI Driver
+    Value:
+      Fn::GetAtt:
+        - S3CsiDriverRole
+        - Arn
+    Export:
+      Name:
+        Fn::Sub: ${AWS::StackName}-S3CsiDriverRoleArn
+    Condition: ShouldCreateS3Role
+  FsxCsiDriverRoleArn:
+    Description: ARN of the IAM role for FSx CSI Driver
+    Value:
+      Fn::GetAtt:
+        - FsxCsiDriverRole
+        - Arn
+    Export:
+      Name:
+        Fn::Sub: ${AWS::StackName}-FsxCsiDriverRoleArn
+    Condition: ShouldCreateFsxRole
+  KedaRoleArn:
+    Description: ARN of the IAM role for KEDA
+    Value:
+      Fn::GetAtt:
+        - KedaRole
+        - Arn
+    Export:
+      Name:
+        Fn::Sub: ${AWS::StackName}-KedaRoleArn
+    Condition: ShouldCreateKedaRole
+  AlbControllerRoleArn:
+    Description: ARN of the IAM role for ALB Controller
+    Value:
+      Fn::GetAtt:
+        - AlbControllerRole
+        - Arn
+    Export:
+      Name:
+        Fn::Sub: ${AWS::StackName}-AlbControllerRoleArn
+    Condition: ShouldCreateAlbControllerRole
+Rules:
+  CheckBootstrapVersion:
+    Assertions:
+      - Assert:
+          Fn::Not:
+            - Fn::Contains:
+                - - '1'
+                  - '2'
+                  - '3'
+                  - '4'
+                  - '5'
+                - Ref: BootstrapVersion
+        AssertDescription: CDK bootstrap stack version 6 required. Please run 'cdk bootstrap' with a recent version of the CDK CLI.

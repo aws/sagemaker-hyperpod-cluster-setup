@@ -16,6 +16,35 @@ Parameters:
     Type: String
     Default: sagemaker-hyperpod-eks
     Description: Prefix to be used for all resources created by this template.
+Conditions:
+  HasValidPrivateRouteTableIds:
+    Fn::And:
+      - Fn::Not:
+          - Fn::Equals:
+              - Fn::Join:
+                  - ','
+                  - Ref: PrivateRouteTableIds
+              - ''
+      - Fn::Not:
+          - Fn::Equals:
+              - Fn::Select:
+                  - 0
+                  - Ref: PrivateRouteTableIds
+              - ''
+  HasValidEksPrivateRouteTableIds:
+    Fn::And:
+      - Fn::Not:
+          - Fn::Equals:
+              - Fn::Join:
+                  - ','
+                  - Ref: EksPrivateRouteTableIds
+              - ''
+      - Fn::Not:
+          - Fn::Equals:
+              - Fn::Select:
+                  - 0
+                  - Ref: EksPrivateRouteTableIds
+              - ''
 Resources:
   S3Endpoint:
     Type: AWS::EC2::VPCEndpoint
@@ -23,14 +52,29 @@ Resources:
       RouteTableIds:
         Fn::Split:
           - ','
-          - Fn::Join:
-              - ','
-              - - Fn::Join:
-                    - ','
-                    - Ref: PrivateRouteTableIds
-                - Fn::Join:
-                    - ','
-                    - Ref: EksPrivateRouteTableIds
+          - Fn::If:
+              - HasValidPrivateRouteTableIds
+              - Fn::If:
+                  - HasValidEksPrivateRouteTableIds
+                  - Fn::Sub:
+                      - ${Private},${Eks}
+                      - Private:
+                          Fn::Join:
+                            - ','
+                            - Ref: PrivateRouteTableIds
+                        Eks:
+                          Fn::Join:
+                            - ','
+                            - Ref: EksPrivateRouteTableIds
+                  - Fn::Join:
+                      - ','
+                      - Ref: PrivateRouteTableIds
+              - Fn::If:
+                  - HasValidEksPrivateRouteTableIds
+                  - Fn::Join:
+                      - ','
+                      - Ref: EksPrivateRouteTableIds
+                  - ''
       ServiceName:
         Fn::Join:
           - ''
