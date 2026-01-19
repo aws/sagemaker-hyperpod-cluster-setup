@@ -7,6 +7,7 @@ cd ../inference-k8s-service-account-creator && ./generate-inf-sa-creation-lambda
 cd ../data-scientist-setup && ./generate-ds-setup-lambda-zip.sh
 cd ../tiered-cache-config && ./generate-tiered-cache-lambda-zip.sh
 cd ../cert-manager-installer && ./generate-cert-manager-lambda-zip.sh
+cd ../common-eks-addon-installer && ./generate-common-eks-addon-lambda-zip.sh
 cd ../hpto-addon-installer && ./generate-hpto-addon-lambda-zip.sh
 cd ../fsx-for-lustre && ./generate-fsx-lambda-zip.sh
 cd ../hyperpod-cluster-creator && ./generate-hp-lambda-zip.sh

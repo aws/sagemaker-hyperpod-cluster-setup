@@ -101,6 +101,18 @@ def parse_role_namespace_mappings():
             }
             mappings.append(mapping)
             print(f"Parsed mapping {len(mappings)}: {mapping}")
+    
+    # Check for domain user profile role (name-based, same as DS roles)
+    domain_role_name = os.environ.get('DOMAIN_USER_PROFILE_ROLE', '').strip()
+    domain_role_namespaces = os.environ.get('DOMAIN_USER_PROFILE_ROLE_NAMESPACES', '').strip()
+    
+    if domain_role_name:
+        mapping = {
+            'roleName': domain_role_name,
+            'namespaces': domain_role_namespaces if domain_role_namespaces else 'default'
+        }
+        mappings.append(mapping)
+        print(f"Parsed domain user profile mapping {len(mappings)}: {mapping}")
 
     print(f"Found {len(mappings)} valid role-namespace mappings")
     return mappings
@@ -157,10 +169,8 @@ def attach_hyperpod_policy(
                 "Sid": "AllowK8SMutateViaConsole",
                 "Effect": "Allow",
                 "Action": [
-                    "eks:DescribeCluster",
                     "eks:AccessKubernetesApi",
-                    "eks:MutateViaKubernetesApi",
-                    "eks:DescribeAddon"
+                    "eks:MutateViaKubernetesApi"
                 ],
                 "Resource": eks_cluster_arn
             },
