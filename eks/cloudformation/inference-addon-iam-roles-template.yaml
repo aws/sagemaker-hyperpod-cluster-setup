@@ -35,6 +35,13 @@ Parameters:
       - 'true'
       - 'false'
     Description: Whether to create IAM role for ALB Controller
+  CreateJumpstartGatedModelRole:
+    Type: String
+    Default: 'true'
+    AllowedValues:
+      - 'true'
+      - 'false'
+    Description: Whether to create IAM role for JumpStart gated model download
   BootstrapVersion:
     Type: AWS::SSM::Parameter::Value<String>
     Default: /cdk-bootstrap/hnb659fds/version
@@ -57,6 +64,10 @@ Conditions:
   ShouldCreateAlbControllerRole:
     Fn::Equals:
       - Ref: CreateAlbControllerRole
+      - 'true'
+  ShouldCreateJumpstartGatedModelRole:
+    Fn::Equals:
+      - Ref: CreateJumpstartGatedModelRole
       - 'true'
   CDKMetadataAvailable:
     Fn::Or:
@@ -450,6 +461,20 @@ Resources:
     Metadata:
       aws:cdk:path: InferenceAddonIamRolesCfnTemplate/AlbControllerRole
     Condition: ShouldCreateAlbControllerRole
+  JumpstartGatedModelRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Fn::Sub: >-
+          {"Version":"2012-10-17","Statement":[{"Effect":"Allow","Principal":{"Service":"sagemaker.amazonaws.com"},"Action":"sts:AssumeRole"},{"Effect":"Allow","Principal":{"Federated":"arn:aws:iam::${AWS::AccountId}:oidc-provider/${OIDCProviderURLWithoutProtocol}"},"Action":"sts:AssumeRoleWithWebIdentity","Condition":{"StringLike":{"${OIDCProviderURLWithoutProtocol}:aud":"sts.amazonaws.com","${OIDCProviderURLWithoutProtocol}:sub":"system:serviceaccount:*:hyperpod-inference-service-account*"}}}]}
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AmazonSageMakerHyperPodGatedModelAccess
+      Path: /
+      RoleName:
+        Fn::Sub: ${ResourceNamePrefix}-jumpstart-gated-model-role
+    Metadata:
+      aws:cdk:path: InferenceAddonIamRolesCfnTemplate/JumpstartGatedModelRole
+    Condition: ShouldCreateJumpstartGatedModelRole
   CDKMetadata:
     Type: AWS::CDK::Metadata
     Properties:
@@ -499,6 +524,16 @@ Outputs:
       Name:
         Fn::Sub: ${AWS::StackName}-AlbControllerRoleArn
     Condition: ShouldCreateAlbControllerRole
+  JumpstartGatedModelRoleArn:
+    Description: ARN of the IAM role for JumpStart gated model download
+    Value:
+      Fn::GetAtt:
+        - JumpstartGatedModelRole
+        - Arn
+    Export:
+      Name:
+        Fn::Sub: ${AWS::StackName}-JumpstartGatedModelRoleArn
+    Condition: ShouldCreateJumpstartGatedModelRole
 Rules:
   CheckBootstrapVersion:
     Assertions:
