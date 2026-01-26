@@ -11,6 +11,10 @@ Parameters:
     Type: String
     Default: aws-mountpoint-s3-csi-driver
     Description: The name of the EKS add-on to install
+  ShortenedAddonName:
+    Type: String
+    Default: s3-csi-driver
+    Description: Shortened name for the add-on to use in resource names (Lambda, IAM roles, etc.)
   AddonVersion:
     Type: String
     Default: v1.14.1-eksbuild.1
@@ -75,7 +79,7 @@ Resources:
                   - Fn::Sub: arn:aws:eks:${AWS::Region}:${AWS::AccountId}:cluster/${EKSClusterName}
                   - Fn::Sub: arn:aws:eks:${AWS::Region}:${AWS::AccountId}:addon/${EKSClusterName}/${AddonName}/*
           PolicyName:
-            Fn::Sub: ${ResourceNamePrefix}-${AddonName}-Addon-Access
+            Fn::Sub: ${ResourceNamePrefix}-${ShortenedAddonName}-Addon-Access
     Metadata:
       aws:cdk:path: S3CsiDriverAddonCfnTemplate/AddonCustomResourceRole
     Condition: NoServiceAccountRole
@@ -116,7 +120,7 @@ Resources:
                   StringEquals:
                     iam:PassedToService: eks.amazonaws.com
           PolicyName:
-            Fn::Sub: ${ResourceNamePrefix}-${AddonName}-Addon-Access
+            Fn::Sub: ${ResourceNamePrefix}-${ShortenedAddonName}-Addon-Access
     Metadata:
       aws:cdk:path: S3CsiDriverAddonCfnTemplate/AddonCustomResourceRoleWithPassRole
     Condition: HasServiceAccountRole
@@ -137,7 +141,7 @@ Resources:
           Ref: LayerS3Key
       Description: Lambda Layer for aws-mountpoint-s3-csi-driver installation (boto3 dependencies)
       LayerName:
-        Fn::Sub: ${ResourceNamePrefix}-${AddonName}-layer
+        Fn::Sub: ${ResourceNamePrefix}-${ShortenedAddonName}-layer
     Metadata:
       aws:cdk:path: S3CsiDriverAddonCfnTemplate/AddonCustomResourceLayer
   AddonCustomResourceFunction:
@@ -161,7 +165,7 @@ Resources:
           SERVICE_ACCOUNT_ROLE_ARN:
             Ref: ServiceAccountRoleArn
       FunctionName:
-        Fn::Sub: ${ResourceNamePrefix}-${AddonName}-func
+        Fn::Sub: ${ResourceNamePrefix}-${ShortenedAddonName}-func
       Handler: lambda_function.lambda_handler
       Layers:
         - Ref: AddonCustomResourceLayer

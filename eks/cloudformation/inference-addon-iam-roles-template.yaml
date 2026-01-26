@@ -42,6 +42,13 @@ Parameters:
       - 'true'
       - 'false'
     Description: Whether to create IAM role for JumpStart gated model download
+  CreateInferenceOperatorExecutionRole:
+    Type: String
+    Default: 'true'
+    AllowedValues:
+      - 'true'
+      - 'false'
+    Description: Whether to create IAM role for Inference Operator execution
   BootstrapVersion:
     Type: AWS::SSM::Parameter::Value<String>
     Default: /cdk-bootstrap/hnb659fds/version
@@ -68,6 +75,10 @@ Conditions:
   ShouldCreateJumpstartGatedModelRole:
     Fn::Equals:
       - Ref: CreateJumpstartGatedModelRole
+      - 'true'
+  ShouldCreateInferenceOperatorExecutionRole:
+    Fn::Equals:
+      - Ref: CreateInferenceOperatorExecutionRole
       - 'true'
   CDKMetadataAvailable:
     Fn::Or:
@@ -475,6 +486,295 @@ Resources:
     Metadata:
       aws:cdk:path: InferenceAddonIamRolesCfnTemplate/JumpstartGatedModelRole
     Condition: ShouldCreateJumpstartGatedModelRole
+  InferenceOperatorExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Fn::Sub: >-
+          {"Version":"2012-10-17","Statement":[{"Effect":"Allow","Principal":{"Service":"sagemaker.amazonaws.com"},"Action":"sts:AssumeRole"},{"Effect":"Allow","Principal":{"Federated":"arn:aws:iam::${AWS::AccountId}:oidc-provider/${OIDCProviderURLWithoutProtocol}"},"Action":"sts:AssumeRoleWithWebIdentity","Condition":{"StringLike":{"${OIDCProviderURLWithoutProtocol}:aud":"sts.amazonaws.com","${OIDCProviderURLWithoutProtocol}:sub":"system:serviceaccount:hyperpod-inference-system:hyperpod-inference-controller-manager"}}}]}
+      Path: /
+      Policies:
+        - PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Sid: S3BucketAccess
+                Effect: Allow
+                Action:
+                  - s3:PutObject
+                  - s3:DeleteObject
+                  - s3:ListBucket
+                  - s3:GetObject
+                Resource:
+                  - Fn::Sub: arn:aws:s3:::${ResourceNamePrefix}-tls-*
+                  - Fn::Sub: arn:aws:s3:::${ResourceNamePrefix}-tls-*/*
+                Condition:
+                  StringEquals:
+                    aws:PrincipalAccount:
+                      Fn::Sub: ${AWS::AccountId}
+              - Sid: ECRAuthorization
+                Effect: Allow
+                Action:
+                  - ecr:GetAuthorizationToken
+                Resource: '*'
+              - Sid: ECRRepositoryAccess
+                Effect: Allow
+                Action:
+                  - ecr:BatchCheckLayerAvailability
+                  - ecr:GetDownloadUrlForLayer
+                  - ecr:DescribeRepositories
+                  - ecr:ListImages
+                  - ecr:DescribeImages
+                  - ecr:BatchGetImage
+                Resource: '*'
+                Condition:
+                  StringEquals:
+                    aws:RequestedRegion:
+                      Fn::Sub: ${AWS::Region}
+              - Sid: EC2DescribeAccess
+                Effect: Allow
+                Action:
+                  - ec2:DescribeAvailabilityZones
+                  - ec2:DescribeRegions
+                  - ec2:DescribeVpcs
+                  - ec2:DescribeSubnets
+                  - ec2:DescribeSecurityGroups
+                  - ec2:DescribeRouteTables
+                  - ec2:DescribeDhcpOptions
+                  - ec2:DescribeInstances
+                  - ec2:DescribeInstanceTypes
+                  - ec2:DescribeVolumes
+                  - ec2:DescribeVolumesModifications
+                  - ec2:DescribeTags
+                  - ec2:DescribeNetworkInterfaces
+                Resource: '*'
+                Condition:
+                  StringEquals:
+                    aws:RequestedRegion:
+                      Fn::Sub: ${AWS::Region}
+              - Sid: EC2NetworkInterfaceActions
+                Effect: Allow
+                Action:
+                  - ec2:AssignPrivateIpAddresses
+                  - ec2:AttachNetworkInterface
+                  - ec2:CreateNetworkInterface
+                  - ec2:DeleteNetworkInterface
+                  - ec2:DetachNetworkInterface
+                  - ec2:ModifyNetworkInterfaceAttribute
+                  - ec2:UnassignPrivateIpAddresses
+                  - ec2:CreateNetworkInterfacePermission
+                  - ec2:CreateTags
+                Resource:
+                  - Fn::Sub: arn:aws:ec2:${AWS::Region}:${AWS::AccountId}:instance/*
+                  - Fn::Sub: arn:aws:ec2:${AWS::Region}:${AWS::AccountId}:network-interface/*
+                  - Fn::Sub: arn:aws:ec2:${AWS::Region}:${AWS::AccountId}:security-group/*
+                  - Fn::Sub: arn:aws:ec2:${AWS::Region}:${AWS::AccountId}:subnet/*
+                  - Fn::Sub: arn:aws:ec2:${AWS::Region}:${AWS::AccountId}:vpc/*
+                Condition:
+                  StringEquals:
+                    aws:RequestedRegion:
+                      Fn::Sub: ${AWS::Region}
+              - Sid: EKSClusterAccess
+                Effect: Allow
+                Action:
+                  - eks:DescribeAddon
+                  - eks:DescribeAddonVersions
+                  - eks:DescribeCluster
+                  - eks:DescribeIdentityProviderConfig
+                  - eks:DescribeNodegroup
+                  - eks:DescribePodIdentityAssociation
+                  - eks:DescribeUpdate
+                  - eks:ListAddons
+                  - eks:ListClusters
+                  - eks:ListFargateProfiles
+                  - eks:ListIdentityProviderConfigs
+                  - eks:ListNodegroups
+                  - eks:ListPodIdentityAssociations
+                  - eks:ListTagsForResource
+                  - eks:ListUpdates
+                  - eks:AccessKubernetesApi
+                  - eks-auth:AssumeRoleForPodIdentity
+                Resource:
+                  Fn::Sub: arn:aws:eks:${AWS::Region}:${AWS::AccountId}:cluster/*
+                Condition:
+                  StringEquals:
+                    aws:RequestedRegion:
+                      Fn::Sub: ${AWS::Region}
+                    aws:ResourceAccount:
+                      Fn::Sub: ${AWS::AccountId}
+              - Sid: EKSAccessEntryPolicyAssociation
+                Effect: Allow
+                Action:
+                  - eks:AssociateAccessPolicy
+                  - eks:DisassociateAccessPolicy
+                Resource: arn:aws:eks:*:*:access-entry/*
+                Condition:
+                  StringEquals:
+                    eks:policyarn: arn:aws:eks::aws:cluster-access-policy/AmazonSagemakerHyperpodInferenceMonitoringPolicy
+              - Sid: ELBDescribeAccess
+                Effect: Allow
+                Action:
+                  - elasticloadbalancing:DescribeAccountLimits
+                  - elasticloadbalancing:DescribeListeners
+                  - elasticloadbalancing:DescribeLoadBalancerAttributes
+                  - elasticloadbalancing:DescribeLoadBalancers
+                  - elasticloadbalancing:DescribeRules
+                  - elasticloadbalancing:DescribeSSLPolicies
+                  - elasticloadbalancing:DescribeTags
+                  - elasticloadbalancing:DescribeTargetGroupAttributes
+                  - elasticloadbalancing:DescribeTargetGroups
+                  - elasticloadbalancing:DescribeTargetHealth
+                Resource: '*'
+                Condition:
+                  StringEquals:
+                    aws:RequestedRegion:
+                      Fn::Sub: ${AWS::Region}
+              - Sid: ELBCreateAccess
+                Effect: Allow
+                Action:
+                  - elasticloadbalancing:CreateListener
+                  - elasticloadbalancing:CreateLoadBalancer
+                  - elasticloadbalancing:CreateRule
+                  - elasticloadbalancing:CreateTargetGroup
+                Resource:
+                  Fn::Sub: arn:aws:elasticloadbalancing:${AWS::Region}:${AWS::AccountId}:*/*
+                Condition:
+                  StringEquals:
+                    aws:RequestedRegion:
+                      Fn::Sub: ${AWS::Region}
+              - Sid: SageMakerListAccess
+                Effect: Allow
+                Action:
+                  - sagemaker:ListModels
+                  - sagemaker:ListTags
+                  - sagemaker:DescribeHubContent
+                Resource: '*'
+                Condition:
+                  StringEquals:
+                    aws:RequestedRegion:
+                      Fn::Sub: ${AWS::Region}
+              - Sid: SageMakerCreateAccess
+                Effect: Allow
+                Action:
+                  - sagemaker:CreateModel
+                  - sagemaker:CreateEndpointConfig
+                  - sagemaker:CreateEndpoint
+                  - sagemaker:AddTags
+                Resource:
+                  - Fn::Sub: arn:aws:sagemaker:${AWS::Region}:${AWS::AccountId}:model/*
+                  - Fn::Sub: arn:aws:sagemaker:${AWS::Region}:${AWS::AccountId}:endpoint/*
+                  - Fn::Sub: arn:aws:sagemaker:${AWS::Region}:${AWS::AccountId}:endpoint-config/*
+                  - Fn::Sub: arn:aws:sagemaker:${AWS::Region}:${AWS::AccountId}:cluster/*
+                  - Fn::Sub: arn:aws:sagemaker:${AWS::Region}:${AWS::AccountId}:cluster-inference/*
+                Condition:
+                  StringEquals:
+                    aws:RequestedRegion:
+                      Fn::Sub: ${AWS::Region}
+                    aws:RequestTag/CreatedBy: HyperPodInference
+                    aws:ResourceAccount:
+                      Fn::Sub: ${AWS::AccountId}
+              - Sid: SageMakerDeleteAccess
+                Effect: Allow
+                Action:
+                  - sagemaker:DeleteModel
+                  - sagemaker:DeleteEndpointConfig
+                  - sagemaker:DeleteEndpoint
+                  - sagemaker:UpdateEndpoint
+                Resource:
+                  - Fn::Sub: arn:aws:sagemaker:${AWS::Region}:${AWS::AccountId}:model/*
+                  - Fn::Sub: arn:aws:sagemaker:${AWS::Region}:${AWS::AccountId}:endpoint/*
+                  - Fn::Sub: arn:aws:sagemaker:${AWS::Region}:${AWS::AccountId}:endpoint-config/*
+                  - Fn::Sub: arn:aws:sagemaker:${AWS::Region}:${AWS::AccountId}:cluster/*
+                  - Fn::Sub: arn:aws:sagemaker:${AWS::Region}:${AWS::AccountId}:cluster-inference/*
+                Condition:
+                  StringEquals:
+                    aws:RequestedRegion:
+                      Fn::Sub: ${AWS::Region}
+                    aws:ResourceTag/CreatedBy: HyperPodInference
+                    aws:ResourceAccount:
+                      Fn::Sub: ${AWS::AccountId}
+              - Sid: FSxAccess
+                Effect: Allow
+                Action:
+                  - fsx:DescribeFileSystems
+                Resource:
+                  Fn::Sub: arn:aws:fsx:${AWS::Region}:${AWS::AccountId}:file-system/*
+                Condition:
+                  StringEquals:
+                    aws:RequestedRegion:
+                      Fn::Sub: ${AWS::Region}
+              - Sid: ACMAccess
+                Effect: Allow
+                Action:
+                  - acm:ImportCertificate
+                  - acm:DeleteCertificate
+                Resource:
+                  Fn::Sub: arn:aws:acm:${AWS::Region}:${AWS::AccountId}:certificate/*
+                Condition:
+                  StringEquals:
+                    aws:RequestedRegion:
+                      Fn::Sub: ${AWS::Region}
+              - Sid: AllowPassRoleToSageMaker
+                Effect: Allow
+                Action:
+                  - iam:PassRole
+                Resource:
+                  - Fn::Sub: arn:aws:iam::${AWS::AccountId}:role/${ResourceNamePrefix}IORole
+                  - Fn::Sub: >-
+                      arn:aws:iam::${AWS::AccountId}:role/SageMakerHyperPodInference-${ResourceNamePrefix}-execution-role
+                Condition:
+                  StringEquals:
+                    iam:PassedToService: sagemaker.amazonaws.com
+                    aws:ResourceAccount:
+                      Fn::Sub: ${AWS::AccountId}
+              - Sid: CloudWatchMetricsAccess
+                Effect: Allow
+                Action:
+                  - cloudwatch:PutMetricData
+                Resource: '*'
+                Condition:
+                  StringEquals:
+                    aws:RequestedRegion:
+                      Fn::Sub: ${AWS::Region}
+                    cloudwatch:namespace: HyperPodInference
+              - Sid: CloudWatchLogsAccess
+                Effect: Allow
+                Action:
+                  - logs:PutLogEvents
+                  - logs:DescribeLogStreams
+                  - logs:DescribeLogGroups
+                  - logs:CreateLogStream
+                  - logs:CreateLogGroup
+                Resource:
+                  - Fn::Sub: arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:*
+                  - Fn::Sub: arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:*:log-stream:*
+                Condition:
+                  StringEquals:
+                    aws:RequestedRegion:
+                      Fn::Sub: ${AWS::Region}
+              - Sid: SageMakerAccess
+                Effect: Allow
+                Action:
+                  - sagemaker:DescribeModel
+                  - sagemaker:DescribeEndpointConfig
+                  - sagemaker:DescribeEndpoint
+                  - sagemaker:DescribeCluster
+                  - sagemaker:DescribeClusterInference
+                  - sagemaker:UpdateClusterInference
+                Resource:
+                  - Fn::Sub: arn:aws:sagemaker:${AWS::Region}:${AWS::AccountId}:*/*
+                Condition:
+                  StringEquals:
+                    aws:RequestedRegion:
+                      Fn::Sub: ${AWS::Region}
+                    aws:ResourceAccount:
+                      Fn::Sub: ${AWS::AccountId}
+          PolicyName:
+            Fn::Sub: ${ResourceNamePrefix}-InfOperator-Policy
+      RoleName:
+        Fn::Sub: SageMakerHyperPodInference-${ResourceNamePrefix}-execution-role
+    Metadata:
+      aws:cdk:path: InferenceAddonIamRolesCfnTemplate/InferenceOperatorExecutionRole
+    Condition: ShouldCreateInferenceOperatorExecutionRole
   CDKMetadata:
     Type: AWS::CDK::Metadata
     Properties:
@@ -534,6 +834,16 @@ Outputs:
       Name:
         Fn::Sub: ${AWS::StackName}-JumpstartGatedModelRoleArn
     Condition: ShouldCreateJumpstartGatedModelRole
+  InferenceOperatorExecutionRoleArn:
+    Description: ARN of the IAM role for Inference Operator execution
+    Value:
+      Fn::GetAtt:
+        - InferenceOperatorExecutionRole
+        - Arn
+    Export:
+      Name:
+        Fn::Sub: ${AWS::StackName}-InferenceOperatorExecutionRoleArn
+    Condition: ShouldCreateInferenceOperatorExecutionRole
 Rules:
   CheckBootstrapVersion:
     Assertions:
