@@ -4,9 +4,24 @@ Parameters:
     Type: String
     Default: sagemaker-hyperpod-eks
     Description: Prefix to be used for all resources created by this template.
+  Stage:
+    Type: String
+    Default: prod
+    AllowedValues:
+      - gamma
+      - prod
+    Description: Deployment stage (gamma, prod)
   OIDCProviderURLWithoutProtocol:
     Type: String
     Description: The URL of the OIDC Provider without https:// prefix.
+  VpcId:
+    Type: String
+    Default: vpc-1234567890abcdef0
+    Description: The ID of the VPC.
+  TlsCertificatesBucketName:
+    Type: String
+    Default: ''
+    Description: Name of the S3 bucket for storing TLS certificates (optional)
   CreateS3CsiDriverRole:
     Type: String
     Default: 'true'
@@ -718,7 +733,6 @@ Resources:
                 Action:
                   - iam:PassRole
                 Resource:
-                  - Fn::Sub: arn:aws:iam::${AWS::AccountId}:role/${ResourceNamePrefix}IORole
                   - Fn::Sub: >-
                       arn:aws:iam::${AWS::AccountId}:role/SageMakerHyperPodInference-${ResourceNamePrefix}-execution-role
                 Condition:
@@ -835,7 +849,7 @@ Outputs:
         Fn::Sub: ${AWS::StackName}-JumpstartGatedModelRoleArn
     Condition: ShouldCreateJumpstartGatedModelRole
   InferenceOperatorExecutionRoleArn:
-    Description: ARN of the IAM role for Inference Operator execution
+    Description: ARN of the IAM role for Inference Operator execution role
     Value:
       Fn::GetAtt:
         - InferenceOperatorExecutionRole
@@ -843,6 +857,14 @@ Outputs:
     Export:
       Name:
         Fn::Sub: ${AWS::StackName}-InferenceOperatorExecutionRoleArn
+    Condition: ShouldCreateInferenceOperatorExecutionRole
+  InferenceOperatorExecutionRoleName:
+    Description: Name of the IAM role for Inference Operator execution role
+    Value:
+      Fn::Sub: SageMakerHyperPodInference-${ResourceNamePrefix}-execution-role
+    Export:
+      Name:
+        Fn::Sub: ${AWS::StackName}-InferenceOperatorExecutionRoleName
     Condition: ShouldCreateInferenceOperatorExecutionRole
 Rules:
   CheckBootstrapVersion:
