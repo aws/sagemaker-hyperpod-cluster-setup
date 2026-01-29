@@ -15,7 +15,6 @@ Metadata:
           - AutoScalerType
           - Tags
           - EnableHPInferenceFeature
-          - EnableHPInferenceAddonFeature
           - EnableObservabilityFeature
           - EnableHPTrainingOperatorFeature
       - Label:
@@ -188,8 +187,6 @@ Metadata:
         default: Feature flag for enabling HP training operator
       CustomBucketName:
         default: Custom S3 Bucket Name
-      TlsCertificateBucketName:
-        default: TLS Certificate S3 Bucket Name
       NodeRecovery:
         default: Instance Recovery
       NodeProvisioningMode:
@@ -389,13 +386,6 @@ Parameters:
       - 'true'
       - 'false'
     Description: Set to "true" to enable the HP inference feature, "false" otherwise.
-  EnableHPInferenceAddonFeature:
-    Type: String
-    Default: 'false'
-    AllowedValues:
-      - 'true'
-      - 'false'
-    Description: Set to "true" to use EKS addon approach (gamma), "false" to use Helm approach.
   EnableObservabilityFeature:
     Type: String
     Default: 'false'
@@ -421,10 +411,6 @@ Parameters:
     Type: String
     Default: ''
     Description: Custom S3 bucket name for templates. If provided, will override the default bucket. Leave empty to use default.
-  TlsCertificateBucketName:
-    Type: String
-    Default: ''
-    Description: Name of the S3 bucket for storing TLS certificates (optional - will be created if not provided)
   ResourceNamePrefix:
     Type: String
     Default: sagemaker-hyperpod-eks
@@ -1102,22 +1088,6 @@ Conditions:
     Fn::Equals:
       - Ref: EnableHPInferenceFeature
       - 'true'
-  EnableHPInferenceAddonFeatureCondition:
-    Fn::And:
-      - Fn::Equals:
-          - Ref: EnableHPInferenceFeature
-          - 'true'
-      - Fn::Equals:
-          - Ref: EnableHPInferenceAddonFeature
-          - 'true'
-  EnableHPInferenceHelmFeatureCondition:
-    Fn::And:
-      - Fn::Equals:
-          - Ref: EnableHPInferenceFeature
-          - 'true'
-      - Fn::Equals:
-          - Ref: EnableHPInferenceAddonFeature
-          - 'false'
   EnableObservabilityFeatureCondition:
     Fn::And:
       - Fn::Equals:
@@ -2008,7 +1978,7 @@ Resources:
             - Ref: PrivateSubnetIds
     Metadata:
       aws:cdk:path: MainEksBasedCfnTemplate/PrivateSubnetTagsStack
-    Condition: EnableHPInferenceHelmFeatureCondition
+    Condition: EnableHPInferenceFeatureCondition
   InferenceOperatorMainStack:
     Type: AWS::CloudFormation::Stack
     Properties:
@@ -2079,77 +2049,7 @@ Resources:
       - HyperPodClusterStack
     Metadata:
       aws:cdk:path: MainEksBasedCfnTemplate/InferenceOperatorMainStack
-    Condition: EnableHPInferenceHelmFeatureCondition
-  InferenceOperatorAddonStack:
-    Type: AWS::CloudFormation::Stack
-    Properties:
-      TemplateURL:
-        Fn::If:
-          - CustomBucketCondition
-          - Fn::Sub: >-
-              https://${CustomBucketName}.s3.${AWS::Region}.amazonaws.com/templates/main-stack-inference-operator-addon-template.yaml
-          - Fn::Sub: >-
-              https://aws-sagemaker-hyperpod-cluster-setup-${AWS::Region}-${Stage}.s3.${AWS::Region}.amazonaws.com/templates/main-stack-inference-operator-addon-template.yaml
-      Parameters:
-        ResourceNamePrefix:
-          Ref: ResourceNamePrefix
-        Stage:
-          Ref: Stage
-        CustomBucketName:
-          Ref: CustomBucketName
-        TlsCertificateBucketName:
-          Ref: TlsCertificateBucketName
-        AccessLogsBucketName:
-          Fn::If:
-            - CreateS3BucketStackCondition
-            - Fn::GetAtt:
-                - S3BucketStack
-                - Outputs.S3LogsBucketName
-            - ''
-        VpcId:
-          Fn::If:
-            - CreateVPCStackCondition
-            - Fn::GetAtt:
-                - VPCStack
-                - Outputs.VpcId
-            - Ref: VpcId
-        EksPrivateRouteTableIds:
-          Fn::If:
-            - CreatePrivateSubnetStackCondition
-            - Fn::GetAtt:
-                - PrivateSubnetStack
-                - Outputs.EksPrivateRouteTableIds
-            - Ref: EksPrivateRouteTableIds
-        CreateS3EndpointStack: 'false'
-        EKSClusterName:
-          Fn::If:
-            - CreateEKSClusterStackCondition
-            - Fn::GetAtt:
-                - EKSClusterStack
-                - Outputs.EKSClusterName
-            - Ref: EKSClusterName
-        OIDCProviderURLWithoutProtocol:
-          Fn::If:
-            - CreateEKSClusterStackCondition
-            - Fn::GetAtt:
-                - EKSClusterStack
-                - Outputs.OIDCProviderURLWithoutProtocol
-            - ''
-        HyperPodClusterArn:
-          Fn::GetAtt:
-            - HyperPodClusterStack
-            - Outputs.HyperPodClusterArn
-        HyperPodClusterName:
-          Fn::GetAtt:
-            - HyperPodClusterStack
-            - Outputs.HyperPodClusterName
-        CreateDomain: 'false'
-    DependsOn:
-      - CertManagerStack
-      - HyperPodClusterStack
-    Metadata:
-      aws:cdk:path: MainEksBasedCfnTemplate/InferenceOperatorAddonStack
-    Condition: EnableHPInferenceAddonFeatureCondition
+    Condition: EnableHPInferenceFeatureCondition
   ObservabilityCustomResourceRole:
     Type: AWS::IAM::Role
     Properties:
@@ -2609,47 +2509,15 @@ Outputs:
     Condition: CreateSageMakerIAMRoleStackCondition
   OutputInfOperatorIAMRoleArn:
     Value:
-      Fn::If:
-        - EnableHPInferenceAddonFeatureCondition
-        - Fn::GetAtt:
-            - InferenceOperatorAddonStack
-            - Outputs.InfOperatorIAMRoleArn
-        - Fn::GetAtt:
-            - InferenceOperatorMainStack
-            - Outputs.InfOperatorIAMRoleArn
+      Fn::GetAtt:
+        - InferenceOperatorMainStack
+        - Outputs.InfOperatorIAMRoleArn
     Condition: EnableHPInferenceFeatureCondition
   OutputInfOperatorIAMRoleName:
     Value:
-      Fn::If:
-        - EnableHPInferenceAddonFeatureCondition
-        - Fn::GetAtt:
-            - InferenceOperatorAddonStack
-            - Outputs.InfOperatorIAMRoleName
-        - Fn::GetAtt:
-            - InferenceOperatorMainStack
-            - Outputs.InfOperatorIAMRoleName
-    Condition: EnableHPInferenceFeatureCondition
-  OutputTLSCertificatesBucketName:
-    Value:
-      Fn::If:
-        - EnableHPInferenceAddonFeatureCondition
-        - Fn::GetAtt:
-            - InferenceOperatorAddonStack
-            - Outputs.TLSCertificatesBucketName
-        - Fn::GetAtt:
-            - InferenceOperatorMainStack
-            - Outputs.TLSCertificatesBucketName
-    Condition: EnableHPInferenceFeatureCondition
-  OutputTLSCertificatesBucketArn:
-    Value:
-      Fn::If:
-        - EnableHPInferenceAddonFeatureCondition
-        - Fn::GetAtt:
-            - InferenceOperatorAddonStack
-            - Outputs.TLSCertificatesBucketArn
-        - Fn::GetAtt:
-            - InferenceOperatorMainStack
-            - Outputs.TLSCertificatesBucketArn
+      Fn::GetAtt:
+        - InferenceOperatorMainStack
+        - Outputs.InfOperatorIAMRoleName
     Condition: EnableHPInferenceFeatureCondition
   OutputS3BucketName:
     Value:
