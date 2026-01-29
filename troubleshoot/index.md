@@ -6,8 +6,6 @@ This guide helps you diagnose and resolve common issues with your HyperPod deplo
 
 | Issue Category | Subject (Symptom) | Reason | Resolution | Link to Details |
 |----------------|-------------------|--------|------------|-----------------|
-| **Deployment** | CloudFormation stack fails | Insufficient IAM permissions, resource limits, invalid parameters | Check CloudFormation Events, verify IAM permissions, validate parameters | [Details](#cloudformation-stack-failures) |
-| **Deployment** | Helm chart installation fails | Lambda timeout, cluster access issues, chart syntax errors | Check CloudWatch logs, verify EKS access, validate chart values | [Details](#helm-chart-installation-issues) |
 | **Deployment** | Cluster creation fails with lifecycle script error | Script syntax errors, missing dependencies, S3 access issues | Review CloudWatch logs, verify S3 access, check script syntax | [Details](#cluster-creation-failed-with-lifecycle-script-execution-error) |
 | **Networking** | FSx filesystem cannot be mounted | FSx not available, security group rules, DNS issues | Verify FSx state, check security groups (port 988), enable VPC DNS | [Details](#fsx-for-lustre-connection-problems) |
 | **Networking** | Resources cannot communicate | Security group rules, route tables, NAT/IGW issues | Verify security groups, check route tables, validate DNS settings | [Details](#vpc-and-networking) |
@@ -35,32 +33,6 @@ This guide helps you diagnose and resolve common issues with your HyperPod deplo
 - [Common Issues](#common-issues)
 
 ## EKS-based Deployments
-
-### CloudFormation Stack Failures
-
-**Issue**: Stack creation fails during deployment
-
-**Common Causes**:
-- Insufficient IAM permissions
-- Resource limits exceeded (VPC, EIP, etc.)
-- Invalid parameter values
-- Subnet availability issues
-
-**Resolution Steps**:
-1. Check CloudFormation Events tab for specific error messages
-2. Verify IAM role has required permissions
-3. Confirm service quotas in AWS Service Quotas console
-4. Validate all template parameters
-
-### Helm Chart Installation Issues
-
-**Issue**: Helm charts fail to install or upgrade
-
-**Resolution Steps**:
-1. Check Lambda function logs in CloudWatch
-2. Verify EKS cluster is accessible
-3. Confirm kubectl/helm versions compatibility
-4. Review helm chart values for syntax errors
 
 ### FSx for Lustre Connection Problems
 
