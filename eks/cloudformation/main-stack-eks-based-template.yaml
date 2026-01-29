@@ -188,6 +188,8 @@ Metadata:
         default: Feature flag for enabling HP training operator
       CustomBucketName:
         default: Custom S3 Bucket Name
+      TlsCertificateBucketName:
+        default: TLS Certificate S3 Bucket Name
       NodeRecovery:
         default: Instance Recovery
       NodeProvisioningMode:
@@ -419,6 +421,10 @@ Parameters:
     Type: String
     Default: ''
     Description: Custom S3 bucket name for templates. If provided, will override the default bucket. Leave empty to use default.
+  TlsCertificateBucketName:
+    Type: String
+    Default: ''
+    Description: Name of the S3 bucket for storing TLS certificates (optional - will be created if not provided)
   ResourceNamePrefix:
     Type: String
     Default: sagemaker-hyperpod-eks
@@ -2091,7 +2097,8 @@ Resources:
           Ref: Stage
         CustomBucketName:
           Ref: CustomBucketName
-        TlsCertificateBucketName: ''
+        TlsCertificateBucketName:
+          Ref: TlsCertificateBucketName
         AccessLogsBucketName:
           Fn::If:
             - CreateS3BucketStackCondition
