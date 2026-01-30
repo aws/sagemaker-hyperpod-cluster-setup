@@ -46,17 +46,24 @@ This guide helps you diagnose and resolve common issues with your HyperPod deplo
    sinfo -o "%N %T %30E"
    ```
    This will display the node name, state, and reason for the current state
-3. Test connectivity to the node using multiple methods to identify what's working:
+3. Check HyperPod cluster node status:
+   - **Via AWS CLI**:
+     ```bash
+     aws sagemaker list-cluster-nodes --cluster-name <cluster-name>
+     ```
+   - **Via Management Console**: Navigate to https://console.aws.amazon.com/sagemaker/home#/cluster-management → Select your cluster → View node details
+   - Look for node health status, instance state, and any error messages
+4. Test connectivity to the node using multiple methods to identify what's working:
    - **PING**: `ping <node-ip-or-hostname>`
    - **Cross-node SSH**: From another node, try `ssh <node-ip-or-hostname>`
    - **SSM Session**: `aws ssm start-session --target <instance-id>`
    - **Slurm srun**: `srun -w <node-name> hostname`
    
    By testing these variations, you can determine which communication paths are functional
-4. If you can access the node, check system logs: `sudo journalctl -xe`
-5. Verify slurmd daemon is running: `sudo systemctl status slurmd`
-6. Check for out-of-memory or disk space issues: `free -h` and `df -h`
-7. If disk space is full, identify what is consuming space:
+5. If you can access the node, check system logs: `sudo journalctl -xe`
+6. Verify slurmd daemon is running: `sudo systemctl status slurmd`
+7. Check for out-of-memory or disk space issues: `free -h` and `df -h`
+8. If disk space is full, identify what is consuming space:
    ```bash
    # Check disk usage by filesystem
    df -h
@@ -69,20 +76,20 @@ This guide helps you diagnose and resolve common issues with your HyperPod deplo
    sudo du -sh /tmp/* | sort -hr
    sudo du -sh /home/*/* | sort -hr
    ```
-8. Clean up disk space if needed:
+9. Clean up disk space if needed:
    - Delete old log files: `sudo rm -f /var/log/*.log.* /var/log/*/*.gz`
    - Clear temporary files: `sudo rm -rf /tmp/*`
    - Clean package manager cache: `sudo yum clean all` or `sudo apt-get clean`
    - Remove old container images if using Docker: `docker system prune -a`
-9. Restart slurmd if needed: `sudo systemctl restart slurmd`
-10. If node remains down, set it back to idle: `scontrol update nodename=<node-name> state=resume`
-11. If none of the above steps resolve the issue, reboot the instance:
+10. Restart slurmd if needed: `sudo systemctl restart slurmd`
+11. If node remains down, set it back to idle: `scontrol update nodename=<node-name> state=resume`
+12. If none of the above steps resolve the issue, reboot the instance:
    ```bash
    aws sagemaker batch-reboot-cluster-nodes \
      --cluster-name <cluster-name> \
      --node-ids <instance-id>
    ```
-12. If rebooting doesn't help, replace the node:
+13. If rebooting doesn't help, replace the node:
    ```bash
    aws sagemaker batch-replace-cluster-nodes \
      --cluster-name <cluster-name> \
