@@ -29,72 +29,9 @@ This guide helps you diagnose and resolve common issues with your HyperPod deplo
 
 ## Troubleshooting Details
 
-### Node Not Responding / Slurm Says Node is "Down"
+### Deployment Issues
 
-**Orchestrator**: Slurm
-
-**Issue**: Slurm node becomes unresponsive or shows as "down"
-
-**Resolution Steps**:
-1. Check node status: `sinfo -N -l` or `scontrol show node <node-name>`
-2. If node shows "down" status, check the reason message:
-   ```bash
-   sinfo -o "%N %T %30E"
-   ```
-   This will display the node name, state, and reason for the current state
-3. Check HyperPod cluster node status:
-   - **Via AWS CLI**:
-     ```bash
-     aws sagemaker list-cluster-nodes --cluster-name <cluster-name>
-     ```
-   - **Via Management Console**: Navigate to https://console.aws.amazon.com/sagemaker/home#/cluster-management → Select your cluster → View node details
-   - Look for node health status, instance state, and any error messages
-4. Test connectivity to the node using multiple methods to identify what's working:
-   - **PING**: `ping <node-ip-or-hostname>`
-   - **Cross-node SSH**: From another node, try `ssh <node-ip-or-hostname>`
-   - **SSM Session**: `aws ssm start-session --target <instance-id>`
-   - **Slurm srun**: `srun -w <node-name> hostname`
-   
-   By testing these variations, you can determine which communication paths are functional
-5. If you can access the node, check system logs: `sudo journalctl -xe`
-6. Verify slurmd daemon is running: `sudo systemctl status slurmd`
-7. Check for out-of-memory or disk space issues: `free -h` and `df -h`
-8. If disk space is full, identify what is consuming space:
-   ```bash
-   # Check disk usage by filesystem
-   df -h
-   
-   # Find large directories
-   sudo du -h --max-depth=1 / | sort -hr | head -20
-   
-   # Check common locations for large files
-   sudo du -sh /var/log/* | sort -hr
-   sudo du -sh /tmp/* | sort -hr
-   sudo du -sh /home/*/* | sort -hr
-   ```
-9. Clean up disk space if needed:
-   - Delete old log files: `sudo rm -f /var/log/*.log.* /var/log/*/*.gz`
-   - Clear temporary files: `sudo rm -rf /tmp/*`
-   - Clean package manager cache: `sudo yum clean all` or `sudo apt-get clean`
-   - Remove old container images if using Docker: `docker system prune -a`
-10. Restart slurmd if needed: `sudo systemctl restart slurmd`
-11. If node remains down, set it back to idle: `scontrol update nodename=<node-name> state=resume`
-12. If none of the above steps resolve the issue, reboot the instance:
-   ```bash
-   aws sagemaker batch-reboot-cluster-nodes \
-     --cluster-name <cluster-name> \
-     --node-ids <instance-id>
-   ```
-13. If rebooting doesn't help, replace the node:
-   ```bash
-   aws sagemaker batch-replace-cluster-nodes \
-     --cluster-name <cluster-name> \
-     --node-ids <instance-id>
-   ```
-
----
-
-### Finding Detailed CloudFormation Error Messages
+#### Finding Detailed CloudFormation Error Messages
 
 **Orchestrator**: Common (Slurm, EKS)
 
@@ -153,7 +90,7 @@ When you deploy a HyperPod cluster using the HyperPod management console, it cre
 
 ---
 
-### Cluster Creation Failing with Capacity Error
+#### Cluster Creation Failing with Capacity Error
 
 **Orchestrator**: Common (Slurm, EKS)
 
@@ -216,7 +153,7 @@ HyperPod supports three options for securing compute capacity:
 
 ---
 
-### Cluster Creation Failed with Lifecycle Script Execution Error
+#### Cluster Creation Failed with Lifecycle Script Execution Error
 
 **Orchestrator**: Common (Slurm, EKS)
 
@@ -259,7 +196,7 @@ HyperPod supports three options for securing compute capacity:
 
 ---
 
-### EFA Health Checks Did Not Run Successfully
+#### EFA Health Checks Did Not Run Successfully
 
 **Orchestrator**: Common (Slurm, EKS)
 
@@ -302,7 +239,7 @@ See the CloudFormation template at `eks/cloudformation/security-group-template.y
 
 ---
 
-### Cluster is InService Status but Not Seeing Instances
+#### Cluster is InService Status but Not Seeing Instances
 
 **Orchestrator**: Common (Slurm, EKS)
 
@@ -353,7 +290,7 @@ This is expected behavior when using Continuous Provisioning mode. In this mode:
 
 ---
 
-### Cannot Access EKS Cluster with kubectl
+#### Cannot Access EKS Cluster with kubectl
 
 **Orchestrator**: EKS
 
@@ -407,7 +344,7 @@ When using EKS's "IAM access entries" for access control, the IAM identity (user
 
 ---
 
-### SSM Session Not Starting or Getting Error
+#### SSM Session Not Starting or Getting Error
 
 **Orchestrator**: Common (Slurm, EKS)
 
@@ -505,7 +442,74 @@ For easier SSM session management with HyperPod clusters, consider using the `hy
 
 ---
 
-### Node Unexpectedly Rebooted
+### Node Management Issues
+
+#### Node Not Responding / Slurm Says Node is "Down"
+
+**Orchestrator**: Slurm
+
+**Issue**: Slurm node becomes unresponsive or shows as "down"
+
+**Resolution Steps**:
+1. Check node status: `sinfo -N -l` or `scontrol show node <node-name>`
+2. If node shows "down" status, check the reason message:
+   ```bash
+   sinfo -o "%N %T %30E"
+   ```
+   This will display the node name, state, and reason for the current state
+3. Check HyperPod cluster node status:
+   - **Via AWS CLI**:
+     ```bash
+     aws sagemaker list-cluster-nodes --cluster-name <cluster-name>
+     ```
+   - **Via Management Console**: Navigate to https://console.aws.amazon.com/sagemaker/home#/cluster-management → Select your cluster → View node details
+   - Look for node health status, instance state, and any error messages
+4. Test connectivity to the node using multiple methods to identify what's working:
+   - **PING**: `ping <node-ip-or-hostname>`
+   - **Cross-node SSH**: From another node, try `ssh <node-ip-or-hostname>`
+   - **SSM Session**: `aws ssm start-session --target <instance-id>`
+   - **Slurm srun**: `srun -w <node-name> hostname`
+   
+   By testing these variations, you can determine which communication paths are functional
+5. If you can access the node, check system logs: `sudo journalctl -xe`
+6. Verify slurmd daemon is running: `sudo systemctl status slurmd`
+7. Check for out-of-memory or disk space issues: `free -h` and `df -h`
+8. If disk space is full, identify what is consuming space:
+   ```bash
+   # Check disk usage by filesystem
+   df -h
+   
+   # Find large directories
+   sudo du -h --max-depth=1 / | sort -hr | head -20
+   
+   # Check common locations for large files
+   sudo du -sh /var/log/* | sort -hr
+   sudo du -sh /tmp/* | sort -hr
+   sudo du -sh /home/*/* | sort -hr
+   ```
+9. Clean up disk space if needed:
+   - Delete old log files: `sudo rm -f /var/log/*.log.* /var/log/*/*.gz`
+   - Clear temporary files: `sudo rm -rf /tmp/*`
+   - Clean package manager cache: `sudo yum clean all` or `sudo apt-get clean`
+   - Remove old container images if using Docker: `docker system prune -a`
+10. Restart slurmd if needed: `sudo systemctl restart slurmd`
+11. If node remains down, set it back to idle: `scontrol update nodename=<node-name> state=resume`
+12. If none of the above steps resolve the issue, reboot the instance:
+   ```bash
+   aws sagemaker batch-reboot-cluster-nodes \
+     --cluster-name <cluster-name> \
+     --node-ids <instance-id>
+   ```
+13. If rebooting doesn't help, replace the node:
+   ```bash
+   aws sagemaker batch-replace-cluster-nodes \
+     --cluster-name <cluster-name> \
+     --node-ids <instance-id>
+   ```
+
+---
+
+#### Node Unexpectedly Rebooted
 
 **Orchestrator**: Slurm
 
@@ -610,7 +614,7 @@ To avoid this issue in the future:
 
 ---
 
-### Jobs Stuck in PENDING/COMPLETING, Nodes in Wrong State
+#### Jobs Stuck in PENDING/COMPLETING, Nodes in Wrong State
 
 **Orchestrator**: Slurm
 
@@ -689,7 +693,7 @@ The slurmctld (Slurm Central Control Daemon) manages job scheduling, resource al
 
 ---
 
-### Node Replacement Not Happening Automatically
+#### Node Replacement Not Happening Automatically
 
 **Orchestrator**: Common (Slurm, EKS)
 
@@ -753,7 +757,7 @@ The slurmctld (Slurm Central Control Daemon) manages job scheduling, resource al
 
 ---
 
-### Node Replacement Not Happening Even After Manual Trigger
+#### Node Replacement Not Happening Even After Manual Trigger
 
 **Orchestrator**: Common (Slurm, EKS)
 
@@ -801,9 +805,9 @@ The slurmctld (Slurm Central Control Daemon) manages job scheduling, resource al
 
 ---
 
-## GPU and Accelerator Issues
+### GPU and Accelerator Issues
 
-### Suspecting GPU Failure
+#### Suspecting GPU Failure
 
 **Orchestrator**: Common (Slurm, EKS)
 
@@ -837,7 +841,7 @@ The slurmctld (Slurm Central Control Daemon) manages job scheduling, resource al
 
 ---
 
-### EFA/NCCL/CUDA/Nvidia Driver Version Mismatch
+#### EFA/NCCL/CUDA/Nvidia Driver Version Mismatch
 
 **Orchestrator**: Common (Slurm, EKS)
 
@@ -882,9 +886,9 @@ The slurmctld (Slurm Central Control Daemon) manages job scheduling, resource al
 
 ---
 
-## Performance Issues
+### Performance Issues
 
-### NCCL Timeouts
+#### NCCL Timeouts
 
 **Orchestrator**: Common (Slurm, EKS)
 
@@ -916,7 +920,7 @@ The slurmctld (Slurm Central Control Daemon) manages job scheduling, resource al
 
 ---
 
-### Uneven NCCL Performance Depending on the Set of Nodes
+#### Uneven NCCL Performance Depending on the Set of Nodes
 
 **Orchestrator**: Common (Slurm, EKS)
 
@@ -948,7 +952,7 @@ The slurmctld (Slurm Central Control Daemon) manages job scheduling, resource al
 
 ---
 
-### Poor Filesystem Performance
+#### Poor Filesystem Performance
 
 **Orchestrator**: Common (Slurm, EKS)
 
@@ -995,9 +999,9 @@ The slurmctld (Slurm Central Control Daemon) manages job scheduling, resource al
      - Large sequential I/O → Lustre is optimal
      - Temporary high-performance data → Use NVMe instance storage
 
----
+### Memory Issues
 
-### "Cannot Allocate Memory" Error at os.fork()
+#### "Cannot Allocate Memory" Error at os.fork()
 
 **Orchestrator**: Common (Slurm, EKS)
 
@@ -1051,9 +1055,9 @@ The slurmctld (Slurm Central Control Daemon) manages job scheduling, resource al
 
 ---
 
-## Storage Management
+### Storage Management
 
-### Root Volume Exhausted - How to Expand Storage
+#### Root Volume Exhausted - How to Expand Storage
 
 **Orchestrator**: Common (Slurm, EKS)
 
@@ -1194,9 +1198,9 @@ When creating a HyperPod cluster or adding instance groups, configure the second
 
 ---
 
-## Utilities and How-To
+### Utilities and How-To
 
-### How to Identify Instance ID from Slurm Node Name
+#### How to Identify Instance ID from Slurm Node Name
 
 **Orchestrator**: Slurm
 
@@ -1259,9 +1263,9 @@ cat cluster_nodes_info.csv | grep "10.1.123.45"
 
 ---
 
-## Getting Help
+### Getting Help
 
-### Collecting Diagnostic Data for Issue Reporting
+#### Collecting Diagnostic Data for Issue Reporting
 
 **Orchestrator**: Common (Slurm, EKS)
 
