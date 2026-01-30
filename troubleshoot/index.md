@@ -49,6 +49,8 @@ This guide helps you diagnose and resolve common issues with your HyperPod deplo
 6. Restart slurmd if needed: `sudo systemctl restart slurmd`
 7. If node remains down, set it back to idle: `scontrol update nodename=<node-name> state=resume`
 
+---
+
 ### Slurm Says Node is "Down"
 
 **Issue**: Node shows as "down" in Slurm even though it's running
@@ -60,6 +62,8 @@ This guide helps you diagnose and resolve common issues with your HyperPod deplo
 4. Review slurmd logs on the compute node: `sudo journalctl -u slurmd -n 100`
 5. Clear the down state: `scontrol update nodename=<node-name> state=resume reason="manual recovery"`
 6. If issue persists, restart slurmd: `sudo systemctl restart slurmd`
+
+---
 
 ### Cluster Creation Failed with Lifecycle Script Execution Error
 
@@ -80,6 +84,8 @@ This guide helps you diagnose and resolve common issues with your HyperPod deplo
 5. Check `/var/log/provision/` on cluster nodes for detailed error logs
 6. Validate script dependencies are available in the base AMI
 7. Ensure script has proper shebang and execute permissions
+
+---
 
 ### EFA Health Checks Did Not Run Successfully
 
@@ -120,6 +126,8 @@ See the CloudFormation template at `eks/cloudformation/security-group-template.y
 - Use the provided CloudFormation templates which include proper security group configuration
 - Test security group configuration before cluster creation
 
+---
+
 ### Node Replacement Not Happening
 
 **Issue**: Failed nodes are not being automatically replaced
@@ -132,6 +140,8 @@ See the CloudFormation template at `eks/cloudformation/security-group-template.y
 5. Check if maximum node count has been reached
 6. Verify IAM permissions allow node replacement operations
 7. Look for service quotas that might block new instance launches
+
+---
 
 ## GPU and Accelerator Issues
 
@@ -152,6 +162,8 @@ See the CloudFormation template at `eks/cloudformation/security-group-template.y
 - Contact AWS support for hardware replacement
 - Document GPU serial number and error details for support case
 
+---
+
 ### GPUs Are Not Getting Released
 
 **Issue**: GPUs remain allocated after job completion
@@ -163,6 +175,8 @@ See the CloudFormation template at `eks/cloudformation/security-group-template.y
 4. If job shows as completed but GPU is held, restart slurmd: `sudo systemctl restart slurmd`
 5. Clear GPU memory: `sudo fuser -v /dev/nvidia*` then kill processes
 6. As last resort, reboot the node
+
+---
 
 ### EFA/NCCL/CUDA/Nvidia Driver Version Mismatch
 
@@ -194,6 +208,8 @@ See the CloudFormation template at `eks/cloudformation/security-group-template.y
 5. Rebuild containers with matching versions if needed
 6. Update drivers/libraries to compatible versions
 
+---
+
 ### Mismatch Between Host Environment and Container Environment
 
 **Issue**: Training works on host but fails in container, or vice versa
@@ -211,6 +227,8 @@ See the CloudFormation template at `eks/cloudformation/security-group-template.y
 5. Verify GPU device access: `--gpus all` or `--runtime=nvidia`
 6. Match PyTorch/TensorFlow versions between environments
 
+---
+
 ## Common Issues
 
 ### VPC and Networking
@@ -222,6 +240,8 @@ See the CloudFormation template at `eks/cloudformation/security-group-template.y
 - Check route tables for proper routing
 - Confirm NAT Gateway or Internet Gateway configuration
 - Validate DNS resolution settings
+
+---
 
 ### IAM Permission Errors
 
@@ -243,6 +263,8 @@ See the CloudFormation template at `eks/cloudformation/security-group-template.y
 - Ensure role ARN is correctly specified in cluster configuration
 - Check if role was recently created (may need a few minutes to propagate)
 
+---
+
 ### Lambda Function Timeouts
 
 **Issue**: Custom resource Lambda functions timeout
@@ -252,6 +274,8 @@ See the CloudFormation template at `eks/cloudformation/security-group-template.y
 2. Check Lambda function logs in CloudWatch
 3. Verify Lambda has network access (VPC configuration if needed)
 4. Review function code for performance bottlenecks
+
+---
 
 ## Performance Issues
 
@@ -274,6 +298,8 @@ See the CloudFormation template at `eks/cloudformation/security-group-template.y
 7. Ensure security groups allow all traffic between compute nodes
 8. Try reducing batch size or number of workers if memory pressure exists
 
+---
+
 ### Uneven NCCL Performance Depending on the Set of Nodes
 
 **Issue**: Training performance varies significantly based on which nodes are allocated
@@ -293,6 +319,8 @@ See the CloudFormation template at `eks/cloudformation/security-group-template.y
 7. Enable NCCL tuning: `export NCCL_TUNER_PLUGIN=libnccl-tuner.so`
 8. Drain and investigate underperforming nodes
 9. Consider using placement groups for consistent network performance
+
+---
 
 ### Poor Filesystem Performance
 
@@ -316,6 +344,8 @@ See the CloudFormation template at `eks/cloudformation/security-group-template.y
    - Use faster data formats (TFRecord, WebDataset)
    - Enable data caching or prefetching
 7. Consider using instance store for temporary data if available
+
+---
 
 ### Multi-process DataLoader Raises "OSError: [Errno 12] Cannot Allocate Memory" Error
 
@@ -345,6 +375,8 @@ See the CloudFormation template at `eks/cloudformation/security-group-template.y
 5. Set `pin_memory=False` if not needed
 6. Check available memory: `free -h` and `/dev/shm` usage: `df -h /dev/shm`
 
+---
+
 ### FI_EFA_USE_HUGE_PAGE=0 Has to Be Set
 
 **Issue**: EFA initialization fails or training crashes without this setting
@@ -367,6 +399,8 @@ See the CloudFormation template at `eks/cloudformation/security-group-template.y
    echo 1024 | sudo tee /proc/sys/vm/nr_hugepages
    ```
 6. Consider using `FI_EFA_USE_HUGE_PAGE=1` only if huge pages are properly configured
+
+---
 
 ## Getting Help
 
