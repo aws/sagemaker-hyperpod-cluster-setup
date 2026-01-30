@@ -13,7 +13,7 @@ This guide helps you diagnose and resolve common issues with your HyperPod deplo
 | **Deployment** | EKS | Cannot access EKS cluster with kubectl | IAM identity not configured in EKS access entries | Add IAM identity to access entries, associate access policy | [Details](#cannot-access-eks-cluster-with-kubectl) |
 | **Deployment** | Common | SSM session not starting or getting error | SSM plugin not installed, wrong target format, incorrect region | Install SSM plugin, use HyperPod target format, verify region | [Details](#ssm-session-not-starting-or-getting-error) |
 | **Node Management** | Slurm | Node not responding / Slurm says node is "down" | Network issues, slurmd daemon stopped, resource exhaustion | Check connectivity, verify slurmd status, check memory/disk | [Details](#node-not-responding--slurm-says-node-is-down) |
-| **Node Management** | Slurm | When to restart slurmctld | Jobs stuck, nodes in wrong state, config changes, controller unresponsive | Restart slurmctld to re-sync state and apply changes | [Details](#when-to-restart-slurmctld) |
+| **Node Management** | Slurm | Jobs stuck in PENDING/COMPLETING, nodes in wrong state | Controller cache issues, stale state, communication problems | Restart slurmctld to re-sync state | [Details](#jobs-stuck-in-pendingcompleting-nodes-in-wrong-state) |
 | **Node Management** | Common | Node replacement not happening automatically | Auto-recovery disabled, capacity unavailable, quota limits | Check auto-recovery settings, verify capacity, review quotas | [Details](#node-replacement-not-happening-automatically) |
 | **Node Management** | Common | Node replacement not happening even after manual trigger | Wrong command syntax, cluster state, IAM permissions, capacity issues | Verify command syntax, check cluster state, review IAM permissions | [Details](#node-replacement-not-happening-even-after-manual-trigger) |
 | **Performance** | Common | NCCL timeouts | Network congestion, EFA issues, insufficient timeout value | Increase NCCL_TIMEOUT, verify EFA, check network connectivity | [Details](#nccl-timeouts) |
@@ -445,11 +445,11 @@ For easier SSM session management with HyperPod clusters, consider using the `hy
 
 ---
 
-### When to Restart slurmctld
+### Jobs Stuck in PENDING/COMPLETING, Nodes in Wrong State
 
 **Orchestrator**: Slurm
 
-**Issue**: Various Slurm controller issues that can be resolved by restarting the slurmctld daemon on the head node
+**Issue**: Jobs stuck in PENDING or COMPLETING state, nodes showing incorrect states, or Slurm controller not responding properly
 
 **Background**:
 The slurmctld (Slurm Central Control Daemon) manages job scheduling, resource allocation, and communication with compute nodes. By design, slurmctld saves state to disk and restores it upon restart, allowing maintenance without losing pending or running jobs. Restarting slurmctld is a common fix for various controller-related issues.
