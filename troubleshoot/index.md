@@ -6,6 +6,7 @@ This guide helps you diagnose and resolve common issues with your HyperPod deplo
 
 | Issue Category | Orchestrator | Subject (Symptom) | Reason | Resolution | Link to Details |
 |----------------|--------------|-------------------|--------|------------|-----------------|
+| **Deployment** | Common | CloudFormation deployment failed, need detailed error | Nested stack structure hides root cause errors | Navigate through nested stacks to find failed resource | [Details](#finding-detailed-cloudformation-error-messages) |
 | **Deployment** | Common | Cluster creation fails with capacity error | Insufficient capacity, wrong availability zone | Use Flexible Training Plans or reserved capacity, verify AZ matches reservation | [Details](#cluster-creation-failing-with-capacity-error) |
 | **Deployment** | Common | Cluster creation fails with lifecycle script error | Script syntax errors, missing dependencies, S3 access issues | Review CloudWatch logs, verify S3 access, check script syntax | [Details](#cluster-creation-failed-with-lifecycle-script-execution-error) |
 | **Deployment** | Common | EFA health checks did not run successfully | Missing security group self-referencing rule | Add outbound rule allowing all traffic to the security group itself | [Details](#efa-health-checks-did-not-run-successfully) |
@@ -91,6 +92,65 @@ This guide helps you diagnose and resolve common issues with your HyperPod deplo
      --cluster-name <cluster-name> \
      --node-ids <instance-id>
    ```
+
+---
+
+### Finding Detailed CloudFormation Error Messages
+
+**Orchestrator**: Common (Slurm, EKS)
+
+**Issue**: HyperPod cluster deployment via management console fails, but error message is not detailed enough to identify root cause
+
+**Background**:
+When you deploy a HyperPod cluster using the HyperPod management console, it creates a CloudFormation stack behind the scenes. This stack uses nested stacks to organize resources. The most relevant error message for the root cause is often buried in the nested stacks at the individual AWS resource level, not at the top-level stack.
+
+**Resolution Steps**:
+
+1. **Navigate to CloudFormation console**:
+   - Go to https://console.aws.amazon.com/cloudformation
+   - Ensure you're in the correct region where the cluster was being deployed
+
+2. **Find the HyperPod stack**:
+   - Look for a stack with a name related to your cluster
+   - The stack status will show as "CREATE_FAILED" or "ROLLBACK_COMPLETE"
+
+3. **Check the Events tab**:
+   - Click on the failed stack
+   - Go to the "Events" tab
+   - Look for events with status "CREATE_FAILED"
+   - Note: The error at this level may be generic like "Embedded stack failed"
+
+4. **Navigate to nested stacks**:
+   - In the "Resources" tab, look for resources of type "AWS::CloudFormation::Stack"
+   - These are nested stacks
+   - Click on the Physical ID (stack name) of any nested stack that shows "CREATE_FAILED" status
+   - This will open the nested stack in a new view
+
+5. **Drill down through nested stacks**:
+   - Repeat step 4 for each level of nesting
+   - Continue drilling down until you find a stack with no nested stacks, only AWS resources
+   - Look for the specific resource that failed (not another nested stack)
+
+6. **Find the failed resource**:
+   - In the deepest nested stack, go to the "Events" tab
+   - Look for the specific AWS resource that failed (e.g., AWS::EC2::Instance, AWS::IAM::Role, AWS::Lambda::Function)
+   - The "Status reason" column will show the detailed error message
+   - This is typically the most useful error message for troubleshooting
+
+7. **Common resource types and their errors**:
+   - **AWS::EC2::Instance**: Capacity errors, subnet issues, security group problems
+   - **AWS::IAM::Role**: Permission errors, trust relationship issues
+   - **AWS::Lambda::Function**: Execution errors, timeout issues
+   - **AWS::EC2::VPC**: CIDR conflicts, quota limits
+   - **Custom::Resource**: Lambda-backed custom resource errors (check Lambda logs)
+
+**Tips**:
+
+- **Use the search/filter**: In the Events tab, you can filter by "Failed" status to quickly find errors
+- **Check timestamps**: Look at the most recent failed events
+- **Multiple failures**: If multiple resources failed, start with the earliest failure - later failures may be cascading effects
+- **Custom resources**: If a Custom::Resource fails, check the associated Lambda function's CloudWatch logs for detailed error messages
+- **Copy error messages**: Copy the full error message for searching documentation or contacting support
 
 ---
 
