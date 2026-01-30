@@ -9,6 +9,7 @@ This guide helps you diagnose and resolve common issues with your HyperPod deplo
 | **Deployment** | Common | Cluster creation fails with lifecycle script error | Script syntax errors, missing dependencies, S3 access issues | Review CloudWatch logs, verify S3 access, check script syntax | [Details](#cluster-creation-failed-with-lifecycle-script-execution-error) |
 | **Deployment** | Common | EFA health checks did not run successfully | Missing security group self-referencing rule | Add outbound rule allowing all traffic to the security group itself | [Details](#efa-health-checks-did-not-run-successfully) |
 | **Deployment** | Common | Cluster is InService but not seeing instances | Continuous Provisioning mode behavior, instance creation failures | Check cluster events for instance creation status and errors | [Details](#cluster-is-inservice-status-but-not-seeing-instances) |
+| **Deployment** | Common | SSM session not starting or getting error | SSM plugin not installed, wrong target format, incorrect region | Install SSM plugin, use HyperPod target format, verify region | [Details](#ssm-session-not-starting-or-getting-error) |
 | **Node Management** | Slurm | Node not responding / Slurm says node is "down" | Network issues, slurmd daemon stopped, resource exhaustion | Check connectivity, verify slurmd status, check memory/disk | [Details](#node-not-responding--slurm-says-node-is-down) |
 | **Node Management** | Common | Node replacement not happening automatically | Auto-recovery disabled, capacity unavailable, quota limits | Check auto-recovery settings, verify capacity, review quotas | [Details](#node-replacement-not-happening-automatically) |
 | **Node Management** | Common | Node replacement not happening even after manual trigger | Wrong command syntax, cluster state, IAM permissions, capacity issues | Verify command syntax, check cluster state, review IAM permissions | [Details](#node-replacement-not-happening-even-after-manual-trigger) |
@@ -224,6 +225,102 @@ This is expected behavior when using Continuous Provisioning mode. In this mode:
 - Provides faster cluster availability for partial deployments
 - Requires monitoring cluster events and node status to track instance creation progress
 - Failed instances can be replaced individually without affecting the overall cluster status
+
+---
+
+### SSM Session Not Starting or Getting Error
+
+**Orchestrator**: Common (Slurm, EKS)
+
+**Issue**: Unable to start SSM session to HyperPod cluster nodes or receiving errors
+
+**Common Causes**:
+- SSM plugin not installed on development machine
+- Incorrect SSM target name format
+- Wrong AWS region configuration
+
+**Resolution Steps**:
+1. Install the AWS Systems Manager Session Manager plugin on your development machine:
+   - Follow the official installation guide: https://docs.aws.amazon.com/systems-manager/latest/userguide/session-manager-working-with-install-plugin.html
+   - Verify installation: `session-manager-plugin --version`
+
+2. Use the correct HyperPod-specific SSM target name format:
+   - **Standard format**: `sagemaker-cluster:<cluster-name>_<instance-group-name>-<instance-id>`
+   - **Example**: `sagemaker-cluster:my-cluster_worker-group-i-0abc123def456789`
+   - **Command**:
+     ```bash
+     aws ssm start-session --target sagemaker-cluster:<cluster-name>_<instance-group-name>-<instance-id>
+     ```
+   - **Note**: Do NOT use the EC2 instance ID directly (e.g., `i-0abc123def456789`) - you must use the HyperPod target format
+
+3. Verify the AWS region is correctly configured:
+   - Check your AWS CLI profile's default region:
+     ```bash
+     aws configure get region
+     ```
+   - Or set the region explicitly using environment variables:
+     ```bash
+     export AWS_REGION=us-west-2
+     export AWS_DEFAULT_REGION=us-west-2
+     ```
+   - Or specify region in the command:
+     ```bash
+     aws ssm start-session --target <target> --region us-west-2
+     ```
+   - Ensure the region matches where your HyperPod cluster is deployed
+
+4. Verify IAM permissions for SSM access:
+   - Your IAM user/role needs the following permissions:
+     - `ssm:StartSession`
+     - `sagemaker:DescribeCluster`
+     - `sagemaker:ListClusterNodes`
+   - The cluster nodes must have the SSM agent running and proper IAM role attached
+
+5. Check if the instance is running and accessible:
+   ```bash
+   aws sagemaker list-cluster-nodes --cluster-name <cluster-name>
+   ```
+   Verify the instance status is "Running" or "InService"
+
+6. Test connectivity with verbose output:
+   ```bash
+   aws ssm start-session --target <target> --debug
+   ```
+   Review the debug output for specific error messages
+
+**Common Error Messages**:
+- "Target is not connected": Instance may be stopped, SSM agent not running, or network connectivity issues
+- "Invalid target": Check the target name format is correct for HyperPod
+- "Access denied": Verify IAM permissions for both your user and the instance role
+- "Region not found": Ensure AWS region is correctly configured
+
+**SSH over SSM**:
+For SSH access using SSM as a transport:
+```bash
+ssh -i <key-file> <username>@<instance-id> \
+  -o ProxyCommand="aws ssm start-session --target sagemaker-cluster:<cluster-name>_<instance-group-name>-%h --document-name AWS-StartSSHSession"
+```
+
+You can also configure SSH to use SSM by adding entries to your SSH config file (`~/.ssh/config`):
+```
+Host my-cluster-controller
+  HostName sagemaker-cluster:abcdfe1234_controller-i-0abc123def456789
+  User ubuntu
+  IdentityFile ~/keys/my-key.pem
+  ProxyCommand aws --profile default --region us-west-2 ssm start-session --target %h --document-name AWS-StartSSHSession --parameters portNumber=%p
+```
+
+Then connect simply with:
+```bash
+ssh my-cluster-controller
+```
+
+**Helpful Tool**:
+For easier SSM session management with HyperPod clusters, consider using the `hyperpod_ssm` tool:
+- Repository: https://github.com/shimomut/sagemaker-solutions/tree/main/hyperpod_ssm
+- Simplifies SSM target name construction and session management
+- Provides convenient commands for listing nodes and starting sessions
+- Handles the HyperPod-specific target format automatically
 
 ---
 
