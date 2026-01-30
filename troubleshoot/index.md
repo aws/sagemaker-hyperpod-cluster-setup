@@ -693,7 +693,20 @@ For easier SSM session management with HyperPod clusters, consider using the `hy
 
 ---
 
-## (WIP) Getting Help
+## Getting Help
+
+### Collecting Diagnostic Data for Issue Reporting
+
+**Orchestrator**: Common (Slurm, EKS)
+
+When reporting issues to AWS Support, providing comprehensive diagnostic data helps expedite troubleshooting and resolution. 
+
+**Recommended Tool**:
+Use the `hyperpod_issue_report` tool to automatically collect relevant diagnostic information from your HyperPod cluster:
+- Repository: https://github.com/shimomut/sagemaker-solutions/tree/main/hyperpod_issue_report
+- Follow the instructions in the README for installation and usage
+
+---
 
 If you continue to experience issues:
 
