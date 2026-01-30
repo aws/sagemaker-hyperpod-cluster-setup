@@ -239,32 +239,35 @@ See the CloudFormation template at `eks/cloudformation/security-group-template.y
 **Issue**: Manual node replacement command fails or doesn't complete
 
 **Resolution Steps**:
-1. Verify the replacement command syntax:
+1. Use the recommended batch commands instead of legacy methods:
+   - **Recommended**: Use `batch-replace-cluster-nodes` or `batch-reboot-cluster-nodes` commands
+   - **Legacy methods** (not recommended): Setting node status in Slurm or node labels in Kubernetes
+   - The new batch commands provide clear success/failure messages indicating whether the service accepted the request
+2. Check HyperPod cluster node status:
+   - **Via AWS CLI**:
+     ```bash
+     aws sagemaker list-cluster-nodes --cluster-name <cluster-name>
+     ```
+   - **Via Management Console**: Navigate to https://console.aws.amazon.com/sagemaker/home#/cluster-management → Select your cluster → View node details
+   - Look for node health status, instance state, and any error messages
+3. Verify the replacement command syntax:
    ```bash
    aws sagemaker batch-replace-cluster-nodes \
      --cluster-name <cluster-name> \
      --node-ids <instance-id>
    ```
-2. Check the command output for error messages
-3. Verify the instance ID is correct and belongs to the cluster:
+4. Check the command output for error messages
+5. Verify the instance ID is correct and belongs to the cluster:
    ```bash
    aws sagemaker list-cluster-nodes --cluster-name <cluster-name>
    ```
-4. Ensure the cluster is in a state that allows node replacement (not in "Creating" or "Deleting" state)
-5. Check IAM permissions for the user/role executing the command:
-   - sagemaker:UpdateClusterSoftware (for batch operations)
-   - Required EC2 permissions
-6. Review CloudWatch logs for detailed error messages:
+6. Ensure the cluster is in a state that allows node replacement (not in "Creating" or "Deleting" state)
+7. Review CloudWatch logs for replacement attempts:
    - Log Group: `/aws/sagemaker/Clusters/<cluster-name>/<cluster-id>`
-7. Verify capacity is available for the instance type in the target availability zone
-8. Check for any service quotas or limits that might prevent instance launch
-9. If the command appears to hang, check the cluster node status:
-   ```bash
-   aws sagemaker list-cluster-nodes \
-     --cluster-name <cluster-name> \
-     --instance-group-name-contains <node-group-name>
-   ```
-10. Contact AWS Support if the issue persists with command output and CloudWatch logs
+   - Check for recent log streams from lifecycle scripts: `LifecycleConfig/<node-group-name>/<instance-id>`
+   - If lifecycle script fails during replacement, the new instance cannot be created and replacement will fail
+   - Look for error messages in the lifecycle script logs that might prevent successful node replacement
+8. Verify capacity is available for the instance type in the target availability zone
 
 ---
 
