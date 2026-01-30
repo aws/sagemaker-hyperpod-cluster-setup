@@ -6,6 +6,7 @@ This guide helps you diagnose and resolve common issues with your HyperPod deplo
 
 | Issue Category | Orchestrator | Subject (Symptom) | Reason | Resolution | Link to Details |
 |----------------|--------------|-------------------|--------|------------|-----------------|
+| **Deployment** | Common | Cluster creation fails with capacity error | Insufficient capacity, wrong availability zone | Use Flexible Training Plans or reserved capacity, verify AZ matches reservation | [Details](#cluster-creation-failing-with-capacity-error) |
 | **Deployment** | Common | Cluster creation fails with lifecycle script error | Script syntax errors, missing dependencies, S3 access issues | Review CloudWatch logs, verify S3 access, check script syntax | [Details](#cluster-creation-failed-with-lifecycle-script-execution-error) |
 | **Deployment** | Common | EFA health checks did not run successfully | Missing security group self-referencing rule | Add outbound rule allowing all traffic to the security group itself | [Details](#efa-health-checks-did-not-run-successfully) |
 | **Deployment** | Common | Cluster is InService but not seeing instances | Continuous Provisioning mode behavior, instance creation failures | Check cluster events for instance creation status and errors | [Details](#cluster-is-inservice-status-but-not-seeing-instances) |
@@ -87,6 +88,69 @@ This guide helps you diagnose and resolve common issues with your HyperPod deplo
      --cluster-name <cluster-name> \
      --node-ids <instance-id>
    ```
+
+---
+
+### Cluster Creation Failing with Capacity Error
+
+**Orchestrator**: Common (Slurm, EKS)
+
+**Issue**: Cluster creation fails with insufficient capacity error
+
+**Common Error Messages**:
+- "Insufficient capacity"
+- "We currently do not have sufficient capacity in the Availability Zone you requested"
+- "Cannot provision requested instances"
+
+**Background**:
+Depending on the instance type, region, and availability zone you choose, it can be challenging to allocate requested capacity on-demand, especially for large instance types (p4d, p5, etc.). Additionally, on-demand instances are not necessarily allocated in close proximity, which can impact network performance for distributed training workloads.
+
+**Capacity Reservation Options**:
+
+HyperPod supports three options for securing compute capacity:
+
+**1. On-Demand Instances**
+- **Best for**: Small instance types, short-term usage, experimental workloads
+- **Pros**: No upfront commitment, immediate availability for common instance types
+- **Cons**: 
+  - Not guaranteed for large instance types
+  - Instances may not be in close proximity (suboptimal network topology)
+  - Not recommended for production workloads
+  - Higher cost compared to reserved options
+
+**2. Flexible Training Plans**
+- **Best for**: Medium to large workloads with predictable schedules
+- **How it works**: 
+  - Query available capacity by instance type, instance count, and desired schedule
+  - Self-service purchase at discounted prices
+  - Capacity duration up to 180 days
+- **Pros**: 
+  - Guaranteed capacity for the reserved period
+  - Discounted pricing compared to on-demand
+  - Better network topology (instances allocated together)
+- **Cons**: Requires planning ahead and commitment
+
+**3. Reserved Capacity via AWS Account Team**
+- **Best for**: Large-scale, long-term capacity needs
+- **How it works**: Contact your AWS account team to reserve capacity
+- **Pros**: 
+  - Best option for large or long-term capacity reservations
+  - Guaranteed capacity and optimal placement
+  - Customized solutions for specific requirements
+- **Cons**: Requires engagement with account team and longer lead time
+
+**Resolution Steps**:
+
+1. **If using On-Demand and facing capacity errors**:
+   - Consider switching to Flexible Training Plans for guaranteed capacity
+   - Try different availability zones within your region
+   - Consider smaller instance types or fewer instances
+   - Contact your AWS account team for capacity reservation options
+
+2. **If using Flexible Training Plans or Reserved Capacity and still facing errors**:
+   - **Verify the availability zone**: Ensure your instance group configuration specifies the correct availability zone where capacity was reserved
+   - Verify the subnet ID corresponds to the availability zone where capacity was reserved
+   - Contact your AWS account team to confirm the reservation details
 
 ---
 
