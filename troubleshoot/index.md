@@ -21,7 +21,6 @@ This guide helps you diagnose and resolve common issues with your HyperPod deplo
 | **GPU** | Common | Suspecting GPU failure | Hardware failure, ECC errors, thermal throttling | Run nvidia-smi diagnostics, check ECC errors, drain node | [Details](#suspecting-gpu-failure) |
 | **GPU** | Common | GPUs not getting released | Zombie processes, stuck jobs, slurmd issues | Kill lingering processes, restart slurmd, reboot if needed | [Details](#gpus-are-not-getting-released) |
 | **GPU** | Common | EFA/NCCL/CUDA/driver version mismatch | Incompatible versions, host/container mismatch | Check version compatibility, rebuild containers with matching versions | [Details](#efanclccudanvidia-driver-version-mismatch) |
-| **GPU** | Common | Host and container environment mismatch | Different CUDA versions, missing EFA mounts | Mount EFA libraries, verify device access, match versions | [Details](#mismatch-between-host-environment-and-container-environment) |
 | **IAM** | Common | Execution role permissions invalid | Missing policies, incorrect trust relationship, SCPs | Verify IAM policies, check trust relationships, validate permissions | [Details](#iam-permission-errors) |
 
 ## Troubleshooting Details
@@ -440,24 +439,33 @@ For easier SSM session management with HyperPod clusters, consider using the `hy
 
 ## GPU and Accelerator Issues
 
-### (WIP) Suspecting GPU Failure
+### Suspecting GPU Failure
 
 **Orchestrator**: Common (Slurm, EKS)
 
 **Issue**: Training jobs fail or produce incorrect results, GPU errors in logs
 
+**Common Symptoms**:
+- CUDA errors in application logs
+- Training produces NaN or incorrect results
+- GPU memory errors or allocation failures
+- System crashes during GPU-intensive operations
+
 **Diagnostic Steps**:
-1. Run GPU diagnostics: `nvidia-smi -q` and check for errors
-2. Run memory test: `nvidia-smi --query-gpu=memory.total,memory.used,memory.free --format=csv`
-3. Check GPU temperature and throttling: `nvidia-smi dmon -s pucvmet`
-4. Run CUDA samples or DCGM diagnostics if available
-5. Check for ECC errors: `nvidia-smi -q | grep -A 5 "ECC Errors"`
-6. Review application logs for CUDA errors
+1. Check GPU status and errors using `nvidia-smi -q`
+2. Look for ECC errors that indicate hardware issues
+3. Monitor GPU temperature and throttling behavior
+4. Run comprehensive GPU stress tests to validate hardware
 
 **Resolution Steps**:
-- If GPU shows errors, drain the node: `scontrol update nodename=<node-name> state=drain reason="GPU failure"`
-- Contact AWS support for hardware replacement
-- Document GPU serial number and error details for support case
+1. If GPU shows errors, drain the node from the scheduler
+2. Run thorough diagnostics to confirm hardware failure
+3. Document GPU serial number and error details
+4. Contact AWS Support for hardware replacement
+5. Replace the node once new hardware is available
+
+**Detailed Guides**:
+- GPU Stress Testing: https://awslabs.github.io/ai-on-sagemaker-hyperpod/docs/validation-and-testing/performance-testing/gpu-stress-testing
 
 ---
 
@@ -477,7 +485,7 @@ For easier SSM session management with HyperPod clusters, consider using the `hy
 
 ---
 
-### (WIP) EFA/NCCL/CUDA/Nvidia Driver Version Mismatch
+### EFA/NCCL/CUDA/Nvidia Driver Version Mismatch
 
 **Orchestrator**: Common (Slurm, EKS)
 
@@ -488,47 +496,32 @@ For easier SSM session management with HyperPod clusters, consider using the `hy
 - EFA device not found errors
 - Unexpected performance drops
 - Segmentation faults during distributed training
+- Training works on host but fails in container, or vice versa
+
+**Common Causes**:
+- Incompatible versions between CUDA, NCCL, EFA, and drivers
+- Mismatch between host and container environments
+- Missing or incorrectly mounted EFA libraries in containers
+- Different PyTorch/TensorFlow versions between host and container
+
+**Diagnostic Steps**:
+1. Check installed versions of CUDA, NCCL, EFA, and Nvidia drivers
+2. Verify compatibility between all components using AWS documentation
+3. Compare versions between host and container environments
+4. Check if EFA libraries are properly mounted in containers
 
 **Resolution Steps**:
-1. Check installed versions:
-   ```bash
-   nvidia-smi  # Driver version
-   nvcc --version  # CUDA version
-   cat /opt/amazon/efa/lib/libfabric/version  # EFA version
-   python -c "import torch; print(torch.cuda.nccl.version())"  # NCCL version
-   ```
-2. Verify compatibility matrix in AWS documentation
-3. Check for mismatches between host and container environments:
-   ```bash
-   # On host
-   nvidia-smi
-   # In container
-   docker exec <container> nvidia-smi
-   ```
-4. Ensure container has proper device mounts and environment variables
-5. Rebuild containers with matching versions if needed
-6. Update drivers/libraries to compatible versions
+1. Run comprehensive environment validation tests
+2. Ensure EFA libraries and devices are properly mounted in containers
+3. Verify LD_LIBRARY_PATH includes all required libraries
+4. Match PyTorch/TensorFlow versions between host and container
+5. Rebuild containers with compatible versions if needed
+6. Update drivers and libraries to compatible versions
 
----
-
-### (WIP) Mismatch Between Host Environment and Container Environment
-
-**Orchestrator**: Common (Slurm, EKS)
-
-**Issue**: Training works on host but fails in container, or vice versa
-
-**Resolution Steps**:
-1. Compare CUDA versions: host vs container
-2. Verify EFA libraries are mounted into container:
-   ```bash
-   docker run --device=/dev/infiniband/uverbs0 \
-     -v /opt/amazon/efa:/opt/amazon/efa \
-     -v /opt/amazon/openmpi:/opt/amazon/openmpi
-   ```
-3. Check LD_LIBRARY_PATH includes EFA libraries in container
-4. Ensure NCCL plugin for EFA is available in container
-5. Verify GPU device access: `--gpus all` or `--runtime=nvidia`
-6. Match PyTorch/TensorFlow versions between environments
+**Detailed Guides**:
+- PyTorch Environment Validation: https://awslabs.github.io/ai-on-sagemaker-hyperpod/docs/validation-and-testing/environment-validation/pytorch-environment-validation
+- EFA and Network Stack Validation: https://awslabs.github.io/ai-on-sagemaker-hyperpod/docs/validation-and-testing/environment-validation/efa-validation
+- Troubleshoot NCCL and CUDA: https://awslabs.github.io/ai-on-sagemaker-hyperpod/docs/validation-and-testing/nccl-cuda-validation/Troubleshoot%20NCCL%20and%20CUDA
 
 ---
 
@@ -560,7 +553,7 @@ For easier SSM session management with HyperPod clusters, consider using the `hy
 
 ## Performance Issues
 
-### (WIP) NCCL Timeouts
+### NCCL Timeouts
 
 **Orchestrator**: Common (Slurm, EKS)
 
@@ -571,39 +564,52 @@ For easier SSM session management with HyperPod clusters, consider using the `hy
 - "NCCL communicator was aborted"
 - "Net/IB : Got completion with error"
 
+**Diagnostic Steps**:
+1. Enable NCCL debug logging to identify where timeouts occur
+2. Verify EFA adapters are working on all nodes
+3. Test network connectivity between node pairs
+4. Check for security group restrictions blocking inter-node traffic
+
 **Resolution Steps**:
-1. Increase NCCL timeout: `export NCCL_TIMEOUT=3600` (default is 1800 seconds)
-2. Enable NCCL debug logging: `export NCCL_DEBUG=INFO`
-3. Verify EFA is being used: `export FI_EFA_USE_DEVICE_RDMA=1`
-4. Check network connectivity between nodes: `fi_pingpong -p efa`
-5. Verify all nodes have working EFA adapters: `fi_info -p efa`
-6. Check for network congestion or packet loss
-7. Ensure security groups allow all traffic between compute nodes
-8. Try reducing batch size or number of workers if memory pressure exists
+1. Increase NCCL timeout value if operations legitimately need more time
+2. Verify EFA is properly configured and being used
+3. Check and fix security group rules to allow all traffic between nodes
+4. Run NCCL performance tests to validate network performance
+5. Reduce batch size or adjust parallelism if memory pressure exists
+
+**Detailed Guides**:
+- NCCL Performance Tests: https://awslabs.github.io/ai-on-sagemaker-hyperpod/docs/validation-and-testing/performance-testing/nccl-tests
+- Troubleshoot NCCL and CUDA: https://awslabs.github.io/ai-on-sagemaker-hyperpod/docs/validation-and-testing/nccl-cuda-validation/Troubleshoot%20NCCL%20and%20CUDA
 
 ---
 
-### (WIP) Uneven NCCL Performance Depending on the Set of Nodes
+### Uneven NCCL Performance Depending on the Set of Nodes
 
 **Orchestrator**: Common (Slurm, EKS)
 
 **Issue**: Training performance varies significantly based on which nodes are allocated
 
+**Common Causes**:
+- Network topology differences between nodes
+- Degraded EFA performance on some nodes
+- Mixed instance types or generations
+- CPU frequency scaling differences
+
+**Diagnostic Steps**:
+1. Check network topology using `nvidia-smi topo -m`
+2. Verify EFA configuration is consistent across all nodes
+3. Run bandwidth tests between node pairs to identify slow links
+4. Check for mixed instance types or generations in the allocation
+
 **Resolution Steps**:
-1. Check for network topology differences: `nvidia-smi topo -m`
-2. Verify all nodes have same EFA configuration: `fi_info -p efa`
-3. Check for nodes with degraded EFA performance:
-   ```bash
-   # Run EFA bandwidth test between node pairs
-   # On node 1: efa_test -s
-   # On node 2: efa_test -c <node1-ip>
-   ```
-4. Look for nodes with different instance generations or types
-5. Check CPU frequency scaling: `cat /proc/cpuinfo | grep MHz`
-6. Verify NCCL is using optimal algorithm: `export NCCL_ALGO=Ring` or `Tree`
-7. Enable NCCL tuning: `export NCCL_TUNER_PLUGIN=libnccl-tuner.so`
-8. Drain and investigate underperforming nodes
-9. Consider using placement groups for consistent network performance
+1. Run comprehensive NCCL performance tests to identify underperforming nodes
+2. Verify all nodes have the same EFA configuration
+3. Drain and investigate nodes with degraded performance
+4. Use placement groups to ensure consistent network topology
+5. Enable NCCL tuning for optimal algorithm selection
+
+**Detailed Guides**:
+- NCCL Performance Tests: https://awslabs.github.io/ai-on-sagemaker-hyperpod/docs/validation-and-testing/performance-testing/nccl-tests
 
 ---
 
@@ -715,8 +721,9 @@ If you continue to experience issues:
 3. **AWS Support**: Open a support case with relevant logs and error messages
 4. **GitHub Issues**: Report bugs or request features in the project repository
 
-## (WIP) Additional Resources
+## Additional Resources
 
 - [AWS HyperPod Documentation](https://docs.aws.amazon.com/sagemaker/latest/dg/sagemaker-hyperpod.html)
 - [EKS Troubleshooting Guide](https://docs.aws.amazon.com/eks/latest/userguide/troubleshooting.html)
 - [Slurm Documentation](https://slurm.schedmd.com/documentation.html)
+- [NCCOM Tests for Trainium Instances](https://awslabs.github.io/ai-on-sagemaker-hyperpod/docs/validation-and-testing/performance-testing/nccom-tests)
