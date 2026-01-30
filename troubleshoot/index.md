@@ -8,7 +8,6 @@ This guide helps you diagnose and resolve common issues with your HyperPod deplo
 |----------------|-------------------|--------|------------|-----------------|
 | **Deployment** | Cluster creation fails with lifecycle script error | Script syntax errors, missing dependencies, S3 access issues | Review CloudWatch logs, verify S3 access, check script syntax | [Details](#cluster-creation-failed-with-lifecycle-script-execution-error) |
 | **Deployment** | EFA health checks did not run successfully | Missing security group self-referencing rule | Add outbound rule allowing all traffic to the security group itself | [Details](#efa-health-checks-did-not-run-successfully) |
-| **Networking** | FSx filesystem cannot be mounted | FSx not available, security group rules, DNS issues | Verify FSx state, check security groups (port 988), enable VPC DNS | [Details](#fsx-for-lustre-connection-problems) |
 | **Networking** | Resources cannot communicate | Security group rules, route tables, NAT/IGW issues | Verify security groups, check route tables, validate DNS settings | [Details](#vpc-and-networking) |
 | **Node Management** | Node not responding | Network issues, slurmd daemon stopped, resource exhaustion | Check connectivity, verify slurmd status, check memory/disk | [Details](#node-not-responding) |
 | **Node Management** | Slurm says node is "down" | slurmd not running, network issues, manual drain | Check slurmd status, verify connectivity, resume node state | [Details](#slurm-says-node-is-down) |
@@ -35,37 +34,7 @@ This guide helps you diagnose and resolve common issues with your HyperPod deplo
 
 ## EKS-based Deployments
 
-### FSx for Lustre Connection Problems
-
-**Issue**: Pods cannot mount FSx filesystem
-
-**Resolution Steps**:
-1. Verify FSx filesystem is in "Available" state
-2. Check security group rules allow NFS traffic (port 988)
-3. Confirm VPC DNS resolution is enabled
-4. Validate FSx mount targets are in correct subnets
-
 ## Slurm-based Deployments
-
-### HyperPod Cluster Creation Failures
-
-**Issue**: SageMaker HyperPod cluster fails to create
-
-**Resolution Steps**:
-1. Check SageMaker console for cluster status and error messages
-2. Verify lifecycle scripts are accessible in S3
-3. Confirm instance types are available in selected region/AZ
-4. Review VPC and subnet configuration
-
-### Node Registration Issues
-
-**Issue**: Compute nodes fail to join Slurm cluster
-
-**Resolution Steps**:
-1. SSH to head node and check Slurm controller logs: `sudo journalctl -u slurmctld`
-2. Verify network connectivity between head and compute nodes
-3. Check `/var/log/slurm/` for detailed error logs
-4. Confirm security groups allow required Slurm ports (6817-6819)
 
 ### Node Not Responding
 
