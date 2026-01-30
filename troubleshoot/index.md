@@ -21,7 +21,6 @@ This guide helps you diagnose and resolve common issues with your HyperPod deplo
 | **GPU** | Common | EFA/NCCL/CUDA/driver version mismatch | Incompatible versions, host/container mismatch | Check version compatibility, rebuild containers with matching versions | [Details](#efanclccudanvidia-driver-version-mismatch) |
 | **GPU** | Common | Host and container environment mismatch | Different CUDA versions, missing EFA mounts | Mount EFA libraries, verify device access, match versions | [Details](#mismatch-between-host-environment-and-container-environment) |
 | **IAM** | Common | Execution role permissions invalid | Missing policies, incorrect trust relationship, SCPs | Verify IAM policies, check trust relationships, validate permissions | [Details](#iam-permission-errors) |
-| **Lambda** | EKS | Custom resource Lambda timeout | Insufficient timeout, network issues, code bottlenecks | Increase timeout, check CloudWatch logs, verify VPC access | [Details](#lambda-function-timeouts) |
 
 ## Troubleshooting Details
 
@@ -405,20 +404,6 @@ See the CloudFormation template at `eks/cloudformation/security-group-template.y
   - FSx access if using shared filesystem
 - Ensure role ARN is correctly specified in cluster configuration
 - Check if role was recently created (may need a few minutes to propagate)
-
----
-
-### Lambda Function Timeouts
-
-**Orchestrator**: EKS
-
-**Issue**: Custom resource Lambda functions timeout
-
-**Resolution Steps**:
-1. Increase Lambda timeout in CloudFormation template
-2. Check Lambda function logs in CloudWatch
-3. Verify Lambda has network access (VPC configuration if needed)
-4. Review function code for performance bottlenecks
 
 ---
 
