@@ -8,8 +8,7 @@ This guide helps you diagnose and resolve common issues with your HyperPod deplo
 |----------------|-------------------|--------|------------|-----------------|
 | **Deployment** | Cluster creation fails with lifecycle script error | Script syntax errors, missing dependencies, S3 access issues | Review CloudWatch logs, verify S3 access, check script syntax | [Details](#cluster-creation-failed-with-lifecycle-script-execution-error) |
 | **Deployment** | EFA health checks did not run successfully | Missing security group self-referencing rule | Add outbound rule allowing all traffic to the security group itself | [Details](#efa-health-checks-did-not-run-successfully) |
-| **Node Management** | Node not responding | Network issues, slurmd daemon stopped, resource exhaustion | Check connectivity, verify slurmd status, check memory/disk | [Details](#node-not-responding) |
-| **Node Management** | Slurm says node is "down" | slurmd not running, network issues, manual drain | Check slurmd status, verify connectivity, resume node state | [Details](#slurm-says-node-is-down) |
+| **Node Management** | Node not responding / Slurm says node is "down" | Network issues, slurmd daemon stopped, resource exhaustion | Check connectivity, verify slurmd status, check memory/disk | [Details](#node-not-responding--slurm-says-node-is-down) |
 | **Node Management** | Node replacement not happening | Auto-recovery disabled, capacity unavailable, quota limits | Check auto-recovery settings, verify capacity, review quotas | [Details](#node-replacement-not-happening) |
 | **Performance** | NCCL timeouts | Network congestion, EFA issues, insufficient timeout value | Increase NCCL_TIMEOUT, verify EFA, check network connectivity | [Details](#nccl-timeouts) |
 | **Performance** | Uneven NCCL performance across nodes | Network topology differences, degraded EFA, instance variations | Check EFA bandwidth, verify instance types, use placement groups | [Details](#uneven-nccl-performance-depending-on-the-set-of-nodes) |
@@ -35,7 +34,7 @@ This guide helps you diagnose and resolve common issues with your HyperPod deplo
 
 ## Slurm-based Deployments
 
-### Node Not Responding
+### Node Not Responding / Slurm Says Node is "Down"
 
 **Issue**: Slurm node becomes unresponsive or shows as "down"
 
@@ -95,20 +94,6 @@ This guide helps you diagnose and resolve common issues with your HyperPod deplo
      --cluster-name <cluster-name> \
      --node-ids <instance-id>
    ```
-
----
-
-### Slurm Says Node is "Down"
-
-**Issue**: Node shows as "down" in Slurm even though it's running
-
-**Resolution Steps**:
-1. Check why node is down: `scontrol show node <node-name> | grep Reason`
-2. Verify slurmd is running on the node: `sudo systemctl status slurmd`
-3. Check network connectivity from head node to compute node
-4. Review slurmd logs on the compute node: `sudo journalctl -u slurmd -n 100`
-5. Clear the down state: `scontrol update nodename=<node-name> state=resume reason="manual recovery"`
-6. If issue persists, restart slurmd: `sudo systemctl restart slurmd`
 
 ---
 
