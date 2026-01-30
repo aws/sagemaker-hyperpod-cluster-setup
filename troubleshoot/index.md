@@ -290,7 +290,7 @@ See the CloudFormation template at `eks/cloudformation/security-group-template.y
 
 ## GPU and Accelerator Issues
 
-### Suspecting GPU Failure
+### (WIP) Suspecting GPU Failure
 
 **Orchestrator**: Common (Slurm, EKS)
 
@@ -311,7 +311,7 @@ See the CloudFormation template at `eks/cloudformation/security-group-template.y
 
 ---
 
-### GPUs Are Not Getting Released
+### (WIP) GPUs Are Not Getting Released
 
 **Orchestrator**: Common (Slurm, EKS)
 
@@ -327,7 +327,7 @@ See the CloudFormation template at `eks/cloudformation/security-group-template.y
 
 ---
 
-### EFA/NCCL/CUDA/Nvidia Driver Version Mismatch
+### (WIP) EFA/NCCL/CUDA/Nvidia Driver Version Mismatch
 
 **Orchestrator**: Common (Slurm, EKS)
 
@@ -361,7 +361,7 @@ See the CloudFormation template at `eks/cloudformation/security-group-template.y
 
 ---
 
-### Mismatch Between Host Environment and Container Environment
+### (WIP) Mismatch Between Host Environment and Container Environment
 
 **Orchestrator**: Common (Slurm, EKS)
 
@@ -384,7 +384,7 @@ See the CloudFormation template at `eks/cloudformation/security-group-template.y
 
 ## Common Issues
 
-### IAM Permission Errors
+### (WIP) IAM Permission Errors
 
 **Orchestrator**: Common (Slurm, EKS)
 
@@ -424,7 +424,7 @@ See the CloudFormation template at `eks/cloudformation/security-group-template.y
 
 ## Performance Issues
 
-### NCCL Timeouts
+### (WIP) NCCL Timeouts
 
 **Orchestrator**: Common (Slurm, EKS)
 
@@ -447,7 +447,7 @@ See the CloudFormation template at `eks/cloudformation/security-group-template.y
 
 ---
 
-### Uneven NCCL Performance Depending on the Set of Nodes
+### (WIP) Uneven NCCL Performance Depending on the Set of Nodes
 
 **Orchestrator**: Common (Slurm, EKS)
 
@@ -471,7 +471,7 @@ See the CloudFormation template at `eks/cloudformation/security-group-template.y
 
 ---
 
-### Poor Filesystem Performance
+### (WIP) Poor Filesystem Performance
 
 **Orchestrator**: Common (Slurm, EKS)
 
@@ -498,7 +498,7 @@ See the CloudFormation template at `eks/cloudformation/security-group-template.y
 
 ---
 
-### Multi-process DataLoader Raises "OSError: [Errno 12] Cannot Allocate Memory" Error
+### (WIP) Multi-process DataLoader Raises "OSError: [Errno 12] Cannot Allocate Memory" Error
 
 **Orchestrator**: Common (Slurm, EKS)
 
@@ -530,7 +530,7 @@ See the CloudFormation template at `eks/cloudformation/security-group-template.y
 
 ---
 
-### FI_EFA_USE_HUGE_PAGE=0 Has to Be Set
+### (WIP) FI_EFA_USE_HUGE_PAGE=0 Has to Be Set
 
 **Orchestrator**: Common (Slurm, EKS)
 
@@ -557,7 +557,7 @@ See the CloudFormation template at `eks/cloudformation/security-group-template.y
 
 ---
 
-## Getting Help
+## (WIP) Getting Help
 
 If you continue to experience issues:
 
@@ -566,7 +566,7 @@ If you continue to experience issues:
 3. **AWS Support**: Open a support case with relevant logs and error messages
 4. **GitHub Issues**: Report bugs or request features in the project repository
 
-## Additional Resources
+## (WIP) Additional Resources
 
 - [AWS HyperPod Documentation](https://docs.aws.amazon.com/sagemaker/latest/dg/sagemaker-hyperpod.html)
 - [EKS Troubleshooting Guide](https://docs.aws.amazon.com/eks/latest/userguide/troubleshooting.html)
