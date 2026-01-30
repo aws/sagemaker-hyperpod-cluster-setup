@@ -711,7 +711,12 @@ HyperPod provides alternative storage locations that you should use instead of t
    - High-performance parallel filesystem
    - Persistent storage shared across all nodes
 
-4. **Amazon S3**
+4. **FSx for OpenZFS Filesystem**
+   - Shared across all cluster nodes
+   - High-performance filesystem with snapshots and cloning capabilities
+   - Persistent storage shared across all nodes
+
+5. **Amazon S3**
    - Object storage for large datasets
    - Fully persistent and durable
 
