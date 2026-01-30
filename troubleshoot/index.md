@@ -189,7 +189,15 @@ See the CloudFormation template at `eks/cloudformation/security-group-template.y
    ```
    Look for the auto-recovery configuration
 2. Verify cluster is not in a failed state that prevents recovery
-3. Check if HyperPod's health monitoring agent detected an issue and triggered resiliency actions:
+3. Check cluster events for auto-recovery information:
+   - **Via Management Console**: Navigate to https://console.aws.amazon.com/sagemaker/home#/cluster-management → Select your cluster → Events tab
+   - **Via AWS CLI**:
+     ```bash
+     aws sagemaker list-cluster-events --cluster-name <cluster-name>
+     ```
+   - Look for events related to node health, replacement attempts, and any failures
+   - **Note**: Cluster events are available for HyperPod EKS. For HyperPod Slurm, this feature is not yet available as of January 2026
+4. Check if HyperPod's health monitoring agent detected an issue and triggered resiliency actions:
    - **Check CloudWatch Logs for health monitoring agent**:
      - Log Group: `/aws/sagemaker/Clusters/<cluster-name>/<cluster-id>`
      - Log Stream: `SagemakerHealthMonitoringAgent/<node-group-name>/<instance-id>`
@@ -210,13 +218,13 @@ See the CloudFormation template at `eks/cloudformation/security-group-template.y
      - `sagemaker.amazonaws.com/node-health-status: UnschedulablePendingReboot` - Node is marked for reboot
      
      See: https://docs.aws.amazon.com/sagemaker/latest/dg/sagemaker-hyperpod-eks-resiliency-node-labels.html
-4. Review CloudWatch logs for auto-recovery attempts:
+5. Review CloudWatch logs for auto-recovery attempts:
    - Log Group: `/aws/sagemaker/Clusters/<cluster-name>/<cluster-id>`
    - Check for recent log streams from lifecycle scripts: `LifecycleConfig/<node-group-name>/<instance-id>`
    - If lifecycle script fails during auto-recovery, the new instance cannot be created and auto-recovery will fail
    - Look for error messages in the lifecycle script logs that might prevent successful node replacement
-5. Confirm capacity is available for replacement instances in the selected availability zones
-6. If you need to immediately recover from the failed instance, trigger manual reboot or replacement:
+6. Confirm capacity is available for replacement instances in the selected availability zones
+7. If you need to immediately recover from the failed instance, trigger manual reboot or replacement:
    - **Manual reboot**:
      ```bash
      aws sagemaker batch-reboot-cluster-nodes \
@@ -250,24 +258,33 @@ See the CloudFormation template at `eks/cloudformation/security-group-template.y
      ```
    - **Via Management Console**: Navigate to https://console.aws.amazon.com/sagemaker/home#/cluster-management → Select your cluster → View node details
    - Look for node health status, instance state, and any error messages
-3. Verify the replacement command syntax:
+3. Check cluster events for replacement information:
+   - **Via Management Console**: Navigate to https://console.aws.amazon.com/sagemaker/home#/cluster-management → Select your cluster → Events tab
+   - **Via AWS CLI**:
+     ```bash
+     aws sagemaker list-cluster-events --cluster-name <cluster-name>
+     ```
+   - Look for events related to the replacement request, node status changes, and any error messages
+   - **Note**: Cluster events are available for HyperPod EKS. For HyperPod Slurm, this feature is not yet available as of January 2026
+4. Verify the replacement command syntax:
    ```bash
    aws sagemaker batch-replace-cluster-nodes \
      --cluster-name <cluster-name> \
      --node-ids <instance-id>
    ```
-4. Check the command output for error messages
-5. Verify the instance ID is correct and belongs to the cluster:
+5. Check the command output for error messages
+6. Verify the instance ID is correct and belongs to the cluster:
    ```bash
    aws sagemaker list-cluster-nodes --cluster-name <cluster-name>
    ```
-6. Ensure the cluster is in a state that allows node replacement (not in "Creating" or "Deleting" state)
+7. Ensure the cluster is in a state that allows node replacement (not in "Creating" or "Deleting" state)
+8. Review CloudWatch logs for replacement attempts:
 7. Review CloudWatch logs for replacement attempts:
    - Log Group: `/aws/sagemaker/Clusters/<cluster-name>/<cluster-id>`
    - Check for recent log streams from lifecycle scripts: `LifecycleConfig/<node-group-name>/<instance-id>`
    - If lifecycle script fails during replacement, the new instance cannot be created and replacement will fail
    - Look for error messages in the lifecycle script logs that might prevent successful node replacement
-8. Verify capacity is available for the instance type in the target availability zone
+9. Verify capacity is available for the instance type in the target availability zone
 
 ---
 
