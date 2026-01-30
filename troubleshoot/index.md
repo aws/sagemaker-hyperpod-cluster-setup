@@ -23,7 +23,6 @@ This guide helps you diagnose and resolve common issues with your HyperPod deplo
 | **Performance** | Common | Poor filesystem performance | Insufficient throughput, wrong volume type, I/O bottleneck | Check filesystem metrics, increase throughput, optimize data loading | [Details](#poor-filesystem-performance) |
 | **Memory** | Common | "Cannot allocate memory" at os.fork() | Insufficient shared memory, huge pages not configured for EFA | Set FI_EFA_USE_HUGE_PAGE=0, increase --shm-size, reduce num_workers | [Details](#cannot-allocate-memory-error-at-osfork) |
 | **GPU** | Common | Suspecting GPU failure | Hardware failure, ECC errors, thermal throttling | Run nvidia-smi diagnostics, check ECC errors, drain node | [Details](#suspecting-gpu-failure) |
-| **GPU** | Common | GPUs not getting released | Zombie processes, stuck jobs, slurmd issues | Kill lingering processes, restart slurmd, reboot if needed | [Details](#gpus-are-not-getting-released) |
 | **GPU** | Common | EFA/NCCL/CUDA/driver version mismatch | Incompatible versions, host/container mismatch | Check version compatibility, rebuild containers with matching versions | [Details](#efanclccudanvidia-driver-version-mismatch) |
 | **Storage** | Common | Root volume exhausted, need to expand | Root volume limited to 100GB, cannot be expanded | Use secondary EBS (/opt/sagemaker), NVMe (/opt/dlami/nvme), FSx, or S3 | [Details](#root-volume-exhausted-how-to-expand-storage) |
 | **Utilities** | Slurm | Need to find instance ID from node name | Node names use IP format, AWS operations need instance ID | Query resource_config.json or use HyperPod APIs | [Details](#how-to-identify-instance-id-from-slurm-node-name) |
@@ -835,22 +834,6 @@ The slurmctld (Slurm Central Control Daemon) manages job scheduling, resource al
 
 **Detailed Guides**:
 - GPU Stress Testing: https://awslabs.github.io/ai-on-sagemaker-hyperpod/docs/validation-and-testing/performance-testing/gpu-stress-testing
-
----
-
-### (WIP) GPUs Are Not Getting Released
-
-**Orchestrator**: Common (Slurm, EKS)
-
-**Issue**: GPUs remain allocated after job completion
-
-**Resolution Steps**:
-1. Check for zombie processes: `nvidia-smi` and look for lingering processes
-2. Kill stuck processes: `sudo kill -9 <PID>`
-3. Check Slurm job status: `squeue -u <username>` and `sacct -j <job-id>`
-4. If job shows as completed but GPU is held, restart slurmd: `sudo systemctl restart slurmd`
-5. Clear GPU memory: `sudo fuser -v /dev/nvidia*` then kill processes
-6. As last resort, reboot the node
 
 ---
 
