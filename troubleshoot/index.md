@@ -8,6 +8,7 @@ This guide helps you diagnose and resolve common issues with your HyperPod deplo
 |----------------|--------------|-------------------|--------|------------|-----------------|
 | **Deployment** | Common | Cluster creation fails with lifecycle script error | Script syntax errors, missing dependencies, S3 access issues | Review CloudWatch logs, verify S3 access, check script syntax | [Details](#cluster-creation-failed-with-lifecycle-script-execution-error) |
 | **Deployment** | Common | EFA health checks did not run successfully | Missing security group self-referencing rule | Add outbound rule allowing all traffic to the security group itself | [Details](#efa-health-checks-did-not-run-successfully) |
+| **Deployment** | Common | Cluster is InService but not seeing instances | Continuous Provisioning mode behavior, instance creation failures | Check cluster events for instance creation status and errors | [Details](#cluster-is-inservice-status-but-not-seeing-instances) |
 | **Node Management** | Slurm | Node not responding / Slurm says node is "down" | Network issues, slurmd daemon stopped, resource exhaustion | Check connectivity, verify slurmd status, check memory/disk | [Details](#node-not-responding--slurm-says-node-is-down) |
 | **Node Management** | Common | Node replacement not happening automatically | Auto-recovery disabled, capacity unavailable, quota limits | Check auto-recovery settings, verify capacity, review quotas | [Details](#node-replacement-not-happening-automatically) |
 | **Node Management** | Common | Node replacement not happening even after manual trigger | Wrong command syntax, cluster state, IAM permissions, capacity issues | Verify command syntax, check cluster state, review IAM permissions | [Details](#node-replacement-not-happening-even-after-manual-trigger) |
@@ -172,6 +173,57 @@ See the CloudFormation template at `eks/cloudformation/security-group-template.y
 - Always include self-referencing rules (both inbound and outbound) when creating security groups for HyperPod clusters
 - Use the provided CloudFormation templates which include proper security group configuration
 - Test security group configuration before cluster creation
+
+---
+
+### Cluster is InService Status but Not Seeing Instances
+
+**Orchestrator**: Common (Slurm, EKS)
+
+**Issue**: Cluster shows "InService" status but instances are not visible or not being created
+
+**Common Cause**:
+This is expected behavior when using Continuous Provisioning mode. In this mode:
+- The cluster transitions to "InService" status before all instances are created
+- Instance creation happens asynchronously after the cluster becomes InService
+- Instance creation failures are not reported as cluster or instance group creation failures
+
+**Resolution Steps**:
+1. Check cluster events for instance creation status:
+   - **Via Management Console**: Navigate to https://console.aws.amazon.com/sagemaker/home#/cluster-management → Select your cluster → Events tab
+   - **Via AWS CLI**:
+     ```bash
+     aws sagemaker list-cluster-events --cluster-name <cluster-name>
+     ```
+   - Look for events related to instance creation, provisioning status, and any error messages
+   - **Note**: Cluster events are available for HyperPod EKS. For HyperPod Slurm, this feature is not yet available as of January 2026
+2. Verify the cluster provisioning mode:
+   ```bash
+   aws sagemaker describe-cluster --cluster-name <cluster-name>
+   ```
+   Look for the provisioning configuration to confirm if Continuous Provisioning is enabled
+3. Check HyperPod cluster node status:
+   - **Via AWS CLI**:
+     ```bash
+     aws sagemaker list-cluster-nodes --cluster-name <cluster-name>
+     ```
+   - **Via Management Console**: Navigate to https://console.aws.amazon.com/sagemaker/home#/cluster-management → Select your cluster → View node details
+   - Look for node health status, instance state, and creation timestamps
+4. Review CloudWatch logs for instance creation attempts:
+   - Log Group: `/aws/sagemaker/Clusters/<cluster-name>/<cluster-id>`
+   - Check for recent log streams from lifecycle scripts: `LifecycleConfig/<node-group-name>/<instance-id>`
+   - Look for errors during instance provisioning or lifecycle script execution
+5. If instances are failing to create, check for common issues:
+   - Insufficient capacity in the selected availability zones
+   - Lifecycle script errors (see [Cluster Creation Failed with Lifecycle Script Execution Error](#cluster-creation-failed-with-lifecycle-script-execution-error))
+   - IAM permission issues
+   - Service quotas or limits
+
+**Understanding Continuous Provisioning Mode**:
+- Allows the cluster to become operational even if some instances fail to provision
+- Provides faster cluster availability for partial deployments
+- Requires monitoring cluster events and node status to track instance creation progress
+- Failed instances can be replaced individually without affecting the overall cluster status
 
 ---
 
