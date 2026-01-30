@@ -21,7 +21,6 @@ This guide helps you diagnose and resolve common issues with your HyperPod deplo
 | **GPU** | Common | Suspecting GPU failure | Hardware failure, ECC errors, thermal throttling | Run nvidia-smi diagnostics, check ECC errors, drain node | [Details](#suspecting-gpu-failure) |
 | **GPU** | Common | GPUs not getting released | Zombie processes, stuck jobs, slurmd issues | Kill lingering processes, restart slurmd, reboot if needed | [Details](#gpus-are-not-getting-released) |
 | **GPU** | Common | EFA/NCCL/CUDA/driver version mismatch | Incompatible versions, host/container mismatch | Check version compatibility, rebuild containers with matching versions | [Details](#efanclccudanvidia-driver-version-mismatch) |
-| **IAM** | Common | Execution role permissions invalid | Missing policies, incorrect trust relationship, SCPs | Verify IAM policies, check trust relationships, validate permissions | [Details](#iam-permission-errors) |
 
 ## Troubleshooting Details
 
@@ -531,32 +530,6 @@ For easier SSM session management with HyperPod clusters, consider using the `hy
 - PyTorch Environment Validation: https://awslabs.github.io/ai-on-sagemaker-hyperpod/docs/validation-and-testing/environment-validation/pytorch-environment-validation
 - EFA and Network Stack Validation: https://awslabs.github.io/ai-on-sagemaker-hyperpod/docs/validation-and-testing/environment-validation/efa-validation
 - Troubleshoot NCCL and CUDA: https://awslabs.github.io/ai-on-sagemaker-hyperpod/docs/validation-and-testing/nccl-cuda-validation/Troubleshoot%20NCCL%20and%20CUDA
-
----
-
-## Common Issues
-
-### (WIP) IAM Permission Errors
-
-**Orchestrator**: Common (Slurm, EKS)
-
-**Issue**: "Access Denied" or permission-related errors
-
-**Common Error Messages**:
-- "Execution role permissions are invalid. Please ensure the execution role arn:aws:iam::123456789012:role/sagemaker-hyperpodcluster-abcd1234ExecRole"
-
-**Resolution Steps**:
-- Review IAM role trust relationships - ensure SageMaker service principal is trusted
-- Verify required policies are attached (SageMaker execution policy, S3 access, etc.)
-- Check for service control policies (SCPs) restrictions
-- Confirm resource-based policies allow access
-- Validate IAM role has permissions for:
-  - S3 bucket access (lifecycle scripts, data)
-  - CloudWatch Logs write permissions
-  - EC2 network interface creation (for VPC)
-  - FSx access if using shared filesystem
-- Ensure role ARN is correctly specified in cluster configuration
-- Check if role was recently created (may need a few minutes to propagate)
 
 ---
 
