@@ -13,6 +13,7 @@ This guide helps you diagnose and resolve common issues with your HyperPod deplo
 | **Deployment** | EKS | Cannot access EKS cluster with kubectl | IAM identity not configured in EKS access entries | Add IAM identity to access entries, associate access policy | [Details](#cannot-access-eks-cluster-with-kubectl) |
 | **Deployment** | Common | SSM session not starting or getting error | SSM plugin not installed, wrong target format, incorrect region | Install SSM plugin, use HyperPod target format, verify region | [Details](#ssm-session-not-starting-or-getting-error) |
 | **Node Management** | Slurm | Node not responding / Slurm says node is "down" | Network issues, slurmd daemon stopped, resource exhaustion | Check connectivity, verify slurmd status, check memory/disk | [Details](#node-not-responding--slurm-says-node-is-down) |
+| **Node Management** | Slurm | When to restart slurmctld | Jobs stuck, nodes in wrong state, config changes, controller unresponsive | Restart slurmctld to re-sync state and apply changes | [Details](#when-to-restart-slurmctld) |
 | **Node Management** | Common | Node replacement not happening automatically | Auto-recovery disabled, capacity unavailable, quota limits | Check auto-recovery settings, verify capacity, review quotas | [Details](#node-replacement-not-happening-automatically) |
 | **Node Management** | Common | Node replacement not happening even after manual trigger | Wrong command syntax, cluster state, IAM permissions, capacity issues | Verify command syntax, check cluster state, review IAM permissions | [Details](#node-replacement-not-happening-even-after-manual-trigger) |
 | **Performance** | Common | NCCL timeouts | Network congestion, EFA issues, insufficient timeout value | Increase NCCL_TIMEOUT, verify EFA, check network connectivity | [Details](#nccl-timeouts) |
@@ -441,6 +442,85 @@ For easier SSM session management with HyperPod clusters, consider using the `hy
 - Simplifies SSM target name construction and session management
 - Provides convenient commands for listing nodes and starting sessions
 - Handles the HyperPod-specific target format automatically
+
+---
+
+### When to Restart slurmctld
+
+**Orchestrator**: Slurm
+
+**Issue**: Various Slurm controller issues that can be resolved by restarting the slurmctld daemon on the head node
+
+**Background**:
+The slurmctld (Slurm Central Control Daemon) manages job scheduling, resource allocation, and communication with compute nodes. By design, slurmctld saves state to disk and restores it upon restart, allowing maintenance without losing pending or running jobs. Restarting slurmctld is a common fix for various controller-related issues.
+
+**When to Restart slurmctld**:
+
+**1. Job Scheduling and Resource Allocation Issues**
+- **Jobs stuck in PENDING with REASON=RESOURCES**: Jobs remain queued despite available nodes. Restart forces queue re-evaluation
+- **GRES (GPU/EFA) miscalculation**: Resources not released back to pool after job completion, causing future jobs to hang
+- **Jobs stuck in COMPLETING state**: Jobs remain in COMPLETING indefinitely, especially after instance replacements. The controller "memorizes" the COMPLETING state and continues waiting even after node replacement
+
+**2. Node State Problems**
+- **Nodes stuck in "Unknown" or "Down" state**: Nodes returned from reboot but controller still thinks they're unavailable
+- **Compute node communication failures**: slurmctld stops responding to `scontrol ping` or nodes can't communicate with head node
+- **Node configuration changes**: After adding new nodes or changing processor counts
+
+**3. Configuration Changes**
+- **Applying slurm.conf changes**: After updating topology.conf or slurm.conf files, especially TCP listening settings or node additions/removals
+- **After reconfiguration commands**: Following `scontrol reconfigure`, particularly for topology updates after node relaunches
+
+**4. Controller Unresponsiveness**
+- **slurmctld hangs or deadlocks**: Daemon becomes overwhelmed or unresponsive
+- **Plugin/database issues**: Lost connection to slurmdbd or invalid RPC errors
+- **Race conditions**: Specific version bugs causing daemon malfunction
+
+**How to Restart**:
+
+1. **Standard restart**:
+   ```bash
+   sudo systemctl restart slurmctld
+   ```
+
+2. **Verify service status**:
+   ```bash
+   sudo systemctl status slurmctld
+   ```
+
+3. **Check logs for issues**:
+   ```bash
+   sudo journalctl -u slurmctld -n 100
+   ```
+
+4. **If controller is completely hung** (kill and restart):
+   ```bash
+   sudo systemctl stop slurmctld
+   sudo pkill -9 slurmctld  # If stop doesn't work
+   sudo systemctl start slurmctld
+   ```
+
+**Important Notes**:
+
+- **State preservation**: By default, slurmctld restarts with state preservation - running jobs continue
+- **Clean start** (use with caution): If state file is corrupted, use `slurmctld -c` to purge all running jobs and node states
+- **Verify after restart**: Check that nodes are in expected states and jobs are running properly:
+  ```bash
+  sinfo
+  squeue
+  scontrol show config | grep StateSaveLocation
+  ```
+
+**What Gets Preserved**:
+- Running jobs continue execution
+- Pending jobs remain in queue
+- Node states are restored from saved state
+- Job history and accounting data
+
+**What Gets Reset**:
+- Controller memory cache
+- Stale communication channels
+- Hung internal processes
+- Resource allocation calculations
 
 ---
 
