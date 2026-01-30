@@ -4,38 +4,30 @@ This guide helps you diagnose and resolve common issues with your HyperPod deplo
 
 ## Quick Reference Table
 
-| Issue Category | Subject (Symptom) | Reason | Resolution | Link to Details |
-|----------------|-------------------|--------|------------|-----------------|
-| **Deployment** | Cluster creation fails with lifecycle script error | Script syntax errors, missing dependencies, S3 access issues | Review CloudWatch logs, verify S3 access, check script syntax | [Details](#cluster-creation-failed-with-lifecycle-script-execution-error) |
-| **Deployment** | EFA health checks did not run successfully | Missing security group self-referencing rule | Add outbound rule allowing all traffic to the security group itself | [Details](#efa-health-checks-did-not-run-successfully) |
-| **Node Management** | Node not responding / Slurm says node is "down" | Network issues, slurmd daemon stopped, resource exhaustion | Check connectivity, verify slurmd status, check memory/disk | [Details](#node-not-responding--slurm-says-node-is-down) |
-| **Node Management** | Node replacement not happening automatically | Auto-recovery disabled, capacity unavailable, quota limits | Check auto-recovery settings, verify capacity, review quotas | [Details](#node-replacement-not-happening-automatically) |
-| **Node Management** | Node replacement not happening even after manual trigger | Wrong command syntax, cluster state, IAM permissions, capacity issues | Verify command syntax, check cluster state, review IAM permissions | [Details](#node-replacement-not-happening-even-after-manual-trigger) |
-| **Performance** | NCCL timeouts | Network congestion, EFA issues, insufficient timeout value | Increase NCCL_TIMEOUT, verify EFA, check network connectivity | [Details](#nccl-timeouts) |
-| **Performance** | Uneven NCCL performance across nodes | Network topology differences, degraded EFA, instance variations | Check EFA bandwidth, verify instance types, use placement groups | [Details](#uneven-nccl-performance-depending-on-the-set-of-nodes) |
-| **Performance** | Poor filesystem performance | Insufficient throughput, wrong volume type, I/O bottleneck | Check filesystem metrics, increase throughput, optimize data loading | [Details](#poor-filesystem-performance) |
-| **Memory** | DataLoader "Cannot allocate memory" error | Insufficient shared memory (/dev/shm), too many workers | Increase --shm-size, reduce num_workers, check /dev/shm usage | [Details](#multi-process-dataloader-raises-oserror-errno-12-cannot-allocate-memory-error) |
-| **Memory** | FI_EFA_USE_HUGE_PAGE=0 required | Huge pages not configured, EFA memory registration fails | Set FI_EFA_USE_HUGE_PAGE=0 or configure huge pages properly | [Details](#fi_efa_use_huge_page0-has-to-be-set) |
-| **GPU** | Suspecting GPU failure | Hardware failure, ECC errors, thermal throttling | Run nvidia-smi diagnostics, check ECC errors, drain node | [Details](#suspecting-gpu-failure) |
-| **GPU** | GPUs not getting released | Zombie processes, stuck jobs, slurmd issues | Kill lingering processes, restart slurmd, reboot if needed | [Details](#gpus-are-not-getting-released) |
-| **GPU** | EFA/NCCL/CUDA/driver version mismatch | Incompatible versions, host/container mismatch | Check version compatibility, rebuild containers with matching versions | [Details](#efanclccudanvidia-driver-version-mismatch) |
-| **GPU** | Host and container environment mismatch | Different CUDA versions, missing EFA mounts | Mount EFA libraries, verify device access, match versions | [Details](#mismatch-between-host-environment-and-container-environment) |
-| **IAM** | Execution role permissions invalid | Missing policies, incorrect trust relationship, SCPs | Verify IAM policies, check trust relationships, validate permissions | [Details](#iam-permission-errors) |
-| **Lambda** | Custom resource Lambda timeout | Insufficient timeout, network issues, code bottlenecks | Increase timeout, check CloudWatch logs, verify VPC access | [Details](#lambda-function-timeouts) |
+| Issue Category | Orchestrator | Subject (Symptom) | Reason | Resolution | Link to Details |
+|----------------|--------------|-------------------|--------|------------|-----------------|
+| **Deployment** | Common | Cluster creation fails with lifecycle script error | Script syntax errors, missing dependencies, S3 access issues | Review CloudWatch logs, verify S3 access, check script syntax | [Details](#cluster-creation-failed-with-lifecycle-script-execution-error) |
+| **Deployment** | Common | EFA health checks did not run successfully | Missing security group self-referencing rule | Add outbound rule allowing all traffic to the security group itself | [Details](#efa-health-checks-did-not-run-successfully) |
+| **Node Management** | Slurm | Node not responding / Slurm says node is "down" | Network issues, slurmd daemon stopped, resource exhaustion | Check connectivity, verify slurmd status, check memory/disk | [Details](#node-not-responding--slurm-says-node-is-down) |
+| **Node Management** | Common | Node replacement not happening automatically | Auto-recovery disabled, capacity unavailable, quota limits | Check auto-recovery settings, verify capacity, review quotas | [Details](#node-replacement-not-happening-automatically) |
+| **Node Management** | Common | Node replacement not happening even after manual trigger | Wrong command syntax, cluster state, IAM permissions, capacity issues | Verify command syntax, check cluster state, review IAM permissions | [Details](#node-replacement-not-happening-even-after-manual-trigger) |
+| **Performance** | Common | NCCL timeouts | Network congestion, EFA issues, insufficient timeout value | Increase NCCL_TIMEOUT, verify EFA, check network connectivity | [Details](#nccl-timeouts) |
+| **Performance** | Common | Uneven NCCL performance across nodes | Network topology differences, degraded EFA, instance variations | Check EFA bandwidth, verify instance types, use placement groups | [Details](#uneven-nccl-performance-depending-on-the-set-of-nodes) |
+| **Performance** | Common | Poor filesystem performance | Insufficient throughput, wrong volume type, I/O bottleneck | Check filesystem metrics, increase throughput, optimize data loading | [Details](#poor-filesystem-performance) |
+| **Memory** | Common | DataLoader "Cannot allocate memory" error | Insufficient shared memory (/dev/shm), too many workers | Increase --shm-size, reduce num_workers, check /dev/shm usage | [Details](#multi-process-dataloader-raises-oserror-errno-12-cannot-allocate-memory-error) |
+| **Memory** | Common | FI_EFA_USE_HUGE_PAGE=0 required | Huge pages not configured, EFA memory registration fails | Set FI_EFA_USE_HUGE_PAGE=0 or configure huge pages properly | [Details](#fi_efa_use_huge_page0-has-to-be-set) |
+| **GPU** | Common | Suspecting GPU failure | Hardware failure, ECC errors, thermal throttling | Run nvidia-smi diagnostics, check ECC errors, drain node | [Details](#suspecting-gpu-failure) |
+| **GPU** | Common | GPUs not getting released | Zombie processes, stuck jobs, slurmd issues | Kill lingering processes, restart slurmd, reboot if needed | [Details](#gpus-are-not-getting-released) |
+| **GPU** | Common | EFA/NCCL/CUDA/driver version mismatch | Incompatible versions, host/container mismatch | Check version compatibility, rebuild containers with matching versions | [Details](#efanclccudanvidia-driver-version-mismatch) |
+| **GPU** | Common | Host and container environment mismatch | Different CUDA versions, missing EFA mounts | Mount EFA libraries, verify device access, match versions | [Details](#mismatch-between-host-environment-and-container-environment) |
+| **IAM** | Common | Execution role permissions invalid | Missing policies, incorrect trust relationship, SCPs | Verify IAM policies, check trust relationships, validate permissions | [Details](#iam-permission-errors) |
+| **Lambda** | EKS | Custom resource Lambda timeout | Insufficient timeout, network issues, code bottlenecks | Increase timeout, check CloudWatch logs, verify VPC access | [Details](#lambda-function-timeouts) |
 
-## Quick Links
-
-- [EKS-based Deployments](#eks-based-deployments)
-- [Slurm-based Deployments](#slurm-based-deployments)
-- [Performance Issues](#performance-issues)
-- [GPU and Accelerator Issues](#gpu-and-accelerator-issues)
-- [Common Issues](#common-issues)
-
-## EKS-based Deployments
-
-## Slurm-based Deployments
+## Troubleshooting Details
 
 ### Node Not Responding / Slurm Says Node is "Down"
+
+**Orchestrator**: Slurm
 
 **Issue**: Slurm node becomes unresponsive or shows as "down"
 
@@ -100,6 +92,8 @@ This guide helps you diagnose and resolve common issues with your HyperPod deplo
 
 ### Cluster Creation Failed with Lifecycle Script Execution Error
 
+**Orchestrator**: Common (Slurm, EKS)
+
 **Issue**: HyperPod cluster creation fails during lifecycle script execution
 
 **Common Causes**:
@@ -141,6 +135,8 @@ This guide helps you diagnose and resolve common issues with your HyperPod deplo
 
 ### EFA Health Checks Did Not Run Successfully
 
+**Orchestrator**: Common (Slurm, EKS)
+
 **Issue**: Cluster creation fails with error "EFA health checks did not run successfully. Ensure that your VPC and security groups are properly configured before attempting to create a new cluster."
 
 **Common Cause**:
@@ -181,6 +177,8 @@ See the CloudFormation template at `eks/cloudformation/security-group-template.y
 ---
 
 ### Node Replacement Not Happening Automatically
+
+**Orchestrator**: Common (Slurm, EKS)
 
 **Issue**: Failed nodes are not being automatically replaced by HyperPod
 
@@ -236,6 +234,8 @@ See the CloudFormation template at `eks/cloudformation/security-group-template.y
 
 ### Node Replacement Not Happening Even After Manual Trigger
 
+**Orchestrator**: Common (Slurm, EKS)
+
 **Issue**: Manual node replacement command fails or doesn't complete
 
 **Resolution Steps**:
@@ -272,6 +272,8 @@ See the CloudFormation template at `eks/cloudformation/security-group-template.y
 
 ### Suspecting GPU Failure
 
+**Orchestrator**: Common (Slurm, EKS)
+
 **Issue**: Training jobs fail or produce incorrect results, GPU errors in logs
 
 **Diagnostic Steps**:
@@ -291,6 +293,8 @@ See the CloudFormation template at `eks/cloudformation/security-group-template.y
 
 ### GPUs Are Not Getting Released
 
+**Orchestrator**: Common (Slurm, EKS)
+
 **Issue**: GPUs remain allocated after job completion
 
 **Resolution Steps**:
@@ -304,6 +308,8 @@ See the CloudFormation template at `eks/cloudformation/security-group-template.y
 ---
 
 ### EFA/NCCL/CUDA/Nvidia Driver Version Mismatch
+
+**Orchestrator**: Common (Slurm, EKS)
 
 **Issue**: Training fails with EFA or NCCL errors, performance degradation
 
@@ -337,6 +343,8 @@ See the CloudFormation template at `eks/cloudformation/security-group-template.y
 
 ### Mismatch Between Host Environment and Container Environment
 
+**Orchestrator**: Common (Slurm, EKS)
+
 **Issue**: Training works on host but fails in container, or vice versa
 
 **Resolution Steps**:
@@ -357,6 +365,8 @@ See the CloudFormation template at `eks/cloudformation/security-group-template.y
 ## Common Issues
 
 ### IAM Permission Errors
+
+**Orchestrator**: Common (Slurm, EKS)
 
 **Issue**: "Access Denied" or permission-related errors
 
@@ -380,6 +390,8 @@ See the CloudFormation template at `eks/cloudformation/security-group-template.y
 
 ### Lambda Function Timeouts
 
+**Orchestrator**: EKS
+
 **Issue**: Custom resource Lambda functions timeout
 
 **Resolution Steps**:
@@ -393,6 +405,8 @@ See the CloudFormation template at `eks/cloudformation/security-group-template.y
 ## Performance Issues
 
 ### NCCL Timeouts
+
+**Orchestrator**: Common (Slurm, EKS)
 
 **Issue**: Distributed training fails with NCCL timeout errors
 
@@ -415,6 +429,8 @@ See the CloudFormation template at `eks/cloudformation/security-group-template.y
 
 ### Uneven NCCL Performance Depending on the Set of Nodes
 
+**Orchestrator**: Common (Slurm, EKS)
+
 **Issue**: Training performance varies significantly based on which nodes are allocated
 
 **Resolution Steps**:
@@ -436,6 +452,8 @@ See the CloudFormation template at `eks/cloudformation/security-group-template.y
 ---
 
 ### Poor Filesystem Performance
+
+**Orchestrator**: Common (Slurm, EKS)
 
 **Issue**: Slow I/O operations, training bottlenecked by data loading
 
@@ -461,6 +479,8 @@ See the CloudFormation template at `eks/cloudformation/security-group-template.y
 ---
 
 ### Multi-process DataLoader Raises "OSError: [Errno 12] Cannot Allocate Memory" Error
+
+**Orchestrator**: Common (Slurm, EKS)
 
 **Issue**: PyTorch DataLoader with multiple workers fails with memory allocation error
 
@@ -491,6 +511,8 @@ See the CloudFormation template at `eks/cloudformation/security-group-template.y
 ---
 
 ### FI_EFA_USE_HUGE_PAGE=0 Has to Be Set
+
+**Orchestrator**: Common (Slurm, EKS)
 
 **Issue**: EFA initialization fails or training crashes without this setting
 
