@@ -16,8 +16,7 @@ This guide helps you diagnose and resolve common issues with your HyperPod deplo
 | **Performance** | Common | NCCL timeouts | Network congestion, EFA issues, insufficient timeout value | Increase NCCL_TIMEOUT, verify EFA, check network connectivity | [Details](#nccl-timeouts) |
 | **Performance** | Common | Uneven NCCL performance across nodes | Network topology differences, degraded EFA, instance variations | Check EFA bandwidth, verify instance types, use placement groups | [Details](#uneven-nccl-performance-depending-on-the-set-of-nodes) |
 | **Performance** | Common | Poor filesystem performance | Insufficient throughput, wrong volume type, I/O bottleneck | Check filesystem metrics, increase throughput, optimize data loading | [Details](#poor-filesystem-performance) |
-| **Memory** | Common | DataLoader "Cannot allocate memory" error | Insufficient shared memory (/dev/shm), too many workers | Increase --shm-size, reduce num_workers, check /dev/shm usage | [Details](#multi-process-dataloader-raises-oserror-errno-12-cannot-allocate-memory-error) |
-| **Memory** | Common | FI_EFA_USE_HUGE_PAGE=0 required | Huge pages not configured, EFA memory registration fails | Set FI_EFA_USE_HUGE_PAGE=0 or configure huge pages properly | [Details](#fi_efa_use_huge_page0-has-to-be-set) |
+| **Memory** | Common | "Cannot allocate memory" at os.fork() | Insufficient shared memory, huge pages not configured for EFA | Set FI_EFA_USE_HUGE_PAGE=0, increase --shm-size, reduce num_workers | [Details](#cannot-allocate-memory-error-at-osfork) |
 | **GPU** | Common | Suspecting GPU failure | Hardware failure, ECC errors, thermal throttling | Run nvidia-smi diagnostics, check ECC errors, drain node | [Details](#suspecting-gpu-failure) |
 | **GPU** | Common | GPUs not getting released | Zombie processes, stuck jobs, slurmd issues | Kill lingering processes, restart slurmd, reboot if needed | [Details](#gpus-are-not-getting-released) |
 | **GPU** | Common | EFA/NCCL/CUDA/driver version mismatch | Incompatible versions, host/container mismatch | Check version compatibility, rebuild containers with matching versions | [Details](#efanclccudanvidia-driver-version-mismatch) |
@@ -626,19 +625,32 @@ For easier SSM session management with HyperPod clusters, consider using the `hy
 
 ---
 
-### (WIP) Multi-process DataLoader Raises "OSError: [Errno 12] Cannot Allocate Memory" Error
+### "Cannot Allocate Memory" Error at os.fork()
 
 **Orchestrator**: Common (Slurm, EKS)
 
-**Issue**: PyTorch DataLoader with multiple workers fails with memory allocation error
+**Issue**: Training fails with "OSError: [Errno 12] Cannot allocate memory" during `os.fork()` operations
+
+**Common Symptoms**:
+- PyTorch DataLoader with multiple workers fails when forking processes
+- Error occurs specifically at `os.fork()` call
+- "Failed to register memory" errors during EFA initialization
+- Segmentation faults during NCCL operations
+- Training crashes when using EFA with multi-process data loading
 
 **Common Causes**:
-- Insufficient shared memory (/dev/shm) for multi-process communication
-- Too many DataLoader workers for available memory
-- Large batch sizes combined with many workers
+- Insufficient shared memory (/dev/shm) for forked processes
+- Huge pages not configured properly, causing EFA memory registration to fail during fork
+- Too many DataLoader workers attempting to fork
+- Large memory footprint in parent process before fork
 
 **Resolution Steps**:
-1. Increase shared memory size:
+1. Set `FI_EFA_USE_HUGE_PAGE=0` environment variable:
+   ```bash
+   export FI_EFA_USE_HUGE_PAGE=0
+   ```
+   Add to job script, container environment, or `/etc/environment` for persistent setting
+2. Increase shared memory size for containers:
    ```bash
    # For Docker containers
    docker run --shm-size=8g ...
@@ -650,38 +662,20 @@ For easier SSM session management with HyperPod clusters, consider using the `hy
        medium: Memory
        sizeLimit: 8Gi
    ```
-2. Reduce number of DataLoader workers: `num_workers=4` instead of higher values
-3. Reduce batch size to lower memory pressure
-4. Use `persistent_workers=True` to avoid recreating workers
-5. Set `pin_memory=False` if not needed
-6. Check available memory: `free -h` and `/dev/shm` usage: `df -h /dev/shm`
-
----
-
-### (WIP) FI_EFA_USE_HUGE_PAGE=0 Has to Be Set
-
-**Orchestrator**: Common (Slurm, EKS)
-
-**Issue**: EFA initialization fails or training crashes without this setting
-
-**Common Symptoms**:
-- "Failed to register memory" errors
-- EFA device initialization failures
-- Segmentation faults during NCCL operations
-
-**Resolution Steps**:
-1. Set environment variable: `export FI_EFA_USE_HUGE_PAGE=0`
-2. Add to job script or container environment
-3. For persistent setting, add to `/etc/environment` or user profile
-4. Verify huge pages configuration: `cat /proc/meminfo | grep Huge`
-5. If huge pages are needed for other workloads, configure them properly:
+3. Reduce number of DataLoader workers: `num_workers=4` instead of higher values
+4. Reduce batch size to lower memory pressure
+5. Use `persistent_workers=True` to avoid recreating workers
+6. Set `pin_memory=False` if not needed
+7. Check available memory: `free -h` and `/dev/shm` usage: `df -h /dev/shm`
+8. Verify huge pages configuration: `cat /proc/meminfo | grep Huge`
+9. If huge pages are needed for other workloads, configure them properly:
    ```bash
    # Check current huge pages
    cat /proc/sys/vm/nr_hugepages
    # Set huge pages (requires root)
    echo 1024 | sudo tee /proc/sys/vm/nr_hugepages
    ```
-6. Consider using `FI_EFA_USE_HUGE_PAGE=1` only if huge pages are properly configured
+   Only use `FI_EFA_USE_HUGE_PAGE=1` if huge pages are properly configured
 
 ---
 
