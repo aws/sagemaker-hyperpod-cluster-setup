@@ -7,6 +7,7 @@ This guide helps you diagnose and resolve common issues with your HyperPod deplo
 | Issue Category | Subject (Symptom) | Reason | Resolution | Link to Details |
 |----------------|-------------------|--------|------------|-----------------|
 | **Deployment** | Cluster creation fails with lifecycle script error | Script syntax errors, missing dependencies, S3 access issues | Review CloudWatch logs, verify S3 access, check script syntax | [Details](#cluster-creation-failed-with-lifecycle-script-execution-error) |
+| **Deployment** | EFA health checks did not run successfully | Missing security group self-referencing rule | Add outbound rule allowing all traffic to the security group itself | [Details](#efa-health-checks-did-not-run-successfully) |
 | **Networking** | FSx filesystem cannot be mounted | FSx not available, security group rules, DNS issues | Verify FSx state, check security groups (port 988), enable VPC DNS | [Details](#fsx-for-lustre-connection-problems) |
 | **Networking** | Resources cannot communicate | Security group rules, route tables, NAT/IGW issues | Verify security groups, check route tables, validate DNS settings | [Details](#vpc-and-networking) |
 | **Node Management** | Node not responding | Network issues, slurmd daemon stopped, resource exhaustion | Check connectivity, verify slurmd status, check memory/disk | [Details](#node-not-responding) |
@@ -110,6 +111,45 @@ This guide helps you diagnose and resolve common issues with your HyperPod deplo
 5. Check `/var/log/provision/` on cluster nodes for detailed error logs
 6. Validate script dependencies are available in the base AMI
 7. Ensure script has proper shebang and execute permissions
+
+### EFA Health Checks Did Not Run Successfully
+
+**Issue**: Cluster creation fails with error "EFA health checks did not run successfully. Ensure that your VPC and security groups are properly configured before attempting to create a new cluster."
+
+**Common Cause**:
+- Security group is missing a self-referencing outbound rule that allows nodes to communicate with each other via EFA
+
+**Resolution Steps**:
+1. Identify the security group used for the HyperPod cluster
+2. Add the required outbound rules to the security group:
+   - **Rule 1 - Intra-SG Communication (Required for EFA)**:
+     - Type: All traffic
+     - Protocol: All (-1)
+     - Destination: The security group itself (self-referencing)
+     - Description: Allow traffic within the security group
+   
+   - **Rule 2 - Internet Access**:
+     - Type: All traffic
+     - Protocol: All (-1)
+     - Destination: 0.0.0.0/0
+     - Description: Allow traffic to internet (for AWS API calls, package downloads, etc.)
+
+3. Verify the security group has the following inbound rules:
+   - **Intra-SG Communication**:
+     - Type: All traffic
+     - Protocol: All (-1)
+     - Source: The security group itself (self-referencing)
+
+4. Ensure all nodes in the cluster use the same security group
+5. After fixing the security group, retry cluster creation
+
+**Reference Configuration**:
+See the CloudFormation template at `eks/cloudformation/security-group-template.yaml` for the complete security group setup used by HyperPod.
+
+**Prevention**:
+- Always include self-referencing rules (both inbound and outbound) when creating security groups for HyperPod clusters
+- Use the provided CloudFormation templates which include proper security group configuration
+- Test security group configuration before cluster creation
 
 ### Node Replacement Not Happening
 
