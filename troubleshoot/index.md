@@ -9,7 +9,8 @@ This guide helps you diagnose and resolve common issues with your HyperPod deplo
 | **Deployment** | Cluster creation fails with lifecycle script error | Script syntax errors, missing dependencies, S3 access issues | Review CloudWatch logs, verify S3 access, check script syntax | [Details](#cluster-creation-failed-with-lifecycle-script-execution-error) |
 | **Deployment** | EFA health checks did not run successfully | Missing security group self-referencing rule | Add outbound rule allowing all traffic to the security group itself | [Details](#efa-health-checks-did-not-run-successfully) |
 | **Node Management** | Node not responding / Slurm says node is "down" | Network issues, slurmd daemon stopped, resource exhaustion | Check connectivity, verify slurmd status, check memory/disk | [Details](#node-not-responding--slurm-says-node-is-down) |
-| **Node Management** | Node replacement not happening | Auto-recovery disabled, capacity unavailable, quota limits | Check auto-recovery settings, verify capacity, review quotas | [Details](#node-replacement-not-happening) |
+| **Node Management** | Node replacement not happening automatically | Auto-recovery disabled, capacity unavailable, quota limits | Check auto-recovery settings, verify capacity, review quotas | [Details](#node-replacement-not-happening-automatically) |
+| **Node Management** | Node replacement not happening even after manual trigger | Wrong command syntax, cluster state, IAM permissions, capacity issues | Verify command syntax, check cluster state, review IAM permissions | [Details](#node-replacement-not-happening-even-after-manual-trigger) |
 | **Performance** | NCCL timeouts | Network congestion, EFA issues, insufficient timeout value | Increase NCCL_TIMEOUT, verify EFA, check network connectivity | [Details](#nccl-timeouts) |
 | **Performance** | Uneven NCCL performance across nodes | Network topology differences, degraded EFA, instance variations | Check EFA bandwidth, verify instance types, use placement groups | [Details](#uneven-nccl-performance-depending-on-the-set-of-nodes) |
 | **Performance** | Poor filesystem performance | Insufficient throughput, wrong volume type, I/O bottleneck | Check filesystem metrics, increase throughput, optimize data loading | [Details](#poor-filesystem-performance) |
@@ -179,18 +180,65 @@ See the CloudFormation template at `eks/cloudformation/security-group-template.y
 
 ---
 
-### Node Replacement Not Happening
+### Node Replacement Not Happening Automatically
 
-**Issue**: Failed nodes are not being automatically replaced
+**Issue**: Failed nodes are not being automatically replaced by HyperPod
 
 **Resolution Steps**:
-1. Check HyperPod cluster auto-recovery settings in SageMaker console
+1. Check HyperPod cluster auto-recovery settings in SageMaker console or via CLI:
+   ```bash
+   aws sagemaker describe-cluster --cluster-name <cluster-name>
+   ```
+   Look for the auto-recovery configuration
 2. Verify cluster is not in a failed state that prevents recovery
-3. Review CloudWatch logs for auto-recovery attempts
-4. Confirm capacity is available for replacement instances
-5. Check if maximum node count has been reached
-6. Verify IAM permissions allow node replacement operations
-7. Look for service quotas that might block new instance launches
+3. Review CloudWatch logs for auto-recovery attempts:
+   - Log Group: `/aws/sagemaker/Clusters/<cluster-name>/<cluster-id>`
+4. Confirm capacity is available for replacement instances in the selected availability zones
+5. Check if maximum node count has been reached in the cluster configuration
+6. Verify IAM permissions allow node replacement operations:
+   - ec2:RunInstances
+   - ec2:TerminateInstances
+   - ec2:DescribeInstances
+7. Look for service quotas that might block new instance launches:
+   ```bash
+   aws service-quotas get-service-quota \
+     --service-code ec2 \
+     --quota-code <quota-code>
+   ```
+
+---
+
+### Node Replacement Not Happening Even After Manual Trigger
+
+**Issue**: Manual node replacement command fails or doesn't complete
+
+**Resolution Steps**:
+1. Verify the replacement command syntax:
+   ```bash
+   aws sagemaker batch-replace-cluster-nodes \
+     --cluster-name <cluster-name> \
+     --node-ids <instance-id>
+   ```
+2. Check the command output for error messages
+3. Verify the instance ID is correct and belongs to the cluster:
+   ```bash
+   aws sagemaker list-cluster-nodes --cluster-name <cluster-name>
+   ```
+4. Ensure the cluster is in a state that allows node replacement (not in "Creating" or "Deleting" state)
+5. Check IAM permissions for the user/role executing the command:
+   - sagemaker:UpdateClusterSoftware (for batch operations)
+   - Required EC2 permissions
+6. Review CloudWatch logs for detailed error messages:
+   - Log Group: `/aws/sagemaker/Clusters/<cluster-name>/<cluster-id>`
+7. Verify capacity is available for the instance type in the target availability zone
+8. Check for any service quotas or limits that might prevent instance launch
+9. If the command appears to hang, check the cluster node status:
+   ```bash
+   aws sagemaker list-cluster-nodes \
+     --cluster-name <cluster-name> \
+     --instance-group-name-contains <node-group-name>
+   ```
+10. Contact AWS Support if the issue persists with command output and CloudWatch logs
 
 ---
 
