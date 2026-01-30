@@ -20,6 +20,7 @@ This guide helps you diagnose and resolve common issues with your HyperPod deplo
 | **GPU** | Common | Suspecting GPU failure | Hardware failure, ECC errors, thermal throttling | Run nvidia-smi diagnostics, check ECC errors, drain node | [Details](#suspecting-gpu-failure) |
 | **GPU** | Common | GPUs not getting released | Zombie processes, stuck jobs, slurmd issues | Kill lingering processes, restart slurmd, reboot if needed | [Details](#gpus-are-not-getting-released) |
 | **GPU** | Common | EFA/NCCL/CUDA/driver version mismatch | Incompatible versions, host/container mismatch | Check version compatibility, rebuild containers with matching versions | [Details](#efanclccudanvidia-driver-version-mismatch) |
+| **Utilities** | Slurm | Need to find instance ID from node name | Node names use IP format, AWS operations need instance ID | Query resource_config.json or use HyperPod APIs | [Details](#how-to-identify-instance-id-from-slurm-node-name) |
 
 ## Troubleshooting Details
 
@@ -676,6 +677,71 @@ For easier SSM session management with HyperPod clusters, consider using the `hy
    echo 1024 | sudo tee /proc/sys/vm/nr_hugepages
    ```
    Only use `FI_EFA_USE_HUGE_PAGE=1` if huge pages are properly configured
+
+---
+
+## Utilities and How-To
+
+### How to Identify Instance ID from Slurm Node Name
+
+**Orchestrator**: Slurm
+
+**Issue**: Need to find the EC2 instance ID (e.g., `i-abcd12345678`) from a Slurm node name (e.g., `ip-10-1-123-45`)
+
+**Background**:
+On HyperPod Slurm clusters, nodes are named using their private IP addresses in the format `ip-10-1-123-45`. However, many AWS operations (SSM sessions, node replacement, CloudWatch logs) require the EC2 instance ID. This guide shows how to map between node names and instance IDs.
+
+**Resolution Steps**:
+
+**Option 1: Query resource_config.json on Head Node**
+
+On the head node, the resource configuration file contains the mapping between IP addresses and instance IDs:
+
+```bash
+# Extract the IP address from the node name
+# Example: ip-10-1-123-45 -> 10.1.123.45
+NODE_NAME="ip-10-1-123-45"
+IP_ADDRESS=$(echo $NODE_NAME | sed 's/ip-//; s/-/./g')
+
+# Search for the instance ID in the resource config
+sudo cat /opt/ml/config/resource_config.json | jq | grep -A 3 "$IP_ADDRESS"
+```
+
+This will show the instance details including the instance ID.
+
+**Option 2: Use HyperPod Service APIs**
+
+Use the HyperPod `list-cluster-nodes` and `describe-cluster-node` APIs to get node information:
+
+```bash
+# List all nodes in the cluster
+aws sagemaker list-cluster-nodes --cluster-name <cluster-name>
+
+# Describe a specific node
+aws sagemaker describe-cluster-node \
+  --cluster-name <cluster-name> \
+  --node-id <instance-id>
+```
+
+**Recommended Tool**:
+
+For easier lookup, use the `dump_cluster_nodes_info.py` tool from the awsome-distributed-training repository:
+- Repository: https://github.com/aws-samples/awsome-distributed-training/blob/main/1.architectures/5.sagemaker-hyperpod/tools/dump_cluster_nodes_info.py
+- This tool dumps all HyperPod node information into a CSV file
+- You can easily lookup instance IDs from IP addresses or node names
+- The CSV includes: instance ID, private IP, node name, instance type, availability zone, and status
+
+**Usage Example**:
+```bash
+# Download the tool
+wget https://raw.githubusercontent.com/aws-samples/awsome-distributed-training/main/1.architectures/5.sagemaker-hyperpod/tools/dump_cluster_nodes_info.py
+
+# Run it to generate CSV
+python3 dump_cluster_nodes_info.py --cluster-name <cluster-name>
+
+# This creates a CSV file you can search or open in a spreadsheet
+cat cluster_nodes_info.csv | grep "10.1.123.45"
+```
 
 ---
 
