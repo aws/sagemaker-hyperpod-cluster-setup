@@ -301,6 +301,8 @@ ssh -i <key-file> <username>@<instance-id> \
   -o ProxyCommand="aws ssm start-session --target sagemaker-cluster:<cluster-name>_<instance-group-name>-%h --document-name AWS-StartSSHSession"
 ```
 
+**Important**: Before using SSH, you must add your SSH public key to the `~/.ssh/authorized_keys` file on the target node.
+
 You can also configure SSH to use SSM by adding entries to your SSH config file (`~/.ssh/config`):
 ```
 Host my-cluster-controller
