@@ -20,7 +20,7 @@ This guide helps you diagnose and resolve common issues with your HyperPod deplo
 | **Node Management** | Common | Node replacement not happening even after manual trigger | Wrong command syntax, cluster state, IAM permissions, capacity issues | Verify command syntax, check cluster state, review IAM permissions | [Details](#node-replacement-not-happening-even-after-manual-trigger) |
 | **Performance** | Common | NCCL timeouts | Network congestion, EFA issues, insufficient timeout value | Increase NCCL_TIMEOUT, verify EFA, check network connectivity | [Details](#nccl-timeouts) |
 | **Performance** | Common | Uneven NCCL performance across nodes | Network topology differences, degraded EFA, instance variations | Check EFA bandwidth, verify instance types, use placement groups | [Details](#uneven-nccl-performance-depending-on-the-set-of-nodes) |
-| **Performance** | Common | Poor filesystem performance | Insufficient throughput, wrong volume type, I/O bottleneck | Check filesystem metrics, increase throughput, optimize data loading | [Details](#poor-filesystem-performance) |
+| **Performance** | Common | Poor filesystem performance | Insufficient throughput, wrong volume type, I/O bottleneck | Check filesystem metrics, increase throughput, optimize I/O operations | [Details](#poor-filesystem-performance) |
 | **Memory** | Common | "Cannot allocate memory" at os.fork() | Insufficient shared memory, huge pages not configured for EFA | Set FI_EFA_USE_HUGE_PAGE=0, increase --shm-size, reduce num_workers | [Details](#cannot-allocate-memory-error-at-osfork) |
 | **GPU** | Common | Suspecting GPU failure | Hardware failure, ECC errors, thermal throttling | Run nvidia-smi diagnostics, check ECC errors, drain node | [Details](#suspecting-gpu-failure) |
 | **GPU** | Common | EFA/NCCL/CUDA/driver version mismatch | Incompatible versions, host/container mismatch | Check version compatibility, rebuild containers with matching versions | [Details](#efanclccudanvidia-driver-version-mismatch) |
@@ -948,30 +948,52 @@ The slurmctld (Slurm Central Control Daemon) manages job scheduling, resource al
 
 ---
 
-### (WIP) Poor Filesystem Performance
+### Poor Filesystem Performance
 
 **Orchestrator**: Common (Slurm, EKS)
 
-**Issue**: Slow I/O operations, training bottlenecked by data loading
+**Issue**: Slow I/O operations, training bottlenecked by data loading, checkpoint saving, or loading executables and scripts
 
 **Resolution Steps**:
-1. Check filesystem type and mount options: `mount | grep <mount-point>`
-2. For FSx for Lustre:
-   - Verify filesystem is in "Available" state
-   - Check throughput capacity matches workload needs
-   - Monitor CloudWatch metrics for IOPS and throughput
-   - Consider increasing filesystem size for more throughput
-3. For EBS volumes:
-   - Check volume type (gp3, io2 recommended for performance)
-   - Monitor EBS burst balance if using gp2
-   - Increase IOPS/throughput if needed
-4. Test filesystem performance: `dd if=/dev/zero of=testfile bs=1M count=1024`
-5. Check for I/O wait: `iostat -x 1`
-6. Optimize data loading:
-   - Increase DataLoader num_workers
-   - Use faster data formats (TFRecord, WebDataset)
-   - Enable data caching or prefetching
-7. Consider using instance store for temporary data if available
+
+1. **Check performance metrics on CloudWatch**:
+   - Navigate to CloudWatch console and select your filesystem
+   - Monitor key metrics: IOPS, throughput, data read/write bytes
+   - Look for metrics hitting their limits or showing sustained high usage
+
+2. **Check provisioned performance configuration**:
+   - **FSx for Lustre**: Review throughput per TiB setting
+   - **FSx for OpenZFS**: Check provisioned IOPS and throughput
+   - **EBS volumes**: Verify volume type (gp3, io2) and provisioned IOPS/throughput
+   - Compare current configuration against your workload requirements
+
+3. **Investigate bottlenecks**:
+   - If metrics show bottlenecks, identify what operations are causing high I/O:
+     - Check which processes or jobs are performing heavy I/O
+     - Review application logs for I/O patterns
+     - Use filesystem-specific monitoring tools
+   - Determine if the bottleneck is legitimate workload demand or inefficient I/O patterns
+
+4. **Consider upgrading provisioned performance**:
+   - If workload legitimately needs more performance, increase:
+     - FSx for Lustre: Increase storage capacity (throughput scales with size)
+     - FSx for OpenZFS: Increase provisioned IOPS/throughput
+     - EBS: Upgrade volume type or increase provisioned IOPS/throughput
+
+5. **Understand filesystem performance characteristics**:
+   - AWS offers multiple filesystem options with different characteristics:
+     - **FSx for Lustre**: High-performance parallel filesystem, best for large sequential I/O
+     - **FSx for OpenZFS**: Good for mixed workloads, supports snapshots and cloning
+     - **EBS**: Block storage, good for single-instance workloads
+     - **Instance store (NVMe)**: Highest performance but non-persistent
+   - Choose the filesystem that matches your I/O patterns
+
+6. **Consider switching filesystem type**:
+   - For HyperPod Slurm: The default lifecycle script offers an option to use FSx for OpenZFS instead of Lustre for home directories
+   - Evaluate if a different filesystem type better suits your workload:
+     - Small random I/O → Consider OpenZFS
+     - Large sequential I/O → Lustre is optimal
+     - Temporary high-performance data → Use NVMe instance storage
 
 ---
 
