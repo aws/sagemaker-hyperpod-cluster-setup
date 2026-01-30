@@ -20,6 +20,7 @@ This guide helps you diagnose and resolve common issues with your HyperPod deplo
 | **GPU** | Common | Suspecting GPU failure | Hardware failure, ECC errors, thermal throttling | Run nvidia-smi diagnostics, check ECC errors, drain node | [Details](#suspecting-gpu-failure) |
 | **GPU** | Common | GPUs not getting released | Zombie processes, stuck jobs, slurmd issues | Kill lingering processes, restart slurmd, reboot if needed | [Details](#gpus-are-not-getting-released) |
 | **GPU** | Common | EFA/NCCL/CUDA/driver version mismatch | Incompatible versions, host/container mismatch | Check version compatibility, rebuild containers with matching versions | [Details](#efanclccudanvidia-driver-version-mismatch) |
+| **Storage** | Common | Root volume exhausted, need to expand | Root volume limited to 100GB, cannot be expanded | Use secondary EBS (/opt/sagemaker), NVMe (/opt/dlami/nvme), FSx, or S3 | [Details](#root-volume-exhausted-how-to-expand-storage) |
 | **Utilities** | Slurm | Need to find instance ID from node name | Node names use IP format, AWS operations need instance ID | Query resource_config.json or use HyperPod APIs | [Details](#how-to-identify-instance-id-from-slurm-node-name) |
 
 ## Troubleshooting Details
@@ -677,6 +678,144 @@ For easier SSM session management with HyperPod clusters, consider using the `hy
    echo 1024 | sudo tee /proc/sys/vm/nr_hugepages
    ```
    Only use `FI_EFA_USE_HUGE_PAGE=1` if huge pages are properly configured
+
+---
+
+## Storage Management
+
+### Root Volume Exhausted - How to Expand Storage
+
+**Orchestrator**: Common (Slurm, EKS)
+
+**Issue**: Running out of disk space on the root volume, need more storage capacity
+
+**Important to Know**:
+You cannot configure the size of the primary EBS root volume in HyperPod - it is fixed at 100GB. This applies to all HyperPod clusters, and there is no way to change this size even when creating a new cluster.
+
+**Available Storage Options**:
+
+HyperPod provides alternative storage locations that you should use instead of the root volume:
+
+1. **Secondary EBS Volume** (Configurable per instance group)
+   - Mount point: `/opt/sagemaker`
+   - Size is configurable for each instance group
+   - Can be configured when creating new instance groups (even after cluster creation)
+
+2. **NVMe Instance Storage** (Available on large instance types)
+   - Mount point: `/opt/dlami/nvme`
+   - High-performance local storage
+   - Available on instance types like p4d, p5, etc.
+
+3. **FSx for Lustre Filesystem**
+   - Shared across all cluster nodes
+   - High-performance parallel filesystem
+   - Persistent storage shared across all nodes
+
+4. **Amazon S3**
+   - Object storage for large datasets
+   - Fully persistent and durable
+
+**Default Configuration**:
+
+The default HyperPod lifecycle scripts automatically configure container runtimes to use alternative storage:
+- **HyperPod Slurm**: Docker and containerd are configured to use `/opt/sagemaker` or `/opt/dlami/nvme`
+- **HyperPod EKS**: Containerd and kubelet are configured to use `/opt/sagemaker` or `/opt/dlami/nvme`
+
+This prevents container images and layers from filling up the root volume.
+
+**Resolution Steps**:
+
+1. **Check current disk usage**:
+   ```bash
+   # Check all mounted filesystems
+   df -h
+   
+   # Identify what's consuming space on root volume
+   sudo du -h --max-depth=1 / | sort -hr | head -20
+   ```
+
+2. **Redirect application data to secondary EBS volume**:
+   ```bash
+   # Use /opt/sagemaker for application data
+   export APP_DATA_DIR=/opt/sagemaker/my-app-data
+   mkdir -p $APP_DATA_DIR
+   
+   # Redirect logs
+   export LOG_DIR=/opt/sagemaker/logs
+   ```
+
+3. **Use NVMe storage for temporary/scratch data**:
+   ```bash
+   # Use /opt/dlami/nvme for temporary files
+   export TMPDIR=/opt/dlami/nvme/tmp
+   mkdir -p $TMPDIR
+   
+   # Redirect cache directories
+   export TORCH_HOME=/opt/dlami/nvme/torch_cache
+   export HF_HOME=/opt/dlami/nvme/huggingface_cache
+   ```
+
+4. **Configure training scripts to use alternative storage**:
+   ```python
+   # In your training script
+   checkpoint_dir = "/opt/sagemaker/checkpoints"
+   cache_dir = "/opt/dlami/nvme/cache"
+   ```
+
+5. **Clean up root volume if already full**:
+   ```bash
+   # Remove old logs
+   sudo rm -f /var/log/*.log.* /var/log/*/*.gz
+   
+   # Clean package manager cache
+   sudo yum clean all  # or sudo apt-get clean
+   
+   # Remove old container images (if applicable)
+   docker system prune -a
+   ```
+
+6. **For Kubernetes pods, configure volume mounts**:
+   ```yaml
+   volumes:
+   - name: secondary-ebs
+     hostPath:
+       path: /opt/sagemaker
+   - name: nvme-storage
+     hostPath:
+       path: /opt/dlami/nvme
+   
+   volumeMounts:
+   - name: secondary-ebs
+     mountPath: /workspace
+   - name: nvme-storage
+     mountPath: /tmp
+   ```
+
+**Best Practices**:
+
+- **Plan ahead**: Configure secondary EBS volume size appropriately during cluster creation
+- **Use appropriate storage**: 
+  - Persistent data → Secondary EBS or FSx
+  - Temporary data → NVMe storage
+  - Large datasets → FSx or S3
+- **Monitor disk usage**: Set up CloudWatch alarms for disk space
+- **Avoid root volume**: Never save large files or datasets to the root volume
+- **Container images**: Ensure container runtime uses `/opt/sagemaker` or `/opt/dlami/nvme`
+- **Environment variables**: Set cache directories to point to alternative storage:
+  ```bash
+  export TORCH_HOME=/opt/sagemaker/torch_cache
+  export HF_HOME=/opt/sagemaker/huggingface_cache
+  export TRANSFORMERS_CACHE=/opt/sagemaker/transformers_cache
+  ```
+
+**Prevention**:
+
+When creating a HyperPod cluster or adding instance groups, configure the secondary EBS volume size based on your needs:
+- Size can be configured differently for each instance group
+- New instance groups can be added after cluster creation with appropriate storage
+- Consider the size of container images you'll use
+- Account for logs, checkpoints, and temporary files
+- Add buffer for unexpected growth (recommend 2-3x your estimated needs)
 
 ---
 
