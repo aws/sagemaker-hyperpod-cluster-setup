@@ -192,6 +192,11 @@ See the CloudFormation template at `eks/cloudformation/security-group-template.y
    Look for the auto-recovery configuration
 2. Verify cluster is not in a failed state that prevents recovery
 3. Check if HyperPod's health monitoring agent detected an issue and triggered resiliency actions:
+   - **Check CloudWatch Logs for health monitoring agent**:
+     - Log Group: `/aws/sagemaker/Clusters/<cluster-name>/<cluster-id>`
+     - Log Stream: `SagemakerHealthMonitoringAgent/<node-group-name>/<instance-id>`
+     - Example: `SagemakerHealthMonitoringAgent/group-g5-8x/i-0aa017cbf6c240f3f`
+     - Look for detected issues and triggered actions
    - **For HyperPod Slurm**: Check if the node reason message indicates a resiliency action:
      ```bash
      sinfo -o "%N %T %30E"
