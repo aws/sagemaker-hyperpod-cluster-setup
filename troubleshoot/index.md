@@ -77,13 +77,32 @@ This guide helps you diagnose and resolve common issues with your HyperPod deplo
 - Network connectivity problems
 
 **Resolution Steps**:
-1. Check CloudWatch logs for the cluster creation process
-2. Verify lifecycle script is accessible in S3 bucket
-3. Review script syntax and test locally if possible
-4. Confirm IAM role has permissions to access S3 and execute required operations
-5. Check `/var/log/provision/` on cluster nodes for detailed error logs
-6. Validate script dependencies are available in the base AMI
-7. Ensure script has proper shebang and execute permissions
+1. Check CloudWatch logs for the cluster creation process:
+   - **Log Group**: `/aws/sagemaker/Clusters/<cluster-name>/<cluster-id>`
+     - Example: `/aws/sagemaker/Clusters/k8-3/gyazigf6kqq9`
+   - **Log Stream**: `LifecycleConfig/<node-group-name>/<instance-id>`
+     - Example: `LifecycleConfig/group-g5-8x/i-0df4aefe56f4ef3bc`
+   - Look for error messages, stack traces, or failed commands in the logs
+2. If logs are not available or empty, verify IAM permissions:
+   - Check if the IAM execution role has CloudWatch Logs write permissions
+   - Verify the IAM role has permissions to access the S3 bucket where lifecycle scripts are stored:
+     - S3 read permissions (s3:GetObject, s3:ListBucket)
+     - Confirm the S3 path is correct in cluster configuration
+     - Check bucket permissions and IAM role policies
+   - Ensure the S3 bucket policy allows the IAM role to read objects
+3. Check for updated versions of default lifecycle scripts:
+   - The lifecycle script version you're using may have known issues that have been fixed
+   - Compare your scripts with the latest versions:
+     - **HyperPod EKS**: https://github.com/aws-samples/awsome-distributed-training/tree/main/1.architectures/7.sagemaker-hyperpod-eks/LifecycleScripts/base-config
+     - **HyperPod Slurm**: https://github.com/aws-samples/awsome-distributed-training/tree/main/1.architectures/5.sagemaker-hyperpod/LifecycleScripts/base-config
+   - Review the commit history for bug fixes and improvements
+   - Update to the latest version if available
+4. Review script syntax and test locally if possible
+5. Verify the script uses Linux line endings (LF, not CRLF):
+   - Scripts created on Windows may have CRLF line endings which cause execution failures on Linux
+   - Convert to LF using: `dos2unix script.sh` or your text editor's line ending conversion
+   - Check line endings: `file script.sh` (should show "ASCII text" not "ASCII text, with CRLF line terminators")
+6. Ensure script has proper shebang (e.g., `#!/bin/bash`) and execute permissions
 
 ---
 
