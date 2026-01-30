@@ -191,20 +191,41 @@ See the CloudFormation template at `eks/cloudformation/security-group-template.y
    ```
    Look for the auto-recovery configuration
 2. Verify cluster is not in a failed state that prevents recovery
-3. Review CloudWatch logs for auto-recovery attempts:
+3. Check if HyperPod's health monitoring agent detected an issue and triggered resiliency actions:
+   - **For HyperPod Slurm**: Check if the node reason message indicates a resiliency action:
+     ```bash
+     sinfo -o "%N %T %30E"
+     ```
+     The reason message must be exactly "Action:Reboot" or "Action:Replace" for auto-recovery to trigger
+   - **For HyperPod EKS**: Check node labels for resiliency actions:
+     ```bash
+     kubectl get nodes --show-labels
+     kubectl describe node <node-name>
+     ```
+     Look for the following labels indicating resiliency actions have been triggered:
+     - `sagemaker.amazonaws.com/node-health-status: UnschedulablePendingReplacement` - Node is marked for replacement
+     - `sagemaker.amazonaws.com/node-health-status: UnschedulablePendingReboot` - Node is marked for reboot
+     
+     See: https://docs.aws.amazon.com/sagemaker/latest/dg/sagemaker-hyperpod-eks-resiliency-node-labels.html
+4. Review CloudWatch logs for auto-recovery attempts:
    - Log Group: `/aws/sagemaker/Clusters/<cluster-name>/<cluster-id>`
-4. Confirm capacity is available for replacement instances in the selected availability zones
-5. Check if maximum node count has been reached in the cluster configuration
-6. Verify IAM permissions allow node replacement operations:
-   - ec2:RunInstances
-   - ec2:TerminateInstances
-   - ec2:DescribeInstances
-7. Look for service quotas that might block new instance launches:
-   ```bash
-   aws service-quotas get-service-quota \
-     --service-code ec2 \
-     --quota-code <quota-code>
-   ```
+   - Check for recent log streams from lifecycle scripts: `LifecycleConfig/<node-group-name>/<instance-id>`
+   - If lifecycle script fails during auto-recovery, the new instance cannot be created and auto-recovery will fail
+   - Look for error messages in the lifecycle script logs that might prevent successful node replacement
+5. Confirm capacity is available for replacement instances in the selected availability zones
+6. If you need to immediately recover from the failed instance, trigger manual reboot or replacement:
+   - **Manual reboot**:
+     ```bash
+     aws sagemaker batch-reboot-cluster-nodes \
+       --cluster-name <cluster-name> \
+       --node-ids <instance-id>
+     ```
+   - **Manual replacement**:
+     ```bash
+     aws sagemaker batch-replace-cluster-nodes \
+       --cluster-name <cluster-name> \
+       --node-ids <instance-id>
+     ```
 
 ---
 
