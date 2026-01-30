@@ -10,6 +10,7 @@ This guide helps you diagnose and resolve common issues with your HyperPod deplo
 | **Deployment** | Common | Cluster creation fails with lifecycle script error | Script syntax errors, missing dependencies, S3 access issues | Review CloudWatch logs, verify S3 access, check script syntax | [Details](#cluster-creation-failed-with-lifecycle-script-execution-error) |
 | **Deployment** | Common | EFA health checks did not run successfully | Missing security group self-referencing rule | Add outbound rule allowing all traffic to the security group itself | [Details](#efa-health-checks-did-not-run-successfully) |
 | **Deployment** | Common | Cluster is InService but not seeing instances | Continuous Provisioning mode behavior, instance creation failures | Check cluster events for instance creation status and errors | [Details](#cluster-is-inservice-status-but-not-seeing-instances) |
+| **Deployment** | EKS | Cannot access EKS cluster with kubectl | IAM identity not configured in EKS access entries | Add IAM identity to access entries, associate access policy | [Details](#cannot-access-eks-cluster-with-kubectl) |
 | **Deployment** | Common | SSM session not starting or getting error | SSM plugin not installed, wrong target format, incorrect region | Install SSM plugin, use HyperPod target format, verify region | [Details](#ssm-session-not-starting-or-getting-error) |
 | **Node Management** | Slurm | Node not responding / Slurm says node is "down" | Network issues, slurmd daemon stopped, resource exhaustion | Check connectivity, verify slurmd status, check memory/disk | [Details](#node-not-responding--slurm-says-node-is-down) |
 | **Node Management** | Common | Node replacement not happening automatically | Auto-recovery disabled, capacity unavailable, quota limits | Check auto-recovery settings, verify capacity, review quotas | [Details](#node-replacement-not-happening-automatically) |
@@ -288,6 +289,60 @@ This is expected behavior when using Continuous Provisioning mode. In this mode:
 - Provides faster cluster availability for partial deployments
 - Requires monitoring cluster events and node status to track instance creation progress
 - Failed instances can be replaced individually without affecting the overall cluster status
+
+---
+
+### Cannot Access EKS Cluster with kubectl
+
+**Orchestrator**: EKS
+
+**Issue**: Unable to access HyperPod EKS cluster using kubectl, receiving authentication or authorization errors
+
+**Common Error Messages**:
+- "couldn't get current server API group list: the server has asked for the client to provide credentials"
+
+**Common Cause**:
+When using EKS's "IAM access entries" for access control, the IAM identity (user or role) you are using must be correctly configured in the access entries. If your IAM identity is not added or misconfigured, kubectl commands will fail with authentication or authorization errors.
+
+**Resolution Steps**:
+
+1. **Verify your current IAM identity**:
+   ```bash
+   aws sts get-caller-identity
+   ```
+   Note the ARN of the identity you're using (user or role)
+
+2. **Configure access entries via EKS Console**:
+   - Navigate to https://console.aws.amazon.com/eks/clusters
+   - Select your HyperPod EKS cluster
+   - Go to the "Access" tab
+   - Under "IAM access entries", check if your IAM identity is listed
+   - If not present, click "Create access entry":
+     - Enter your IAM principal ARN
+     - Select access policy (e.g., AmazonEKSClusterAdminPolicy for full access)
+     - Choose access scope (cluster-wide recommended)
+     - Click "Create"
+   - If already present, verify the configuration:
+     - Check that the access policies are correctly associated (e.g., AmazonEKSClusterAdminPolicy for full access)
+     - Verify the namespace configuration if using namespace-scoped access
+
+3. **Update kubeconfig** (if not already configured):
+   ```bash
+   aws eks update-kubeconfig \
+     --name <cluster-name> \
+     --region <region>
+   ```
+
+4. **Test access**:
+   ```bash
+   kubectl get nodes
+   kubectl get pods -A
+   ```
+
+**Note**: 
+- Access entries are the recommended method for managing EKS cluster access
+- Ensure the IAM identity has the necessary EKS permissions in IAM policies
+- Changes to access entries may take a few moments to propagate
 
 ---
 
