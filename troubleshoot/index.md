@@ -8,7 +8,6 @@ This guide helps you diagnose and resolve common issues with your HyperPod deplo
 |----------------|-------------------|--------|------------|-----------------|
 | **Deployment** | Cluster creation fails with lifecycle script error | Script syntax errors, missing dependencies, S3 access issues | Review CloudWatch logs, verify S3 access, check script syntax | [Details](#cluster-creation-failed-with-lifecycle-script-execution-error) |
 | **Deployment** | EFA health checks did not run successfully | Missing security group self-referencing rule | Add outbound rule allowing all traffic to the security group itself | [Details](#efa-health-checks-did-not-run-successfully) |
-| **Networking** | Resources cannot communicate | Security group rules, route tables, NAT/IGW issues | Verify security groups, check route tables, validate DNS settings | [Details](#vpc-and-networking) |
 | **Node Management** | Node not responding | Network issues, slurmd daemon stopped, resource exhaustion | Check connectivity, verify slurmd status, check memory/disk | [Details](#node-not-responding) |
 | **Node Management** | Slurm says node is "down" | slurmd not running, network issues, manual drain | Check slurmd status, verify connectivity, resume node state | [Details](#slurm-says-node-is-down) |
 | **Node Management** | Node replacement not happening | Auto-recovery disabled, capacity unavailable, quota limits | Check auto-recovery settings, verify capacity, review quotas | [Details](#node-replacement-not-happening) |
@@ -42,12 +41,53 @@ This guide helps you diagnose and resolve common issues with your HyperPod deplo
 
 **Resolution Steps**:
 1. Check node status: `sinfo -N -l` or `scontrol show node <node-name>`
-2. Attempt to ping the node from head node
-3. SSH to the node and check system logs: `sudo journalctl -xe`
-4. Verify slurmd daemon is running: `sudo systemctl status slurmd`
-5. Check for out-of-memory or disk space issues: `free -h` and `df -h`
-6. Restart slurmd if needed: `sudo systemctl restart slurmd`
-7. If node remains down, set it back to idle: `scontrol update nodename=<node-name> state=resume`
+2. If node shows "down" status, check the reason message:
+   ```bash
+   sinfo -o "%N %T %30E"
+   ```
+   This will display the node name, state, and reason for the current state
+3. Test connectivity to the node using multiple methods to identify what's working:
+   - **PING**: `ping <node-ip-or-hostname>`
+   - **Cross-node SSH**: From another node, try `ssh <node-ip-or-hostname>`
+   - **SSM Session**: `aws ssm start-session --target <instance-id>`
+   - **Slurm srun**: `srun -w <node-name> hostname`
+   
+   By testing these variations, you can determine which communication paths are functional
+4. If you can access the node, check system logs: `sudo journalctl -xe`
+5. Verify slurmd daemon is running: `sudo systemctl status slurmd`
+6. Check for out-of-memory or disk space issues: `free -h` and `df -h`
+7. If disk space is full, identify what is consuming space:
+   ```bash
+   # Check disk usage by filesystem
+   df -h
+   
+   # Find large directories
+   sudo du -h --max-depth=1 / | sort -hr | head -20
+   
+   # Check common locations for large files
+   sudo du -sh /var/log/* | sort -hr
+   sudo du -sh /tmp/* | sort -hr
+   sudo du -sh /home/*/* | sort -hr
+   ```
+8. Clean up disk space if needed:
+   - Delete old log files: `sudo rm -f /var/log/*.log.* /var/log/*/*.gz`
+   - Clear temporary files: `sudo rm -rf /tmp/*`
+   - Clean package manager cache: `sudo yum clean all` or `sudo apt-get clean`
+   - Remove old container images if using Docker: `docker system prune -a`
+9. Restart slurmd if needed: `sudo systemctl restart slurmd`
+10. If node remains down, set it back to idle: `scontrol update nodename=<node-name> state=resume`
+11. If none of the above steps resolve the issue, reboot the instance:
+   ```bash
+   aws sagemaker batch-reboot-cluster-nodes \
+     --cluster-name <cluster-name> \
+     --node-ids <instance-id>
+   ```
+12. If rebooting doesn't help, replace the node:
+   ```bash
+   aws sagemaker batch-replace-cluster-nodes \
+     --cluster-name <cluster-name> \
+     --node-ids <instance-id>
+   ```
 
 ---
 
@@ -249,18 +289,6 @@ See the CloudFormation template at `eks/cloudformation/security-group-template.y
 ---
 
 ## Common Issues
-
-### VPC and Networking
-
-**Issue**: Resources cannot communicate
-
-**Resolution Steps**:
-- Verify security group rules allow required traffic
-- Check route tables for proper routing
-- Confirm NAT Gateway or Internet Gateway configuration
-- Validate DNS resolution settings
-
----
 
 ### IAM Permission Errors
 
