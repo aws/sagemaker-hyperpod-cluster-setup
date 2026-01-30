@@ -13,6 +13,7 @@ This guide helps you diagnose and resolve common issues with your HyperPod deplo
 | **Deployment** | EKS | Cannot access EKS cluster with kubectl | IAM identity not configured in EKS access entries | Add IAM identity to access entries, associate access policy | [Details](#cannot-access-eks-cluster-with-kubectl) |
 | **Deployment** | Common | SSM session not starting or getting error | SSM plugin not installed, wrong target format, incorrect region | Install SSM plugin, use HyperPod target format, verify region | [Details](#ssm-session-not-starting-or-getting-error) |
 | **Node Management** | Slurm | Node not responding / Slurm says node is "down" | Network issues, slurmd daemon stopped, resource exhaustion | Check connectivity, verify slurmd status, check memory/disk | [Details](#node-not-responding--slurm-says-node-is-down) |
+| **Node Management** | Slurm | Node shows "Node unexpectedly rebooted" | Node rebooted without Slurm being notified, slurmd not running | Resume node after verifying it's healthy, check slurmd status | [Details](#node-unexpectedly-rebooted) |
 | **Node Management** | Slurm | Jobs stuck in PENDING/COMPLETING, nodes in wrong state | Controller cache issues, stale state, communication problems | Restart slurmctld to re-sync state | [Details](#jobs-stuck-in-pendingcompleting-nodes-in-wrong-state) |
 | **Node Management** | Common | Node replacement not happening automatically | Auto-recovery disabled, capacity unavailable, quota limits | Check auto-recovery settings, verify capacity, review quotas | [Details](#node-replacement-not-happening-automatically) |
 | **Node Management** | Common | Node replacement not happening even after manual trigger | Wrong command syntax, cluster state, IAM permissions, capacity issues | Verify command syntax, check cluster state, review IAM permissions | [Details](#node-replacement-not-happening-even-after-manual-trigger) |
@@ -442,6 +443,111 @@ For easier SSM session management with HyperPod clusters, consider using the `hy
 - Simplifies SSM target name construction and session management
 - Provides convenient commands for listing nodes and starting sessions
 - Handles the HyperPod-specific target format automatically
+
+---
+
+### Node Unexpectedly Rebooted
+
+**Orchestrator**: Slurm
+
+**Issue**: Slurm node shows as "down" with reason "Node unexpectedly rebooted"
+
+**Common Symptoms**:
+- Node appears as "down" in `sinfo` output
+- Reason message shows "Node unexpectedly rebooted"
+- Node is actually running and accessible, but Slurm won't schedule jobs on it
+
+**Common Causes**:
+- Node was rebooted (manually or automatically) without notifying Slurm
+- slurmd daemon stopped or crashed during reboot
+- slurmd failed to start after reboot
+- Network interruption during reboot prevented slurmd from re-registering with slurmctld
+
+**Diagnostic Steps**:
+
+1. **Check node status and reason**:
+   ```bash
+   sinfo -N -l
+   scontrol show node <node-name>
+   ```
+   Look for "Reason=Node unexpectedly rebooted"
+
+2. **Verify node is actually running**:
+   ```bash
+   # Try to ping the node
+   ping <node-ip>
+   
+   # Try to SSH to the node
+   ssh <node-name>
+   ```
+
+3. **Check if slurmd is running on the node**:
+   ```bash
+   # On the affected node
+   sudo systemctl status slurmd
+   ```
+
+4. **Check slurmd logs for errors**:
+   ```bash
+   # On the affected node
+   sudo journalctl -u slurmd -n 100
+   ```
+
+**Resolution Steps**:
+
+1. **If slurmd is not running, start it**:
+   ```bash
+   # On the affected node
+   sudo systemctl start slurmd
+   sudo systemctl status slurmd
+   ```
+
+2. **Resume the node in Slurm**:
+   ```bash
+   # On the head node
+   scontrol update nodename=<node-name> state=resume
+   ```
+
+3. **Verify node is back to idle state**:
+   ```bash
+   sinfo -N -l | grep <node-name>
+   ```
+   The node should now show as "idle" or "alloc" instead of "down"
+
+4. **If node still shows as down, check for other issues**:
+   ```bash
+   # Check if node can communicate with controller
+   scontrol ping
+   
+   # Check node configuration
+   scontrol show node <node-name>
+   ```
+
+**Prevention**:
+
+To avoid this issue in the future:
+- Ensure slurmd is configured to start automatically on boot:
+  ```bash
+  sudo systemctl enable slurmd
+  ```
+- When rebooting nodes intentionally, drain them first:
+  ```bash
+  scontrol update nodename=<node-name> state=drain reason="Planned reboot"
+  # Reboot the node
+  # After reboot, resume the node
+  scontrol update nodename=<node-name> state=resume
+  ```
+- Use HyperPod's batch-reboot-cluster-nodes command for managed reboots:
+  ```bash
+  aws sagemaker batch-reboot-cluster-nodes \
+    --cluster-name <cluster-name> \
+    --node-ids <instance-id>
+  ```
+
+**Note**: 
+- This is a protective mechanism in Slurm to prevent scheduling jobs on nodes that may have lost state during an unexpected reboot
+- Always verify the node is healthy before resuming it
+- If the node continues to have issues, consider replacing it instead of resuming
 
 ---
 
