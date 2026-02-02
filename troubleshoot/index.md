@@ -147,6 +147,7 @@ HyperPod supports three options for securing compute capacity:
    - Contact your AWS account team for capacity reservation options
 
 2. **If using Flexible Training Plans or Reserved Capacity and still facing errors**:
+   - **Verify TrainingPlanArn is specified**: For Flexible Training Plans, ensure you specified the TrainingPlanArn field in your cluster configuration with the ARN of the purchased training plan
    - **Verify the availability zone**: Ensure your instance group configuration specifies the correct availability zone where capacity was reserved
    - Verify the subnet ID corresponds to the availability zone where capacity was reserved
    - Contact your AWS account team to confirm the reservation details
