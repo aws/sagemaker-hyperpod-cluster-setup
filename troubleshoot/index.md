@@ -462,7 +462,7 @@ For easier SSM session management with HyperPod clusters, consider using the `hy
 4. Test connectivity to the node using multiple methods to identify what's working:
    - **PING**: `ping <node-ip-or-hostname>`
    - **Cross-node SSH**: From another node, try `ssh <node-ip-or-hostname>`
-   - **SSM Session**: `aws ssm start-session --target <instance-id>`
+   - **SSM Session**: See [SSM Session Not Starting or Getting Error](#ssm-session-not-starting-or-getting-error) for the correct HyperPod target format
    - **Slurm srun**: `srun -w <node-name> hostname`
    
    By testing these variations, you can determine which communication paths are functional
