@@ -23,6 +23,28 @@ You can configure resources and deploy using the CloudFormation templates for Sa
 * [Slurm orchestration](https://docs.aws.amazon.com/sagemaker/latest/dg/smcluster-getting-started-slurm-console-create-cluster-cfn.html)
 * [Amazon EKS orchestration](https://docs.aws.amazon.com/sagemaker/latest/dg/smcluster-getting-started-eks-console-create-cluster-cfn.html)
 
+## Troubleshooting Guide
+
+This repository includes a comprehensive [Troubleshooting Guide](troubleshoot/index.md) to help you diagnose and resolve common issues with your HyperPod deployment.
+
+The guide covers:
+* **Deployment Issues** - Cluster creation failures, CloudFormation errors, capacity issues, EFA health checks, and access configuration
+* **Node Management** - Node connectivity, unexpected reboots, job scheduling issues, and node replacement
+* **Performance Issues** - NCCL timeouts, uneven performance, and filesystem bottlenecks
+* **GPU and Accelerator Issues** - GPU failures and driver/library version mismatches
+* **Memory Issues** - Memory allocation errors during process forking
+* **Storage Management** - Root volume limitations and storage expansion options
+* **Utilities** - How-to guides for common operational tasks
+
+Each troubleshooting article includes:
+* Common symptoms and error messages
+* Root cause explanations
+* Step-by-step diagnostic procedures
+* Resolution steps with commands and examples
+* Links to detailed validation and testing guides
+
+The guide features a Quick Reference Table at the top for easy navigation, allowing you to quickly find solutions based on the symptoms you're experiencing.
+
 ## Security
 
 See [CONTRIBUTING](CONTRIBUTING.md#security-issue-notifications) for more information.
