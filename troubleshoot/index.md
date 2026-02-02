@@ -791,7 +791,6 @@ The slurmctld (Slurm Central Control Daemon) manages job scheduling, resource al
    ```
 7. Ensure the cluster is in a state that allows node replacement (not in "Creating" or "Deleting" state)
 8. Review CloudWatch logs for replacement attempts:
-7. Review CloudWatch logs for replacement attempts:
    - Log Group: `/aws/sagemaker/Clusters/<cluster-name>/<cluster-id>`
    - Check for recent log streams from lifecycle scripts: `LifecycleConfig/<node-group-name>/<instance-id>`
    - If lifecycle script fails during replacement, the new instance cannot be created and replacement will fail
