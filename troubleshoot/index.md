@@ -10,7 +10,7 @@ This guide helps you diagnose and resolve common issues with your HyperPod deplo
 | **Deployment** | Common | Cluster creation fails with capacity error | Insufficient capacity, wrong availability zone | Use Flexible Training Plans or reserved capacity, verify AZ matches reservation | [Details](#cluster-creation-failing-with-capacity-error) |
 | **Deployment** | Common | Cluster creation fails with lifecycle script error | Script syntax errors, missing dependencies, S3 access issues | Review CloudWatch logs, verify S3 access, check script syntax | [Details](#cluster-creation-failed-with-lifecycle-script-execution-error) |
 | **Deployment** | Common | EFA health checks did not run successfully | Missing security group self-referencing rule | Add outbound rule allowing all traffic to the security group itself | [Details](#efa-health-checks-did-not-run-successfully) |
-| **Deployment** | Common | Cluster is InService but not seeing instances | Continuous Provisioning mode behavior, instance creation failures | Check cluster events for instance creation status and errors | [Details](#cluster-is-inservice-status-but-not-seeing-instances) |
+| **Deployment** | EKS | Cluster is InService but not seeing instances | Continuous Provisioning mode behavior, instance creation failures | Check cluster events for instance creation status and errors | [Details](#cluster-is-inservice-status-but-not-seeing-instances) |
 | **Deployment** | EKS | Cannot access EKS cluster with kubectl | IAM identity not configured in EKS access entries | Add IAM identity to access entries, associate access policy | [Details](#cannot-access-eks-cluster-with-kubectl) |
 | **Deployment** | Common | SSM session not starting or getting error | SSM plugin not installed, wrong target format, incorrect region | Install SSM plugin, use HyperPod target format, verify region | [Details](#ssm-session-not-starting-or-getting-error) |
 | **Node Management** | Slurm | Node not responding / Slurm says node is "down" | Network issues, slurmd daemon stopped, resource exhaustion | Check connectivity, verify slurmd status, check memory/disk | [Details](#node-not-responding--slurm-says-node-is-down) |
@@ -242,15 +242,17 @@ See the CloudFormation template at `eks/cloudformation/security-group-template.y
 
 #### Cluster is InService Status but Not Seeing Instances
 
-**Orchestrator**: Common (Slurm, EKS)
+**Orchestrator**: EKS
 
 **Issue**: Cluster shows "InService" status but instances are not visible or not being created
 
 **Common Cause**:
-This is expected behavior when using Continuous Provisioning mode. In this mode:
+This is expected behavior when using Continuous Provisioning mode (available for HyperPod EKS only). In this mode:
 - The cluster transitions to "InService" status before all instances are created
 - Instance creation happens asynchronously after the cluster becomes InService
 - Instance creation failures are not reported as cluster or instance group creation failures
+
+**Note**: Continuous Provisioning mode and cluster events are available for HyperPod EKS only. These features are not yet available for HyperPod Slurm as of January 2026.
 
 **Resolution Steps**:
 1. Check cluster events for instance creation status:
@@ -260,7 +262,6 @@ This is expected behavior when using Continuous Provisioning mode. In this mode:
      aws sagemaker list-cluster-events --cluster-name <cluster-name>
      ```
    - Look for events related to instance creation, provisioning status, and any error messages
-   - **Note**: Cluster events are available for HyperPod EKS. For HyperPod Slurm, this feature is not yet available as of January 2026
 2. Verify the cluster provisioning mode:
    ```bash
    aws sagemaker describe-cluster --cluster-name <cluster-name>
