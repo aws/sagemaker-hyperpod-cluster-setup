@@ -193,7 +193,7 @@ HyperPod supports three options for securing compute capacity:
    - Scripts created on Windows may have CRLF line endings which cause execution failures on Linux
    - Convert to LF using: `dos2unix script.sh` or your text editor's line ending conversion
    - Check line endings: `file script.sh` (should show "ASCII text" not "ASCII text, with CRLF line terminators")
-6. Ensure script has proper shebang (e.g., `#!/bin/bash`) and execute permissions
+6. Ensure script has proper shebang (e.g., `#!/bin/bash`)
 
 ---
 
