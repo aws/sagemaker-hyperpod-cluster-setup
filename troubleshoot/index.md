@@ -69,12 +69,12 @@ When you deploy a HyperPod cluster using the HyperPod management console, it cre
 
 6. **Find the failed resource**:
    - In the deepest nested stack, go to the "Events" tab
-   - Look for the specific AWS resource that failed (e.g., AWS::EC2::Instance, AWS::IAM::Role, AWS::Lambda::Function)
+   - Look for the specific AWS resource that failed (e.g., AWS::SageMaker::Cluster, AWS::IAM::Role, AWS::Lambda::Function)
    - The "Status reason" column will show the detailed error message
    - This is typically the most useful error message for troubleshooting
 
 7. **Common resource types and their errors**:
-   - **AWS::EC2::Instance**: Capacity errors, subnet issues, security group problems
+   - **AWS::SageMaker::Cluster**: Capacity errors, subnet issues, security group problems, lifecycle script failures
    - **AWS::IAM::Role**: Permission errors, trust relationship issues
    - **AWS::Lambda::Function**: Execution errors, timeout issues
    - **AWS::EC2::VPC**: CIDR conflicts, quota limits
