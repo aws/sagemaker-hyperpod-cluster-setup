@@ -485,7 +485,7 @@ For easier SSM session management with HyperPod clusters, consider using the `hy
 9. Clean up disk space if needed:
    - Delete old log files: `sudo rm -f /var/log/*.log.* /var/log/*/*.gz`
    - Clear temporary files: `sudo rm -rf /tmp/*`
-   - Clean package manager cache: `sudo yum clean all` or `sudo apt-get clean`
+   - Clean package manager cache: `sudo apt-get clean` (Slurm) or `sudo yum clean all` (EKS)
    - Remove old container images if using Docker: `docker system prune -a`
 10. Restart slurmd if needed: `sudo systemctl restart slurmd`
 11. If node remains down, set it back to idle: `scontrol update nodename=<node-name> state=resume`
@@ -1141,7 +1141,8 @@ This prevents container images and layers from filling up the root volume.
    sudo rm -f /var/log/*.log.* /var/log/*/*.gz
    
    # Clean package manager cache
-   sudo yum clean all  # or sudo apt-get clean
+   sudo apt-get clean  # For Slurm (Ubuntu)
+   sudo yum clean all  # For EKS (Amazon Linux)
    
    # Remove old container images (if applicable)
    docker system prune -a
