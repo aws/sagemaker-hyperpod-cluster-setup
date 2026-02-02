@@ -906,10 +906,9 @@ The slurmctld (Slurm Central Control Daemon) manages job scheduling, resource al
 **Resolution Steps**:
 1. Increase NCCL timeout if needed: `export NCCL_TIMEOUT=3600`
 2. Verify EFA is being used: `export FI_EFA_USE_DEVICE_RDMA=1`
-3. Optimize NCCL settings: `export NCCL_PROTO=simple` and tune buffer sizes
-4. Check and fix security group rules to allow all traffic between nodes
-5. Isolate and drain problematic nodes showing low bandwidth
-6. Reduce batch size or adjust parallelism if memory pressure exists
+3. Check and fix security group rules to allow all traffic between nodes
+4. Isolate and drain problematic nodes showing low bandwidth
+5. Reduce batch size or adjust parallelism if memory pressure exists
 
 **Detailed Guides**:
 - NCCL Performance Tests: https://awslabs.github.io/ai-on-sagemaker-hyperpod/docs/validation-and-testing/performance-testing/nccl-tests
