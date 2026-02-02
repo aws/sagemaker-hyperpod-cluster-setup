@@ -866,12 +866,15 @@ The slurmctld (Slurm Central Control Daemon) manages job scheduling, resource al
 
 **Resolution Steps**:
 1. Ensure CUDA driver and nvcc compiler versions match
-2. Verify version compatibility using the EFA compatibility matrix
-3. For containers: mount EFA libraries and devices properly
-4. Verify LD_LIBRARY_PATH includes EFA and CUDA libraries
-5. Initialize CUDA devices if needed (may require reboot)
-6. Match PyTorch/TensorFlow versions between host and container
-7. Rebuild containers with compatible versions from the compatibility matrix
+2. Check version compatibility documentation:
+   - EFA installer (including libnccl-ofi) and NCCL compatibility: https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/efa-changelog.html
+   - NVIDIA driver and CUDA toolkit compatibility: https://docs.nvidia.com/cuda/cuda-toolkit-release-notes/
+3. Verify version compatibility using the EFA compatibility matrix
+4. For containers: mount EFA libraries and devices properly
+5. Verify LD_LIBRARY_PATH includes EFA and CUDA libraries
+6. Initialize CUDA devices if needed (may require reboot)
+7. Match PyTorch/TensorFlow versions between host and container
+8. Rebuild containers with compatible versions from the compatibility matrix
 
 **Detailed Guides**:
 - PyTorch Environment Validation: https://awslabs.github.io/ai-on-sagemaker-hyperpod/docs/validation-and-testing/environment-validation/pytorch-environment-validation
