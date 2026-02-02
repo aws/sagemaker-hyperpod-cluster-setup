@@ -939,9 +939,8 @@ The slurmctld (Slurm Central Control Daemon) manages job scheduling, resource al
 1. Run comprehensive NCCL all-reduce tests across all nodes
 2. Use topology-aware testing scripts to systematically identify bad nodes
 3. Check failed jobs and isolate problematic nodes
-4. Optimize NCCL environment variables (NCCL_PROTO, NCCL_ALGO)
-5. Configure EFA optimization settings and GPU affinity
-6. Drain underperforming nodes and use placement groups for consistency
+4. Configure EFA optimization settings and GPU affinity
+5. Drain underperforming nodes and use placement groups for consistency
 
 **Detailed Guides**:
 - NCCL Performance Tests: https://awslabs.github.io/ai-on-sagemaker-hyperpod/docs/validation-and-testing/performance-testing/nccl-tests
