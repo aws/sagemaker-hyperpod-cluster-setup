@@ -407,21 +407,14 @@ When using EKS's "IAM access entries" for access control, the IAM identity (user
    Review the debug output for specific error messages
 
 **Common Error Messages**:
-- "Target is not connected": Instance may be stopped, SSM agent not running, or network connectivity issues
-- "Invalid target": Check the target name format is correct for HyperPod
+- "Target is not connected": Instance may be stopped, SSM agent not running, network connectivity issues, or incorrect target name format
 - "Access denied": Verify IAM permissions for both your user and the instance role
-- "Region not found": Ensure AWS region is correctly configured
 
 **SSH over SSM**:
-For SSH access using SSM as a transport:
-```bash
-ssh -i <key-file> <username>@<instance-id> \
-  -o ProxyCommand="aws ssm start-session --target sagemaker-cluster:<cluster-name>_<instance-group-name>-%h --document-name AWS-StartSSHSession"
-```
 
 **Important**: Before using SSH, you must add your SSH public key to the `~/.ssh/authorized_keys` file on the target node.
 
-You can also configure SSH to use SSM by adding entries to your SSH config file (`~/.ssh/config`):
+You can configure SSH to use SSM by adding entries to your SSH config file (`~/.ssh/config`):
 ```
 Host my-cluster-controller
   HostName sagemaker-cluster:abcdfe1234_controller-i-0abc123def456789
