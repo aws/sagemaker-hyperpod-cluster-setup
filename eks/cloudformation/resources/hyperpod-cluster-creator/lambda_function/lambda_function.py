@@ -401,7 +401,7 @@ def create_hyperpod_cluster(instance_groups):
 
         
     print(f"Creating yaml with parameters: {create_params}")
-    yaml_str = generate_cluster_template_yaml(create_params, cluster_name)
+    yaml_str = generate_cluster_template_yaml(create_params)
     template_url = upload_cluster_template_to_s3(yaml_str)        
          
     return {
@@ -655,7 +655,7 @@ def upload_slurm_provisioning_parameters_json(instance_groups):
     )
     print(f"Uploaded provisioning_parameters.json to s3://{s3_bucket_name}/{s3_file_key}")
 
-def generate_cluster_template_yaml(create_params, cluster_name):
+def generate_cluster_template_yaml(create_params):
     template = {
         "AWSTemplateFormatVersion": "2010-09-09",
         "Resources": {
@@ -671,7 +671,7 @@ def generate_cluster_template_yaml(create_params, cluster_name):
             },
             "HyperPodClusterName": {
                 "Description": "The name of the created SageMaker HyperPod cluster",
-                "Value": cluster_name
+                "Value": {"Ref": "NewHyperPodCluster"}
             }
         }
     }

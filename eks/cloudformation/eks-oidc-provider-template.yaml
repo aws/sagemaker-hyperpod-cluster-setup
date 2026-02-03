@@ -1,0 +1,124 @@
+Description: CloudFormation template to associate IAM OIDC provider with an EKS cluster using eksctl
+Parameters:
+  ResourceNamePrefix:
+    Type: String
+    Default: sagemaker-hyperpod-eks
+    Description: Prefix to be used for all resources created by this template.
+  EKSClusterName:
+    Type: String
+    Description: The name of the EKS cluster where the OIDC provider will be associated.
+  CustomResourceS3Bucket:
+    Type: String
+    Default: aws-sagemaker-hyperpod-cluster-setup-us-east-2-prod
+    Description: The name of the S3 bucket containing the custom resource.
+  LayerS3Key:
+    Type: String
+    Default: resources/artifacts/eks-oidc-provider-lambda-layer.zip
+    Description: The S3 key for the lambda layer zip file.
+  FunctionS3Key:
+    Type: String
+    Default: resources/artifacts/eks-oidc-provider-lambda-function.zip
+    Description: The S3 key for the lambda function zip file.
+Resources:
+  OidcProviderCustomResourceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Statement:
+          - Action: sts:AssumeRole
+            Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+        Version: 2012-10-17
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        - PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action:
+                  - eks:DescribeCluster
+                  - eks:ListClusters
+                  - eks:TagResource
+                Resource:
+                  Fn::Sub: arn:aws:eks:${AWS::Region}:${AWS::AccountId}:cluster/${EKSClusterName}
+              - Effect: Allow
+                Action:
+                  - iam:CreateOpenIDConnectProvider
+                  - iam:GetOpenIDConnectProvider
+                  - iam:TagOpenIDConnectProvider
+                  - iam:ListOpenIDConnectProviders
+                Resource: '*'
+          PolicyName:
+            Fn::Sub: ${ResourceNamePrefix}-oidc-provider-access
+    Metadata:
+      aws:cdk:path: EksOidcProviderAssociationCfnTemplate/OidcProviderCustomResourceRole
+  OidcProviderCustomResourceLayer:
+    Type: AWS::Lambda::LayerVersion
+    Properties:
+      CompatibleArchitectures:
+        - x86_64
+      CompatibleRuntimes:
+        - python3.9
+        - python3.10
+        - python3.11
+        - python3.12
+      Content:
+        S3Bucket:
+          Ref: CustomResourceS3Bucket
+        S3Key:
+          Ref: LayerS3Key
+      Description: Lambda Layer for EKS OIDC provider association (eksctl)
+      LayerName:
+        Fn::Sub: ${ResourceNamePrefix}-oidc-provider-layer
+    Metadata:
+      aws:cdk:path: EksOidcProviderAssociationCfnTemplate/OidcProviderCustomResourceLayer
+  OidcProviderCustomResourceFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      Code:
+        S3Bucket:
+          Ref: CustomResourceS3Bucket
+        S3Key:
+          Ref: FunctionS3Key
+      Environment:
+        Variables:
+          EKS_CLUSTER_NAME:
+            Ref: EKSClusterName
+          PATH: /opt/python/bin:/var/lang/bin:/usr/local/bin:/usr/bin/:/bin
+      FunctionName:
+        Fn::Sub: ${ResourceNamePrefix}-oidc-provider-func
+      Handler: lambda_function.lambda_handler
+      Layers:
+        - Ref: OidcProviderCustomResourceLayer
+      MemorySize: 1024
+      Role:
+        Fn::GetAtt:
+          - OidcProviderCustomResourceRole
+          - Arn
+      Runtime: python3.12
+      Timeout: 900
+    Metadata:
+      aws:cdk:path: EksOidcProviderAssociationCfnTemplate/OidcProviderCustomResourceFunction
+  OidcProviderCustomResource:
+    Type: AWS::CloudFormation::CustomResource
+    Properties:
+      ServiceToken:
+        Fn::GetAtt:
+          - OidcProviderCustomResourceFunction
+          - Arn
+    DependsOn:
+      - OidcProviderCustomResourceFunction
+    Metadata:
+      aws:cdk:path: EksOidcProviderAssociationCfnTemplate/OidcProviderCustomResource
+Outputs:
+  OidcProviderStatus:
+    Description: Status of OIDC provider association
+    Value:
+      Fn::GetAtt:
+        - OidcProviderCustomResource
+        - Status
+    Export:
+      Name:
+        Fn::Sub: ${AWS::StackName}-OidcProviderStatus
