@@ -107,7 +107,18 @@ Resources:
           KUBECONFIG: /tmp/.kube/config
           LD_LIBRARY_PATH: /opt/python/lib
       FunctionName:
-        Fn::Sub: ${ResourceNamePrefix}-certfunc
+        Fn::Sub:
+          - ${ResourceNamePrefix}-certfunc-${UniqueSuffix}
+          - UniqueSuffix:
+              Fn::Select:
+                - 0
+                - Fn::Split:
+                    - '-'
+                    - Fn::Select:
+                        - 2
+                        - Fn::Split:
+                            - /
+                            - Ref: AWS::StackId
       Handler: lambda_function.lambda_handler
       Layers:
         - Ref: CertManagerCustomResourceLayer

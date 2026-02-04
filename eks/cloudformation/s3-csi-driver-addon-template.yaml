@@ -13,7 +13,7 @@ Parameters:
     Description: The name of the EKS add-on to install
   ShortenedAddonName:
     Type: String
-    Default: s3-csi-driver
+    Default: s3
     Description: Shortened name for the add-on to use in resource names (Lambda, IAM roles, etc.)
   AddonVersion:
     Type: String
@@ -165,7 +165,18 @@ Resources:
           SERVICE_ACCOUNT_ROLE_ARN:
             Ref: ServiceAccountRoleArn
       FunctionName:
-        Fn::Sub: ${ResourceNamePrefix}-${ShortenedAddonName}-func
+        Fn::Sub:
+          - ${ResourceNamePrefix}-${ShortenedAddonName}-func-${UniqueSuffix}
+          - UniqueSuffix:
+              Fn::Select:
+                - 0
+                - Fn::Split:
+                    - '-'
+                    - Fn::Select:
+                        - 2
+                        - Fn::Split:
+                            - /
+                            - Ref: AWS::StackId
       Handler: lambda_function.lambda_handler
       Layers:
         - Ref: AddonCustomResourceLayer

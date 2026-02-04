@@ -76,8 +76,8 @@ Resources:
       BucketName:
         Fn::Join:
           - '-'
-          - - Ref: ResourceNamePrefix
-            - tls
+          - - hyperpod-tls
+            - Ref: ResourceNamePrefix
             - Fn::Select:
                 - 0
                 - Fn::Split:

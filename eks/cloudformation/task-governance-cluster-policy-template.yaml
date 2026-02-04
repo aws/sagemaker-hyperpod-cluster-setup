@@ -2,9 +2,9 @@ Parameters:
   EKSClusterName:
     Type: String
     Description: Name of the EKS cluster
-  HyperPodClusterName:
+  HyperPodClusterArn:
     Type: String
-    Description: Name of the HyperPod cluster
+    Description: ARN of the HyperPod cluster
   PriorityClasses:
     Type: String
     Default: ''
@@ -16,6 +16,13 @@ Parameters:
       - Enabled
       - Disabled
     Description: Fair share setting for the scheduler configuration
+  IdleResourceSharing:
+    Type: String
+    Default: Enabled
+    AllowedValues:
+      - Enabled
+      - Disabled
+    Description: Enable or disable idle compute resource sharing among different workloads
 Conditions:
   UseDefaultPriorityClassesCondition:
     Fn::Equals:
@@ -38,17 +45,7 @@ Resources:
         Fn::ImportValue:
           Fn::Sub: TaskGovernanceAddonLambdaArn-${EKSClusterName}
       ClusterArn:
-        Fn::Sub:
-          - arn:aws:sagemaker:${AWS::Region}:${AWS::AccountId}:cluster/${ClusterName}
-          - ClusterName:
-              Fn::Select:
-                - 1
-                - Fn::Split:
-                    - cluster/
-                    - Fn::Join:
-                        - ''
-                        - - ''
-                          - Ref: HyperPodClusterName
+        Ref: HyperPodClusterArn
       Name:
         Fn::Sub: ${EKSClusterName}-scheduler-config
       Description: >-
@@ -59,6 +56,8 @@ Resources:
           - UseDefaultPriorityClassesCondition
           - FairShare:
               Ref: FairShare
+            IdleResourceSharing:
+              Ref: IdleResourceSharing
             PriorityClasses:
               - Name: inference
                 Weight: 100
@@ -72,6 +71,8 @@ Resources:
                 Weight: 60
           - FairShare:
               Ref: FairShare
+            IdleResourceSharing:
+              Ref: IdleResourceSharing
             PriorityClasses:
               Ref: PriorityClasses
     DependsOn:
