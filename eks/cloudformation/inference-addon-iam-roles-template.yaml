@@ -67,12 +67,6 @@ Parameters:
       - 'true'
       - 'false'
     Description: Whether to create IAM role for Inference Operator execution
-  BootstrapVersion:
-    Type: AWS::SSM::Parameter::Value<String>
-    Default: /cdk-bootstrap/hnb659fds/version
-    Description: >-
-      Version of the CDK Bootstrap resources in this environment, automatically retrieved from SSM Parameter Store.
-      [cdk:skip]
 Conditions:
   ShouldCreateS3Role:
     Fn::Equals:
@@ -98,104 +92,6 @@ Conditions:
     Fn::Equals:
       - Ref: CreateInferenceOperatorExecutionRole
       - 'true'
-  CDKMetadataAvailable:
-    Fn::Or:
-      - Fn::Or:
-          - Fn::Equals:
-              - Ref: AWS::Region
-              - af-south-1
-          - Fn::Equals:
-              - Ref: AWS::Region
-              - ap-east-1
-          - Fn::Equals:
-              - Ref: AWS::Region
-              - ap-northeast-1
-          - Fn::Equals:
-              - Ref: AWS::Region
-              - ap-northeast-2
-          - Fn::Equals:
-              - Ref: AWS::Region
-              - ap-northeast-3
-          - Fn::Equals:
-              - Ref: AWS::Region
-              - ap-south-1
-          - Fn::Equals:
-              - Ref: AWS::Region
-              - ap-south-2
-          - Fn::Equals:
-              - Ref: AWS::Region
-              - ap-southeast-1
-          - Fn::Equals:
-              - Ref: AWS::Region
-              - ap-southeast-2
-          - Fn::Equals:
-              - Ref: AWS::Region
-              - ap-southeast-3
-      - Fn::Or:
-          - Fn::Equals:
-              - Ref: AWS::Region
-              - ap-southeast-4
-          - Fn::Equals:
-              - Ref: AWS::Region
-              - ca-central-1
-          - Fn::Equals:
-              - Ref: AWS::Region
-              - ca-west-1
-          - Fn::Equals:
-              - Ref: AWS::Region
-              - cn-north-1
-          - Fn::Equals:
-              - Ref: AWS::Region
-              - cn-northwest-1
-          - Fn::Equals:
-              - Ref: AWS::Region
-              - eu-central-1
-          - Fn::Equals:
-              - Ref: AWS::Region
-              - eu-central-2
-          - Fn::Equals:
-              - Ref: AWS::Region
-              - eu-north-1
-          - Fn::Equals:
-              - Ref: AWS::Region
-              - eu-south-1
-          - Fn::Equals:
-              - Ref: AWS::Region
-              - eu-south-2
-      - Fn::Or:
-          - Fn::Equals:
-              - Ref: AWS::Region
-              - eu-west-1
-          - Fn::Equals:
-              - Ref: AWS::Region
-              - eu-west-2
-          - Fn::Equals:
-              - Ref: AWS::Region
-              - eu-west-3
-          - Fn::Equals:
-              - Ref: AWS::Region
-              - il-central-1
-          - Fn::Equals:
-              - Ref: AWS::Region
-              - me-central-1
-          - Fn::Equals:
-              - Ref: AWS::Region
-              - me-south-1
-          - Fn::Equals:
-              - Ref: AWS::Region
-              - sa-east-1
-          - Fn::Equals:
-              - Ref: AWS::Region
-              - us-east-1
-          - Fn::Equals:
-              - Ref: AWS::Region
-              - us-east-2
-          - Fn::Equals:
-              - Ref: AWS::Region
-              - us-west-1
-      - Fn::Equals:
-          - Ref: AWS::Region
-          - us-west-2
 Resources:
   S3MountpointPolicy:
     Type: AWS::IAM::ManagedPolicy
@@ -633,14 +529,6 @@ Resources:
     Metadata:
       aws:cdk:path: InferenceAddonIamRolesCfnTemplate/InferenceOperatorExecutionRole
     Condition: ShouldCreateInferenceOperatorExecutionRole
-  CDKMetadata:
-    Type: AWS::CDK::Metadata
-    Properties:
-      Analytics: >-
-        v2:deflate64:H4sIAAAAAAAA/yWKywrCMBAAv6X3dG1zUDznLJb6AbImqWybbEoeFin9dwmeZgZGguwv0DW4pVabpXX0gv2RUS9CTTxgRG+zjTVUYEOZAgvc0pPQw64mviHj25ohONLfuo3B2aPKveS15ENwMBbmdPrIDvornJs5EbWxcCZvYfzzB95w9XOIAAAA
-    Metadata:
-      aws:cdk:path: InferenceAddonIamRolesCfnTemplate/CDKMetadata/Default
-    Condition: CDKMetadataAvailable
 Outputs:
   S3CsiDriverRoleArn:
     Description: ARN of the IAM role for S3 CSI Driver
@@ -721,16 +609,3 @@ Outputs:
       Name:
         Fn::Sub: ${AWS::StackName}-InferenceOperatorExecutionRoleName
     Condition: ShouldCreateInferenceOperatorExecutionRole
-Rules:
-  CheckBootstrapVersion:
-    Assertions:
-      - Assert:
-          Fn::Not:
-            - Fn::Contains:
-                - - '1'
-                  - '2'
-                  - '3'
-                  - '4'
-                  - '5'
-                - Ref: BootstrapVersion
-        AssertDescription: CDK bootstrap stack version 6 required. Please run 'cdk bootstrap' with a recent version of the CDK CLI.
