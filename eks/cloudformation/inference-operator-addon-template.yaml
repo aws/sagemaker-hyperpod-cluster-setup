@@ -1,0 +1,188 @@
+Description: Hyperpod Inference Operator EKS Addon Installation via Custom Resource
+Parameters:
+  ResourceNamePrefix:
+    Type: String
+    Default: sagemaker-hyperpod-eks
+    Description: Prefix to be used for all resources created by this template.
+  EKSClusterName:
+    Type: String
+    Description: The name of the EKS cluster where the inference operator addon will be installed.
+  AddonVersion:
+    Type: String
+    Default: v1.0.0-eksbuild.1
+    Description: Version of the Hyperpod Inference Operator EKS addon to install
+  ExecutionRoleArn:
+    Type: String
+    Description: IAM role ARN for Inference Operator execution
+  TlsCertificateS3Bucket:
+    Type: String
+    Description: Name of the S3 bucket for storing TLS certificates
+  KedaRoleArn:
+    Type: String
+    Description: IAM role ARN for KEDA autoscaler
+  AlbControllerRoleArn:
+    Type: String
+    Description: IAM role ARN for ALB Controller
+  JumpstartGatedModelRoleArn:
+    Type: String
+    Description: IAM role ARN for SageMaker Jumpstart gated model download
+  CustomResourceS3Bucket:
+    Type: String
+    Default: aws-sagemaker-hyperpod-cluster-setup-us-east-2-prod
+    Description: The name of the S3 bucket containing the custom resource.
+  LayerS3Key:
+    Type: String
+    Default: resources/artifacts/inference-operator-lambda-layer.zip
+    Description: The S3 key for the lambda layer zip file.
+  FunctionS3Key:
+    Type: String
+    Default: resources/artifacts/inference-operator-lambda-function.zip
+    Description: The S3 key for the lambda function zip file.
+Resources:
+  InferenceOperatorCustomResourceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Statement:
+          - Action: sts:AssumeRole
+            Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+        Version: 2012-10-17
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        - PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action:
+                  - s3:GetObject
+                  - s3:GetObjectVersion
+                Resource:
+                  - Fn::Sub: arn:aws:s3:::${CustomResourceS3Bucket}/*
+              - Effect: Allow
+                Action:
+                  - s3:ListBucket
+                Resource:
+                  - Fn::Sub: arn:aws:s3:::${CustomResourceS3Bucket}
+          PolicyName:
+            Fn::Sub: ${ResourceNamePrefix}-InferenceOperator-S3-Access
+        - PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action:
+                  - eks:DescribeCluster
+                  - eks:DescribeAddon
+                  - eks:CreateAddon
+                  - eks:DeleteAddon
+                  - eks:UpdateAddon
+                  - eks:TagResource
+                  - eks:ListTagsForResource
+                Resource:
+                  - Fn::Sub: arn:aws:eks:${AWS::Region}:${AWS::AccountId}:cluster/${EKSClusterName}
+                  - Fn::Sub: >-
+                      arn:aws:eks:${AWS::Region}:${AWS::AccountId}:addon/${EKSClusterName}/amazon-sagemaker-hyperpod-inference/*
+          PolicyName:
+            Fn::Sub: ${ResourceNamePrefix}-InferenceOperator-Addon-Access
+    Metadata:
+      aws:cdk:path: InferenceOperatorAddonCfnTemplate/InferenceOperatorCustomResourceRole
+  InferenceOperatorCustomResourceLayer:
+    Type: AWS::Lambda::LayerVersion
+    Properties:
+      CompatibleArchitectures:
+        - x86_64
+      CompatibleRuntimes:
+        - python3.9
+        - python3.10
+        - python3.11
+        - python3.12
+      Content:
+        S3Bucket:
+          Ref: CustomResourceS3Bucket
+        S3Key:
+          Ref: LayerS3Key
+      Description: Lambda Layer for Hyperpod Inference Operator installation (boto3 dependencies)
+      LayerName:
+        Fn::Sub: ${ResourceNamePrefix}-inference-operator-layer
+    Metadata:
+      aws:cdk:path: InferenceOperatorAddonCfnTemplate/InferenceOperatorCustomResourceLayer
+  InferenceOperatorCustomResourceFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      Code:
+        S3Bucket:
+          Ref: CustomResourceS3Bucket
+        S3Key:
+          Ref: FunctionS3Key
+      Environment:
+        Variables:
+          EKS_CLUSTER_NAME:
+            Ref: EKSClusterName
+          ADDON_NAME: amazon-sagemaker-hyperpod-inference
+          ADDON_VERSION:
+            Ref: AddonVersion
+          EXECUTION_ROLE_ARN:
+            Ref: ExecutionRoleArn
+          TLS_CERTIFICATE_S3_BUCKET:
+            Ref: TlsCertificateS3Bucket
+          KEDA_ROLE_ARN:
+            Ref: KedaRoleArn
+          ALB_CONTROLLER_ROLE_ARN:
+            Ref: AlbControllerRoleArn
+          JUMPSTART_GATED_MODEL_ROLE_ARN:
+            Ref: JumpstartGatedModelRoleArn
+      FunctionName:
+        Fn::Sub:
+          - ${ResourceNamePrefix}-inf-op-func-${UniqueSuffix}
+          - UniqueSuffix:
+              Fn::Select:
+                - 0
+                - Fn::Split:
+                    - '-'
+                    - Fn::Select:
+                        - 2
+                        - Fn::Split:
+                            - /
+                            - Ref: AWS::StackId
+      Handler: lambda_function.lambda_handler
+      Layers:
+        - Ref: InferenceOperatorCustomResourceLayer
+      MemorySize: 1024
+      Role:
+        Fn::GetAtt:
+          - InferenceOperatorCustomResourceRole
+          - Arn
+      Runtime: python3.12
+      Timeout: 900
+    Metadata:
+      aws:cdk:path: InferenceOperatorAddonCfnTemplate/InferenceOperatorCustomResourceFunction
+  InferenceOperatorCustomResource:
+    Type: AWS::CloudFormation::CustomResource
+    Properties:
+      ServiceToken:
+        Fn::GetAtt:
+          - InferenceOperatorCustomResourceFunction
+          - Arn
+    DependsOn:
+      - InferenceOperatorCustomResourceFunction
+    Metadata:
+      aws:cdk:path: InferenceOperatorAddonCfnTemplate/InferenceOperatorCustomResource
+Outputs:
+  AddonStatus:
+    Description: Status of Hyperpod Inference Operator addon installation
+    Value:
+      Fn::GetAtt:
+        - InferenceOperatorCustomResource
+        - AddonStatus
+    Export:
+      Name:
+        Fn::Sub: ${AWS::StackName}-AddonStatus
+  InferenceOperatorCustomResourceArn:
+    Description: ARN of the Hyperpod Inference Operator Custom Resource
+    Value:
+      Ref: InferenceOperatorCustomResource
+    Export:
+      Name:
+        Fn::Sub: ${AWS::StackName}-InferenceOperatorCustomResourceArn
