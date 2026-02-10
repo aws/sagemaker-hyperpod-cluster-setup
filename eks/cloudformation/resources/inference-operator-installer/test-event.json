@@ -1,0 +1,9 @@
+{
+  "RequestType": "Create",
+  "ResponseURL": "https://httpbin.org/post",
+  "StackId": "arn:aws:cloudformation:us-west-2:123456789012:stack/test-stack/guid",
+  "RequestId": "test-request-id",
+  "ResourceType": "Custom::InferenceOperatorAddon",
+  "LogicalResourceId": "InferenceOperatorCustomResource",
+  "ResourceProperties": {}
+}

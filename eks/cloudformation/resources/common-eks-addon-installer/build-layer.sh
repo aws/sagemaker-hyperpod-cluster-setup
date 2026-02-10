@@ -18,6 +18,9 @@ mkdir -p "${PYTHON_DIR}"
 # Install Python dependencies
 pip3 install boto3>=1.26.0 botocore>=1.29.0 -t "${PYTHON_DIR}"
 
+# Copy shared utilities
+cp "${SCRIPT_DIR}/../shared/version_utils.py" "${PYTHON_DIR}/"
+
 # Create the layer zip
 cd "${LAYER_DIR}"
 echo "Creating layer zip file..."
