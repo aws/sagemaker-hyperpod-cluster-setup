@@ -67,6 +67,34 @@ Parameters:
       - 'true'
       - 'false'
     Description: Whether to create IAM role for Inference Operator execution
+  RetainFsxCsiDriverStack:
+    Type: String
+    Default: 'false'
+    AllowedValues:
+      - 'true'
+      - 'false'
+    Description: Retain FSx CSI Driver stack resources
+  RetainS3CsiDriverStack:
+    Type: String
+    Default: 'false'
+    AllowedValues:
+      - 'true'
+      - 'false'
+    Description: Retain S3 CSI Driver stack resources
+  RetainCertManagerStack:
+    Type: String
+    Default: 'false'
+    AllowedValues:
+      - 'true'
+      - 'false'
+    Description: Retain Cert Manager stack resources
+  RetainMetricsServerStack:
+    Type: String
+    Default: 'false'
+    AllowedValues:
+      - 'true'
+      - 'false'
+    Description: Retain Metrics Server stack resources
 Conditions:
   ShouldCreateS3Role:
     Fn::Equals:
@@ -92,6 +120,18 @@ Conditions:
     Fn::Equals:
       - Ref: CreateInferenceOperatorExecutionRole
       - 'true'
+  RetainFsxRoleCondition:
+    Fn::And:
+      - Condition: ShouldCreateFsxRole
+      - Fn::Equals:
+          - Ref: RetainFsxCsiDriverStack
+          - 'true'
+  RetainS3RoleCondition:
+    Fn::And:
+      - Condition: ShouldCreateS3Role
+      - Fn::Equals:
+          - Ref: RetainS3CsiDriverStack
+          - 'true'
 Resources:
   S3MountpointPolicy:
     Type: AWS::IAM::ManagedPolicy
@@ -132,6 +172,11 @@ Resources:
     Metadata:
       aws:cdk:path: InferenceAddonIamRolesCfnTemplate/S3MountpointPolicy
     Condition: ShouldCreateS3Role
+    DeletionPolicy:
+      Fn::If:
+        - RetainS3RoleCondition
+        - RetainExceptOnCreate
+        - Delete
   S3CsiDriverRole:
     Type: AWS::IAM::Role
     Properties:
@@ -159,6 +204,11 @@ Resources:
     Metadata:
       aws:cdk:path: InferenceAddonIamRolesCfnTemplate/S3CsiDriverRole
     Condition: ShouldCreateS3Role
+    DeletionPolicy:
+      Fn::If:
+        - RetainS3RoleCondition
+        - RetainExceptOnCreate
+        - Delete
   FsxCsiDriverRole:
     Type: AWS::IAM::Role
     Properties:
@@ -186,6 +236,11 @@ Resources:
     Metadata:
       aws:cdk:path: InferenceAddonIamRolesCfnTemplate/FsxCsiDriverRole
     Condition: ShouldCreateFsxRole
+    DeletionPolicy:
+      Fn::If:
+        - RetainFsxRoleCondition
+        - RetainExceptOnCreate
+        - Delete
   KedaPolicy:
     Type: AWS::IAM::ManagedPolicy
     Properties:
