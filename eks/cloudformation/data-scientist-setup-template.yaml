@@ -534,3 +534,91 @@ Outputs:
   DataScientistSetupComplete:
     Description: Indicates data scientist setup is complete
     Value: DataScientistSetupComplete
+  DataScientistRole1Output:
+    Description: First Data Scientist IAM role name
+    Value:
+      Ref: DataScientistRole1
+  DataScientistRole1NamespacesOutput:
+    Description: Namespaces for first Data Scientist role
+    Value:
+      Ref: DataScientistRole1Namespaces
+  DataScientistRole2Output:
+    Description: Second Data Scientist IAM role name
+    Value:
+      Ref: DataScientistRole2
+  DataScientistRole2NamespacesOutput:
+    Description: Namespaces for second Data Scientist role
+    Value:
+      Ref: DataScientistRole2Namespaces
+  DataScientistRole3Output:
+    Description: Third Data Scientist IAM role name
+    Value:
+      Ref: DataScientistRole3
+  DataScientistRole3NamespacesOutput:
+    Description: Namespaces for third Data Scientist role
+    Value:
+      Ref: DataScientistRole3Namespaces
+  DataScientistRole4Output:
+    Description: Fourth Data Scientist IAM role name
+    Value:
+      Ref: DataScientistRole4
+  DataScientistRole4NamespacesOutput:
+    Description: Namespaces for fourth Data Scientist role
+    Value:
+      Ref: DataScientistRole4Namespaces
+  DataScientistRole5Output:
+    Description: Fifth Data Scientist IAM role name
+    Value:
+      Ref: DataScientistRole5
+  DataScientistRole5NamespacesOutput:
+    Description: Namespaces for fifth Data Scientist role
+    Value:
+      Ref: DataScientistRole5Namespaces
+  DataScientistRole6Output:
+    Description: Sixth Data Scientist IAM role name
+    Value:
+      Ref: DataScientistRole6
+  DataScientistRole6NamespacesOutput:
+    Description: Namespaces for sixth Data Scientist role
+    Value:
+      Ref: DataScientistRole6Namespaces
+  DataScientistRole7Output:
+    Description: Seventh Data Scientist IAM role name
+    Value:
+      Ref: DataScientistRole7
+  DataScientistRole7NamespacesOutput:
+    Description: Namespaces for seventh Data Scientist role
+    Value:
+      Ref: DataScientistRole7Namespaces
+  DataScientistRole8Output:
+    Description: Eighth Data Scientist IAM role name
+    Value:
+      Ref: DataScientistRole8
+  DataScientistRole8NamespacesOutput:
+    Description: Namespaces for eighth Data Scientist role
+    Value:
+      Ref: DataScientistRole8Namespaces
+  DataScientistRole9Output:
+    Description: Ninth Data Scientist IAM role name
+    Value:
+      Ref: DataScientistRole9
+  DataScientistRole9NamespacesOutput:
+    Description: Namespaces for ninth Data Scientist role
+    Value:
+      Ref: DataScientistRole9Namespaces
+  DataScientistRole10Output:
+    Description: Tenth Data Scientist IAM role name
+    Value:
+      Ref: DataScientistRole10
+  DataScientistRole10NamespacesOutput:
+    Description: Namespaces for tenth Data Scientist role
+    Value:
+      Ref: DataScientistRole10Namespaces
+  DomainUserProfileRoleOutput:
+    Description: Domain User Profile IAM role name
+    Value:
+      Ref: DomainUserProfileRole
+  DomainUserProfileRoleNamespacesOutput:
+    Description: Namespaces for Domain User Profile role
+    Value:
+      Ref: DomainUserProfileRoleNamespaces

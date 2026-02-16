@@ -54,11 +54,6 @@ Parameters:
       - 'true'
       - 'false'
     Description: Flag to enable inference operator addon integration. When true, update_cluster will be called on Create.
-Conditions:
-  IsGammaStage:
-    Fn::Equals:
-      - Ref: Stage
-      - gamma
 Resources:
   TieredCacheConfigCustomResourceLayer:
     Type: AWS::Lambda::LayerVersion
@@ -166,11 +161,6 @@ Resources:
           PATH: /opt/python/bin:/var/lang/bin:/usr/local/bin:/usr/bin/:/bin
           KUBECONFIG: /tmp/.kube/config
           LD_LIBRARY_PATH: /opt/python/lib
-          TESTING:
-            Fn::If:
-              - IsGammaStage
-              - 'true'
-              - 'false'
           IS_INF_OPERATOR_ADDON_ENABLED:
             Ref: IsInfOperatorAddOnEnabled
       FunctionName:

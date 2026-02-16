@@ -7,6 +7,7 @@ Metadata:
           default: General Settings
         Parameters:
           - ResourceNamePrefix
+          - ResourceNameShortPrefix
           - Stage
           - CustomBucketName
           - NodeRecovery
@@ -187,6 +188,8 @@ Metadata:
     ParameterLabels:
       ResourceNamePrefix:
         default: Resource Name Prefix
+      ResourceNameShortPrefix:
+        default: Resource Name Short Prefix
       Stage:
         default: Deployment Stage
       EnableHPInferenceFeature:
@@ -464,6 +467,10 @@ Parameters:
     Type: String
     Default: sagemaker-hyperpod-eks
     Description: Prefix to be used for all resources created by this template.
+  ResourceNameShortPrefix:
+    Type: String
+    Default: sm-hyp-eks
+    Description: 'Short prefix for resources (format: truncated-name-shortUuid). Used for resources with name length constraints.'
   VpcCIDR:
     Type: String
     Default: 10.192.0.0/16
@@ -2065,7 +2072,7 @@ Resources:
               https://aws-sagemaker-hyperpod-cluster-setup-${AWS::Region}-${Stage}.s3.${AWS::Region}.amazonaws.com/templates/inference-operator-main-stack-template.yaml
       Parameters:
         ResourceNamePrefix:
-          Ref: ResourceNamePrefix
+          Ref: ResourceNameShortPrefix
         Stage:
           Ref: Stage
         CustomBucketName:
@@ -2136,7 +2143,7 @@ Resources:
               https://aws-sagemaker-hyperpod-cluster-setup-${AWS::Region}-${Stage}.s3.${AWS::Region}.amazonaws.com/templates/main-stack-inference-operator-addon-template.yaml
       Parameters:
         ResourceNamePrefix:
-          Ref: ResourceNamePrefix
+          Ref: ResourceNameShortPrefix
         Stage:
           Ref: Stage
         CustomBucketName:

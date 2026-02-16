@@ -1,0 +1,1365 @@
+Description: Main Stack for Hyperpod Inference Operator Addon Installation
+Metadata:
+  AWS::CloudFormation::Interface:
+    ParameterGroups:
+      - Label:
+          default: General Settings
+        Parameters:
+          - ResourceNamePrefix
+          - Stage
+          - CustomBucketName
+      - Label:
+          default: TLS Certificate Bucket
+        Parameters:
+          - TlsCertificateBucketName
+          - AccessLogsBucketName
+      - Label:
+          default: SageMaker Domain
+        Parameters:
+          - CreateDomain
+          - DomainUserProfileRoleArn
+          - DomainName
+          - UserProfileName
+          - DomainVpcId
+          - DomainSubnetIds
+      - Label:
+          default: Networking
+        Parameters:
+          - VpcId
+          - EksPrivateRouteTableIds
+          - CreateS3EndpointStack
+      - Label:
+          default: EKS Cluster
+        Parameters:
+          - EKSClusterName
+          - OIDCProviderURLWithoutProtocol
+          - AssociateOIDCProvider
+      - Label:
+          default: HyperPod Cluster
+        Parameters:
+          - HyperPodClusterArn
+          - HyperPodClusterName
+      - Label:
+          default: Dependency Addons
+        Parameters:
+          - InstallCertManager
+          - InstallFsxCsiDriver
+          - InstallS3CsiDriver
+          - InstallMetricsServer
+          - FsxCsiDriverRoleArn
+          - S3CsiDriverRoleArn
+      - Label:
+          default: Resource Retention Policies
+        Parameters:
+          - RetainCertManagerStack
+          - RetainFsxCsiDriverStack
+          - RetainS3CsiDriverStack
+          - RetainMetricsServerStack
+          - RetainS3EndpointStack
+      - Label:
+          default: HyperPod Data Scientist Setup
+        Parameters:
+          - DataScientistRole1
+          - DataScientistRole1Namespaces
+          - DataScientistRole2
+          - DataScientistRole2Namespaces
+          - DataScientistRole3
+          - DataScientistRole3Namespaces
+          - DataScientistRole4
+          - DataScientistRole4Namespaces
+          - DataScientistRole5
+          - DataScientistRole5Namespaces
+          - DataScientistRole6
+          - DataScientistRole6Namespaces
+          - DataScientistRole7
+          - DataScientistRole7Namespaces
+          - DataScientistRole8
+          - DataScientistRole8Namespaces
+          - DataScientistRole9
+          - DataScientistRole9Namespaces
+          - DataScientistRole10
+          - DataScientistRole10Namespaces
+          - DomainUserProfileRoleNamespaces
+      - Label:
+          default: Hyperpod Inference Operator Addon
+        Parameters:
+          - InferenceOperatorExecutionRoleArn
+          - KedaRoleArn
+          - AlbControllerRoleArn
+          - JumpstartGatedModelDownloadRoleArn
+    ParameterLabels:
+      ResourceNamePrefix:
+        default: Resource Name Prefix
+      Stage:
+        default: Deployment Stage
+      CustomBucketName:
+        default: Custom S3 Bucket Name
+      VpcId:
+        default: Existing VPC ID
+      EksPrivateRouteTableIds:
+        default: EKS Private Route Table IDs
+      CreateS3EndpointStack:
+        default: Create S3 Endpoint
+      DataScientistRole1:
+        default: Data Scientist Role 1
+      DataScientistRole1Namespaces:
+        default: Data Scientist Role 1 Namespaces
+      DataScientistRole2:
+        default: Data Scientist Role 2
+      DataScientistRole2Namespaces:
+        default: Data Scientist Role 2 Namespaces
+      DataScientistRole3:
+        default: Data Scientist Role 3
+      DataScientistRole3Namespaces:
+        default: Data Scientist Role 3 Namespaces
+      DataScientistRole4:
+        default: Data Scientist Role 4
+      DataScientistRole4Namespaces:
+        default: Data Scientist Role 4 Namespaces
+      DataScientistRole5:
+        default: Data Scientist Role 5
+      DataScientistRole5Namespaces:
+        default: Data Scientist Role 5 Namespaces
+      DataScientistRole6:
+        default: Data Scientist Role 6
+      DataScientistRole6Namespaces:
+        default: Data Scientist Role 6 Namespaces
+      DataScientistRole7:
+        default: Data Scientist Role 7
+      DataScientistRole7Namespaces:
+        default: Data Scientist Role 7 Namespaces
+      DataScientistRole8:
+        default: Data Scientist Role 8
+      DataScientistRole8Namespaces:
+        default: Data Scientist Role 8 Namespaces
+      DataScientistRole9:
+        default: Data Scientist Role 9
+      DataScientistRole9Namespaces:
+        default: Data Scientist Role 9 Namespaces
+      DataScientistRole10:
+        default: Data Scientist Role 10
+      DataScientistRole10Namespaces:
+        default: Data Scientist Role 10 Namespaces
+      HyperPodClusterArn:
+        default: HyperPod Cluster ARN
+      HyperPodClusterName:
+        default: HyperPod Cluster Name
+Parameters:
+  Stage:
+    Type: String
+    Default: prod
+    AllowedValues:
+      - gamma
+      - prod
+    Description: Deployment stage (gamma, prod)
+  CustomBucketName:
+    Type: String
+    Default: ''
+    Description: Custom S3 bucket name for templates. If provided, will override the default bucket. Leave empty to use default.
+  ResourceNamePrefix:
+    Type: String
+    Default: sagemaker-hyperpod-eks
+    Description: Prefix to be used for all resources created by this template.
+  AccessLogsBucketName:
+    Type: String
+    Default: ''
+    Description: Name of the S3 bucket to use for access logs.
+  VpcId:
+    Type: String
+    Default: vpc-1234567890abcdef0
+    Description: The ID of the VPC.
+  EksPrivateRouteTableIds:
+    Type: String
+    Default: rtb-1234567890abcdef0
+    Description: Comma-separated list of EKS private route table IDs.
+  EKSClusterName:
+    Type: String
+    Default: eks
+    Description: The name of the preexisting EKS cluster you wish to use.
+  OIDCProviderURLWithoutProtocol:
+    Type: String
+    Default: ''
+    Description: The URL of the OIDC Provider without https:// prefix (required for creating IAM roles)
+  AssociateOIDCProvider:
+    Type: String
+    Default: 'true'
+    AllowedValues:
+      - 'true'
+      - 'false'
+    Description: Boolean to associate IAM OIDC provider with the EKS cluster
+  TlsCertificateBucketName:
+    Type: String
+    Default: ''
+    Description: Name of the S3 bucket for storing TLS certificates (optional - will be created if not provided)
+  CreateDomain:
+    Type: String
+    Default: 'true'
+    AllowedValues:
+      - 'true'
+      - 'false'
+    Description: Boolean to create SageMaker Domain
+  DomainUserProfileRoleArn:
+    Type: String
+    Default: ''
+    Description: >-
+      IAM role ARN for SageMaker Domain user profile (optional - will be created if not provided and CreateDomain is
+      true)
+  DomainUserProfileRoleNamespaces:
+    Type: String
+    Default: ''
+    Description: >-
+      Comma-separated list of Kubernetes namespaces for DomainUserProfileRole. Model deployment permissions will be
+      scoped to these namespaces. (optional)
+  DomainName:
+    Type: String
+    Default: ''
+    Description: Name for the SageMaker Domain (optional, auto-generated if not provided).
+  UserProfileName:
+    Type: String
+    Default: default-user
+    Description: Name for the SageMaker User Profile (defaults to "default-user" if not provided)
+  DomainVpcId:
+    Type: String
+    Default: ''
+    Description: VPC ID for the SageMaker Domain (required if CreateDomain is true)
+  DomainSubnetIds:
+    Type: String
+    Default: ''
+    Description: Comma-separated list of subnet IDs for the SageMaker Domain (required if CreateDomain is true)
+  InstallCertManager:
+    Type: String
+    Default: 'true'
+    AllowedValues:
+      - 'true'
+      - 'false'
+    Description: Boolean to install Cert Manager
+  InstallFsxCsiDriver:
+    Type: String
+    Default: 'true'
+    AllowedValues:
+      - 'true'
+      - 'false'
+    Description: Boolean to install FSx CSI Driver
+  InstallS3CsiDriver:
+    Type: String
+    Default: 'true'
+    AllowedValues:
+      - 'true'
+      - 'false'
+    Description: Boolean to install S3 CSI Driver
+  InstallMetricsServer:
+    Type: String
+    Default: 'true'
+    AllowedValues:
+      - 'true'
+      - 'false'
+    Description: Boolean to install Metrics Server
+  FsxCsiDriverRoleArn:
+    Type: String
+    Default: ''
+    Description: IAM role ARN for FSx CSI Driver
+  S3CsiDriverRoleArn:
+    Type: String
+    Default: ''
+    Description: IAM role ARN for S3 CSI Driver
+  RetainCertManagerStack:
+    Type: String
+    Default: 'true'
+    AllowedValues:
+      - 'true'
+      - 'false'
+    Description: Retain CertManagerStack on deletion
+  RetainFsxCsiDriverStack:
+    Type: String
+    Default: 'true'
+    AllowedValues:
+      - 'true'
+      - 'false'
+    Description: Retain FsxCsiDriverStack on deletion
+  RetainS3CsiDriverStack:
+    Type: String
+    Default: 'true'
+    AllowedValues:
+      - 'true'
+      - 'false'
+    Description: Retain S3CsiDriverStack on deletion
+  RetainMetricsServerStack:
+    Type: String
+    Default: 'true'
+    AllowedValues:
+      - 'true'
+      - 'false'
+    Description: Retain MetricsServerStack on deletion
+  RetainS3EndpointStack:
+    Type: String
+    Default: 'true'
+    AllowedValues:
+      - 'true'
+      - 'false'
+    Description: Retain S3EndpointStack on deletion
+  InferenceOperatorExecutionRoleArn:
+    Type: String
+    Default: ''
+    Description: IAM role ARN for Inference Operator execution
+  KedaRoleArn:
+    Type: String
+    Default: ''
+    Description: IAM role ARN for KEDA autoscaler
+  AlbControllerRoleArn:
+    Type: String
+    Default: ''
+    Description: IAM role ARN for ALB Controller
+  JumpstartGatedModelDownloadRoleArn:
+    Type: String
+    Default: ''
+    Description: IAM role ARN for SageMaker Jumpstart gated model download
+  HyperPodClusterArn:
+    Type: String
+    Default: ''
+    Description: ARN of SageMaker HyperPod Cluster.
+  HyperPodClusterName:
+    Type: String
+    Default: ''
+    Description: Name of SageMaker HyperPod Cluster.
+  TieredStorageConfig:
+    Type: String
+    Default: ''
+    Description: >-
+      JSON string containing tiered storage configuration. Format: {"Mode": "Enable",
+      "InstanceMemoryAllocationPercentage": 20}
+  TieredKVCacheConfig:
+    Type: String
+    Default: ''
+    Description: >-
+      JSON string containing tiered KV cache configuration. Format: {"KVCacheMode": "Enable", "InstanceGroup": ["ig-1"],
+      "NVMeMode": "Enable"}
+  DataScientistRole1:
+    Type: String
+    Default: ''
+    Description: >-
+      First HyperPod Data Scientist IAM role name. Model deployment permissions will be scoped to the specified
+      namespaces. (optional)
+  DataScientistRole1Namespaces:
+    Type: String
+    Default: ''
+    Description: >-
+      Comma-separated list of Kubernetes namespaces for DataScientistRole1. Model deployment permissions will be scoped
+      to these namespaces. (optional)
+  DataScientistRole2:
+    Type: String
+    Default: ''
+    Description: >-
+      Second HyperPod Data Scientist IAM role name. Model deployment permissions will be scoped to the specified
+      namespaces. (optional)
+  DataScientistRole2Namespaces:
+    Type: String
+    Default: ''
+    Description: >-
+      Comma-separated list of Kubernetes namespaces for DataScientistRole2. Model deployment permissions will be scoped
+      to these namespaces. (optional)
+  DataScientistRole3:
+    Type: String
+    Default: ''
+    Description: >-
+      Third HyperPod Data Scientist IAM role name. Model deployment permissions will be scoped to the specified
+      namespaces. (optional)
+  DataScientistRole3Namespaces:
+    Type: String
+    Default: ''
+    Description: >-
+      Comma-separated list of Kubernetes namespaces for DataScientistRole3. Model deployment permissions will be scoped
+      to these namespaces. (optional)
+  DataScientistRole4:
+    Type: String
+    Default: ''
+    Description: >-
+      Fourth HyperPod Data Scientist IAM role name. Model deployment permissions will be scoped to the specified
+      namespaces. (optional)
+  DataScientistRole4Namespaces:
+    Type: String
+    Default: ''
+    Description: >-
+      Comma-separated list of Kubernetes namespaces for DataScientistRole4. Model deployment permissions will be scoped
+      to these namespaces. (optional)
+  DataScientistRole5:
+    Type: String
+    Default: ''
+    Description: >-
+      Fifth HyperPod Data Scientist IAM role name. Model deployment permissions will be scoped to the specified
+      namespaces. (optional)
+  DataScientistRole5Namespaces:
+    Type: String
+    Default: ''
+    Description: >-
+      Comma-separated list of Kubernetes namespaces for DataScientistRole5. Model deployment permissions will be scoped
+      to these namespaces. (optional)
+  DataScientistRole6:
+    Type: String
+    Default: ''
+    Description: >-
+      Sixth HyperPod Data Scientist IAM role name. Model deployment permissions will be scoped to the specified
+      namespaces. (optional)
+  DataScientistRole6Namespaces:
+    Type: String
+    Default: ''
+    Description: >-
+      Comma-separated list of Kubernetes namespaces for DataScientistRole6. Model deployment permissions will be scoped
+      to these namespaces. (optional)
+  DataScientistRole7:
+    Type: String
+    Default: ''
+    Description: >-
+      Seventh HyperPod Data Scientist IAM role name. Model deployment permissions will be scoped to the specified
+      namespaces. (optional)
+  DataScientistRole7Namespaces:
+    Type: String
+    Default: ''
+    Description: >-
+      Comma-separated list of Kubernetes namespaces for DataScientistRole7. Model deployment permissions will be scoped
+      to these namespaces. (optional)
+  DataScientistRole8:
+    Type: String
+    Default: ''
+    Description: >-
+      Eighth HyperPod Data Scientist IAM role name. Model deployment permissions will be scoped to the specified
+      namespaces. (optional)
+  DataScientistRole8Namespaces:
+    Type: String
+    Default: ''
+    Description: >-
+      Comma-separated list of Kubernetes namespaces for DataScientistRole8. Model deployment permissions will be scoped
+      to these namespaces. (optional)
+  DataScientistRole9:
+    Type: String
+    Default: ''
+    Description: >-
+      Ninth HyperPod Data Scientist IAM role name. Model deployment permissions will be scoped to the specified
+      namespaces. (optional)
+  DataScientistRole9Namespaces:
+    Type: String
+    Default: ''
+    Description: >-
+      Comma-separated list of Kubernetes namespaces for DataScientistRole9. Model deployment permissions will be scoped
+      to these namespaces. (optional)
+  DataScientistRole10:
+    Type: String
+    Default: ''
+    Description: >-
+      Tenth HyperPod Data Scientist IAM role name. Model deployment permissions will be scoped to the specified
+      namespaces. (optional)
+  DataScientistRole10Namespaces:
+    Type: String
+    Default: ''
+    Description: >-
+      Comma-separated list of Kubernetes namespaces for DataScientistRole10. Model deployment permissions will be scoped
+      to these namespaces. (optional)
+  CreateS3EndpointStack:
+    Type: String
+    Default: 'true'
+    AllowedValues:
+      - 'true'
+      - 'false'
+    Description: Boolean to Create S3 Endpoint Stack
+Conditions:
+  CreateS3EndpointStackCondition:
+    Fn::Equals:
+      - Ref: CreateS3EndpointStack
+      - 'true'
+  CustomBucketCondition:
+    Fn::Not:
+      - Fn::Equals:
+          - Ref: CustomBucketName
+          - ''
+  AnyDataScientistRoleProvidedCondition:
+    Fn::Or:
+      - Fn::Not:
+          - Fn::Equals:
+              - Ref: DataScientistRole1
+              - ''
+      - Fn::Not:
+          - Fn::Equals:
+              - Ref: DataScientistRole2
+              - ''
+      - Fn::Not:
+          - Fn::Equals:
+              - Ref: DataScientistRole3
+              - ''
+      - Fn::Not:
+          - Fn::Equals:
+              - Ref: DataScientistRole4
+              - ''
+      - Fn::Not:
+          - Fn::Equals:
+              - Ref: DataScientistRole5
+              - ''
+      - Fn::Not:
+          - Fn::Equals:
+              - Ref: DataScientistRole6
+              - ''
+      - Fn::Not:
+          - Fn::Equals:
+              - Ref: DataScientistRole7
+              - ''
+      - Fn::Not:
+          - Fn::Equals:
+              - Ref: DataScientistRole8
+              - ''
+      - Fn::Not:
+          - Fn::Equals:
+              - Ref: DataScientistRole9
+              - ''
+      - Fn::Not:
+          - Fn::Equals:
+              - Ref: DataScientistRole10
+              - ''
+  DataScientistSetupCondition:
+    Fn::Or:
+      - Fn::Equals:
+          - AnyDataScientistRoleProvidedCondition
+          - 'true'
+      - Fn::Equals:
+          - Ref: CreateDomain
+          - 'true'
+  CreateTlsBucketCondition:
+    Fn::Equals:
+      - Ref: TlsCertificateBucketName
+      - ''
+  CreateDomainCondition:
+    Fn::Equals:
+      - Ref: CreateDomain
+      - 'true'
+  InstallCertManagerCondition:
+    Fn::Equals:
+      - Ref: InstallCertManager
+      - 'true'
+  InstallFsxCsiDriverCondition:
+    Fn::Equals:
+      - Ref: InstallFsxCsiDriver
+      - 'true'
+  InstallS3CsiDriverCondition:
+    Fn::Equals:
+      - Ref: InstallS3CsiDriver
+      - 'true'
+  InstallMetricsServerCondition:
+    Fn::Equals:
+      - Ref: InstallMetricsServer
+      - 'true'
+  FsxRoleProvidedCondition:
+    Fn::Not:
+      - Fn::Equals:
+          - Ref: FsxCsiDriverRoleArn
+          - ''
+  S3RoleProvidedCondition:
+    Fn::Not:
+      - Fn::Equals:
+          - Ref: S3CsiDriverRoleArn
+          - ''
+  CreateFsxRoleCondition:
+    Fn::And:
+      - Fn::Equals:
+          - Ref: FsxCsiDriverRoleArn
+          - ''
+      - Fn::Equals:
+          - Ref: InstallFsxCsiDriver
+          - 'true'
+  CreateS3RoleCondition:
+    Fn::And:
+      - Fn::Equals:
+          - Ref: S3CsiDriverRoleArn
+          - ''
+      - Fn::Equals:
+          - Ref: InstallS3CsiDriver
+          - 'true'
+  KedaRoleProvidedCondition:
+    Fn::Not:
+      - Fn::Equals:
+          - Ref: KedaRoleArn
+          - ''
+  AlbControllerRoleProvidedCondition:
+    Fn::Not:
+      - Fn::Equals:
+          - Ref: AlbControllerRoleArn
+          - ''
+  CreateKedaRoleCondition:
+    Fn::Equals:
+      - Ref: KedaRoleArn
+      - ''
+  CreateAlbControllerRoleCondition:
+    Fn::Equals:
+      - Ref: AlbControllerRoleArn
+      - ''
+  JumpstartGatedModelDownloadRoleProvidedCondition:
+    Fn::Not:
+      - Fn::Equals:
+          - Ref: JumpstartGatedModelDownloadRoleArn
+          - ''
+  CreateJumpstartGatedModelRoleCondition:
+    Fn::Equals:
+      - Ref: JumpstartGatedModelDownloadRoleArn
+      - ''
+  CreateInferenceOperatorExecutionRoleCondition:
+    Fn::Equals:
+      - Ref: InferenceOperatorExecutionRoleArn
+      - ''
+  InferenceOperatorExecutionRoleProvidedCondition:
+    Fn::Not:
+      - Fn::Equals:
+          - Ref: InferenceOperatorExecutionRoleArn
+          - ''
+  TieredKVCacheConfigCondition:
+    Fn::Not:
+      - Fn::Equals:
+          - Ref: TieredKVCacheConfig
+          - ''
+  AssociateOIDCProviderCondition:
+    Fn::Equals:
+      - Ref: AssociateOIDCProvider
+      - 'true'
+  RetainCertManagerStackCondition:
+    Fn::Equals:
+      - Ref: RetainCertManagerStack
+      - 'true'
+  RetainFsxCsiDriverStackCondition:
+    Fn::Equals:
+      - Ref: RetainFsxCsiDriverStack
+      - 'true'
+  RetainS3CsiDriverStackCondition:
+    Fn::Equals:
+      - Ref: RetainS3CsiDriverStack
+      - 'true'
+  RetainMetricsServerStackCondition:
+    Fn::Equals:
+      - Ref: RetainMetricsServerStack
+      - 'true'
+  RetainS3EndpointStackCondition:
+    Fn::Equals:
+      - Ref: RetainS3EndpointStack
+      - 'true'
+Resources:
+  EksOidcProviderStack:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL:
+        Fn::If:
+          - CustomBucketCondition
+          - Fn::Sub: https://${CustomBucketName}.s3.${AWS::Region}.amazonaws.com/templates/eks-oidc-provider-template.yaml
+          - Fn::Sub: >-
+              https://aws-sagemaker-hyperpod-cluster-setup-${AWS::Region}-${Stage}.s3.${AWS::Region}.amazonaws.com/templates/eks-oidc-provider-template.yaml
+      Parameters:
+        ResourceNamePrefix:
+          Ref: ResourceNamePrefix
+        EKSClusterName:
+          Ref: EKSClusterName
+        CustomResourceS3Bucket:
+          Fn::If:
+            - CustomBucketCondition
+            - Ref: CustomBucketName
+            - Fn::Sub: aws-sagemaker-hyperpod-cluster-setup-${AWS::Region}-${Stage}
+    Metadata:
+      aws:cdk:path: MainInferenceOperatorAddonCfnTemplate/EksOidcProviderStack
+    Condition: AssociateOIDCProviderCondition
+  InferenceAddonIamRolesStack:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL:
+        Fn::If:
+          - CustomBucketCondition
+          - Fn::Sub: >-
+              https://${CustomBucketName}.s3.${AWS::Region}.amazonaws.com/templates/inference-addon-iam-roles-template.yaml
+          - Fn::Sub: >-
+              https://aws-sagemaker-hyperpod-cluster-setup-${AWS::Region}-${Stage}.s3.${AWS::Region}.amazonaws.com/templates/inference-addon-iam-roles-template.yaml
+      Parameters:
+        ResourceNamePrefix:
+          Ref: ResourceNamePrefix
+        Stage:
+          Ref: Stage
+        OIDCProviderURLWithoutProtocol:
+          Ref: OIDCProviderURLWithoutProtocol
+        HyperPodClusterArn:
+          Ref: HyperPodClusterArn
+        TlsCertificatesBucketName:
+          Fn::If:
+            - CreateTlsBucketCondition
+            - Fn::GetAtt:
+                - TLSCertificatesS3BucketStack
+                - Outputs.TLSCertificatesBucketName
+            - Ref: TlsCertificateBucketName
+        VpcId:
+          Ref: VpcId
+        CreateS3CsiDriverRole:
+          Fn::If:
+            - CreateS3RoleCondition
+            - 'true'
+            - 'false'
+        CreateFsxCsiDriverRole:
+          Fn::If:
+            - CreateFsxRoleCondition
+            - 'true'
+            - 'false'
+        CreateKedaRole:
+          Fn::If:
+            - CreateKedaRoleCondition
+            - 'true'
+            - 'false'
+        CreateAlbControllerRole:
+          Fn::If:
+            - CreateAlbControllerRoleCondition
+            - 'true'
+            - 'false'
+        CreateJumpstartGatedModelRole:
+          Fn::If:
+            - CreateJumpstartGatedModelRoleCondition
+            - 'true'
+            - 'false'
+        CreateInferenceOperatorExecutionRole:
+          Fn::If:
+            - CreateInferenceOperatorExecutionRoleCondition
+            - 'true'
+            - 'false'
+        RetainFsxCsiDriverStack:
+          Ref: RetainFsxCsiDriverStack
+        RetainS3CsiDriverStack:
+          Ref: RetainS3CsiDriverStack
+        RetainCertManagerStack:
+          Ref: RetainCertManagerStack
+        RetainMetricsServerStack:
+          Ref: RetainMetricsServerStack
+    DependsOn:
+      - EksOidcProviderStack
+    Metadata:
+      aws:cdk:path: MainInferenceOperatorAddonCfnTemplate/InferenceAddonIamRolesStack
+  TLSCertificatesS3BucketStack:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL:
+        Fn::If:
+          - CustomBucketCondition
+          - Fn::Sub: >-
+              https://${CustomBucketName}.s3.${AWS::Region}.amazonaws.com/templates/tls-certificates-s3-bucket-template.yaml
+          - Fn::Sub: >-
+              https://aws-sagemaker-hyperpod-cluster-setup-${AWS::Region}-${Stage}.s3.${AWS::Region}.amazonaws.com/templates/tls-certificates-s3-bucket-template.yaml
+      Parameters:
+        ResourceNamePrefix:
+          Ref: ResourceNamePrefix
+        AccessLogsBucketName:
+          Ref: AccessLogsBucketName
+    Metadata:
+      aws:cdk:path: MainInferenceOperatorAddonCfnTemplate/TLSCertificatesS3BucketStack
+    Condition: CreateTlsBucketCondition
+    DeletionPolicy: RetainExceptOnCreate
+  S3EndpointStack:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL:
+        Fn::If:
+          - CustomBucketCondition
+          - Fn::Sub: https://${CustomBucketName}.s3.${AWS::Region}.amazonaws.com/templates/s3-endpoint-template.yaml
+          - Fn::Sub: >-
+              https://aws-sagemaker-hyperpod-cluster-setup-${AWS::Region}-${Stage}.s3.${AWS::Region}.amazonaws.com/templates/s3-endpoint-template.yaml
+      Parameters:
+        VpcId:
+          Ref: VpcId
+        PrivateRouteTableIds: ''
+        EksPrivateRouteTableIds:
+          Ref: EksPrivateRouteTableIds
+        ResourceNamePrefix:
+          Ref: ResourceNamePrefix
+    Metadata:
+      aws:cdk:path: MainInferenceOperatorAddonCfnTemplate/S3EndpointStack
+    Condition: CreateS3EndpointStackCondition
+    DeletionPolicy:
+      Fn::If:
+        - RetainS3EndpointStackCondition
+        - RetainExceptOnCreate
+        - Delete
+  DataScientistSetupStack:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL:
+        Fn::If:
+          - CustomBucketCondition
+          - Fn::Sub: https://${CustomBucketName}.s3.${AWS::Region}.amazonaws.com/templates/data-scientist-setup-template.yaml
+          - Fn::Sub: >-
+              https://aws-sagemaker-hyperpod-cluster-setup-${AWS::Region}-${Stage}.s3.${AWS::Region}.amazonaws.com/templates/data-scientist-setup-template.yaml
+      Parameters:
+        ResourceNamePrefix:
+          Ref: ResourceNamePrefix
+        EKSClusterName:
+          Ref: EKSClusterName
+        HPClusterArn:
+          Ref: HyperPodClusterArn
+        DataScientistRole1:
+          Ref: DataScientistRole1
+        DataScientistRole1Namespaces:
+          Ref: DataScientistRole1Namespaces
+        DataScientistRole2:
+          Ref: DataScientistRole2
+        DataScientistRole2Namespaces:
+          Ref: DataScientistRole2Namespaces
+        DataScientistRole3:
+          Ref: DataScientistRole3
+        DataScientistRole3Namespaces:
+          Ref: DataScientistRole3Namespaces
+        DataScientistRole4:
+          Ref: DataScientistRole4
+        DataScientistRole4Namespaces:
+          Ref: DataScientistRole4Namespaces
+        DataScientistRole5:
+          Ref: DataScientistRole5
+        DataScientistRole5Namespaces:
+          Ref: DataScientistRole5Namespaces
+        DataScientistRole6:
+          Ref: DataScientistRole6
+        DataScientistRole6Namespaces:
+          Ref: DataScientistRole6Namespaces
+        DataScientistRole7:
+          Ref: DataScientistRole7
+        DataScientistRole7Namespaces:
+          Ref: DataScientistRole7Namespaces
+        DataScientistRole8:
+          Ref: DataScientistRole8
+        DataScientistRole8Namespaces:
+          Ref: DataScientistRole8Namespaces
+        DataScientistRole9:
+          Ref: DataScientistRole9
+        DataScientistRole9Namespaces:
+          Ref: DataScientistRole9Namespaces
+        DataScientistRole10:
+          Ref: DataScientistRole10
+        DataScientistRole10Namespaces:
+          Ref: DataScientistRole10Namespaces
+        DomainUserProfileRole:
+          Fn::If:
+            - CreateDomainCondition
+            - Fn::GetAtt:
+                - SageMakerDomainStack
+                - Outputs.ExecutionRoleName
+            - ''
+        DomainUserProfileRoleNamespaces:
+          Ref: DomainUserProfileRoleNamespaces
+        CustomResourceS3Bucket:
+          Fn::If:
+            - CustomBucketCondition
+            - Ref: CustomBucketName
+            - Fn::Sub: aws-sagemaker-hyperpod-cluster-setup-${AWS::Region}-${Stage}
+    Metadata:
+      aws:cdk:path: MainInferenceOperatorAddonCfnTemplate/DataScientistSetupStack
+    Condition: DataScientistSetupCondition
+  SageMakerDomainStack:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL:
+        Fn::If:
+          - CustomBucketCondition
+          - Fn::Sub: https://${CustomBucketName}.s3.${AWS::Region}.amazonaws.com/templates/sagemaker-domain-template.yaml
+          - Fn::Sub: >-
+              https://aws-sagemaker-hyperpod-cluster-setup-${AWS::Region}-${Stage}.s3.${AWS::Region}.amazonaws.com/templates/sagemaker-domain-template.yaml
+      Parameters:
+        ResourceNamePrefix:
+          Ref: ResourceNamePrefix
+        DomainUserProfileRoleArn:
+          Ref: DomainUserProfileRoleArn
+        EKSClusterName:
+          Ref: EKSClusterName
+        DomainName:
+          Ref: DomainName
+        UserProfileName:
+          Ref: UserProfileName
+        DomainVpcId:
+          Ref: DomainVpcId
+        DomainSubnetIds:
+          Ref: DomainSubnetIds
+    DependsOn:
+      - HyperPodInferenceAddonStack
+    Metadata:
+      aws:cdk:path: MainInferenceOperatorAddonCfnTemplate/SageMakerDomainStack
+    Condition: CreateDomainCondition
+  CertManagerStack:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL:
+        Fn::If:
+          - CustomBucketCondition
+          - Fn::Sub: https://${CustomBucketName}.s3.${AWS::Region}.amazonaws.com/templates/cert-manager-addon-template.yaml
+          - Fn::Sub: >-
+              https://aws-sagemaker-hyperpod-cluster-setup-${AWS::Region}-${Stage}.s3.${AWS::Region}.amazonaws.com/templates/cert-manager-addon-template.yaml
+      Parameters:
+        ResourceNamePrefix:
+          Ref: ResourceNamePrefix
+        EKSClusterName:
+          Ref: EKSClusterName
+        CustomResourceS3Bucket:
+          Fn::If:
+            - CustomBucketCondition
+            - Ref: CustomBucketName
+            - Fn::Sub: aws-sagemaker-hyperpod-cluster-setup-${AWS::Region}-${Stage}
+    Metadata:
+      aws:cdk:path: MainInferenceOperatorAddonCfnTemplate/CertManagerStack
+    Condition: InstallCertManagerCondition
+    DeletionPolicy:
+      Fn::If:
+        - RetainCertManagerStackCondition
+        - RetainExceptOnCreate
+        - Delete
+  FsxCsiDriverStack:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL:
+        Fn::If:
+          - CustomBucketCondition
+          - Fn::Sub: https://${CustomBucketName}.s3.${AWS::Region}.amazonaws.com/templates/fsx-csi-driver-addon-template.yaml
+          - Fn::Sub: >-
+              https://aws-sagemaker-hyperpod-cluster-setup-${AWS::Region}-${Stage}.s3.${AWS::Region}.amazonaws.com/templates/fsx-csi-driver-addon-template.yaml
+      Parameters:
+        ResourceNamePrefix:
+          Ref: ResourceNamePrefix
+        EKSClusterName:
+          Ref: EKSClusterName
+        ServiceAccountRoleArn:
+          Fn::If:
+            - FsxRoleProvidedCondition
+            - Ref: FsxCsiDriverRoleArn
+            - Fn::GetAtt:
+                - InferenceAddonIamRolesStack
+                - Outputs.FsxCsiDriverRoleArn
+        CustomResourceS3Bucket:
+          Fn::If:
+            - CustomBucketCondition
+            - Ref: CustomBucketName
+            - Fn::Sub: aws-sagemaker-hyperpod-cluster-setup-${AWS::Region}-${Stage}
+    Metadata:
+      aws:cdk:path: MainInferenceOperatorAddonCfnTemplate/FsxCsiDriverStack
+    Condition: InstallFsxCsiDriverCondition
+    DeletionPolicy:
+      Fn::If:
+        - RetainFsxCsiDriverStackCondition
+        - RetainExceptOnCreate
+        - Delete
+  S3CsiDriverStack:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL:
+        Fn::If:
+          - CustomBucketCondition
+          - Fn::Sub: https://${CustomBucketName}.s3.${AWS::Region}.amazonaws.com/templates/s3-csi-driver-addon-template.yaml
+          - Fn::Sub: >-
+              https://aws-sagemaker-hyperpod-cluster-setup-${AWS::Region}-${Stage}.s3.${AWS::Region}.amazonaws.com/templates/s3-csi-driver-addon-template.yaml
+      Parameters:
+        ResourceNamePrefix:
+          Ref: ResourceNamePrefix
+        EKSClusterName:
+          Ref: EKSClusterName
+        ServiceAccountRoleArn:
+          Fn::If:
+            - S3RoleProvidedCondition
+            - Ref: S3CsiDriverRoleArn
+            - Fn::GetAtt:
+                - InferenceAddonIamRolesStack
+                - Outputs.S3CsiDriverRoleArn
+        CustomResourceS3Bucket:
+          Fn::If:
+            - CustomBucketCondition
+            - Ref: CustomBucketName
+            - Fn::Sub: aws-sagemaker-hyperpod-cluster-setup-${AWS::Region}-${Stage}
+    Metadata:
+      aws:cdk:path: MainInferenceOperatorAddonCfnTemplate/S3CsiDriverStack
+    Condition: InstallS3CsiDriverCondition
+    DeletionPolicy:
+      Fn::If:
+        - RetainS3CsiDriverStackCondition
+        - RetainExceptOnCreate
+        - Delete
+  MetricsServerStack:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL:
+        Fn::If:
+          - CustomBucketCondition
+          - Fn::Sub: https://${CustomBucketName}.s3.${AWS::Region}.amazonaws.com/templates/metrics-server-addon-template.yaml
+          - Fn::Sub: >-
+              https://aws-sagemaker-hyperpod-cluster-setup-${AWS::Region}-${Stage}.s3.${AWS::Region}.amazonaws.com/templates/metrics-server-addon-template.yaml
+      Parameters:
+        ResourceNamePrefix:
+          Ref: ResourceNamePrefix
+        EKSClusterName:
+          Ref: EKSClusterName
+        CustomResourceS3Bucket:
+          Fn::If:
+            - CustomBucketCondition
+            - Ref: CustomBucketName
+            - Fn::Sub: aws-sagemaker-hyperpod-cluster-setup-${AWS::Region}-${Stage}
+    Metadata:
+      aws:cdk:path: MainInferenceOperatorAddonCfnTemplate/MetricsServerStack
+    Condition: InstallMetricsServerCondition
+    DeletionPolicy:
+      Fn::If:
+        - RetainMetricsServerStackCondition
+        - RetainExceptOnCreate
+        - Delete
+  TieredCacheConfigStack:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL:
+        Fn::If:
+          - CustomBucketCondition
+          - Fn::Sub: https://${CustomBucketName}.s3.${AWS::Region}.amazonaws.com/templates/tiered-cache-config-template.yaml
+          - Fn::Sub: >-
+              https://aws-sagemaker-hyperpod-cluster-setup-${AWS::Region}-${Stage}.s3.${AWS::Region}.amazonaws.com/templates/tiered-cache-config-template.yaml
+      Parameters:
+        ResourceNamePrefix:
+          Ref: ResourceNamePrefix
+        EKSClusterName:
+          Ref: EKSClusterName
+        HyperPodClusterName:
+          Ref: HyperPodClusterName
+        CustomResourceS3Bucket:
+          Fn::If:
+            - CustomBucketCondition
+            - Ref: CustomBucketName
+            - Fn::Sub: aws-sagemaker-hyperpod-cluster-setup-${AWS::Region}-${Stage}
+        TieredStorageConfig:
+          Ref: TieredStorageConfig
+        TieredKVCacheConfig:
+          Ref: TieredKVCacheConfig
+        Region:
+          Ref: AWS::Region
+        Stage:
+          Ref: Stage
+        IsInfOperatorAddOnEnabled: 'true'
+    Metadata:
+      aws:cdk:path: MainInferenceOperatorAddonCfnTemplate/TieredCacheConfigStack
+    Condition: TieredKVCacheConfigCondition
+  CertManagerWaitHandle:
+    Type: AWS::CloudFormation::WaitConditionHandle
+    DependsOn:
+      - CertManagerStack
+    Metadata:
+      aws:cdk:path: MainInferenceOperatorAddonCfnTemplate/CertManagerWaitHandle
+    Condition: InstallCertManagerCondition
+  FsxCsiWaitHandle:
+    Type: AWS::CloudFormation::WaitConditionHandle
+    DependsOn:
+      - FsxCsiDriverStack
+    Metadata:
+      aws:cdk:path: MainInferenceOperatorAddonCfnTemplate/FsxCsiWaitHandle
+    Condition: InstallFsxCsiDriverCondition
+  S3CsiWaitHandle:
+    Type: AWS::CloudFormation::WaitConditionHandle
+    DependsOn:
+      - S3CsiDriverStack
+    Metadata:
+      aws:cdk:path: MainInferenceOperatorAddonCfnTemplate/S3CsiWaitHandle
+    Condition: InstallS3CsiDriverCondition
+  TieredCacheConfigWaitHandle:
+    Type: AWS::CloudFormation::WaitConditionHandle
+    DependsOn:
+      - TieredCacheConfigStack
+    Metadata:
+      aws:cdk:path: MainInferenceOperatorAddonCfnTemplate/TieredCacheConfigWaitHandle
+    Condition: TieredKVCacheConfigCondition
+  AddonWaitHandle:
+    Type: AWS::CloudFormation::WaitConditionHandle
+    Metadata:
+      aws:cdk:path: MainInferenceOperatorAddonCfnTemplate/AddonWaitHandle
+  CertManagerWaitCondition:
+    Type: AWS::CloudFormation::WaitCondition
+    Properties:
+      Handle:
+        Fn::If:
+          - InstallCertManagerCondition
+          - Ref: CertManagerWaitHandle
+          - Ref: AddonWaitHandle
+      Timeout: '360'
+      Count: 0
+    Metadata:
+      aws:cdk:path: MainInferenceOperatorAddonCfnTemplate/CertManagerWaitCondition
+  FsxCsiWaitCondition:
+    Type: AWS::CloudFormation::WaitCondition
+    Properties:
+      Handle:
+        Fn::If:
+          - InstallFsxCsiDriverCondition
+          - Ref: FsxCsiWaitHandle
+          - Ref: AddonWaitHandle
+      Timeout: '1'
+      Count: 0
+    Metadata:
+      aws:cdk:path: MainInferenceOperatorAddonCfnTemplate/FsxCsiWaitCondition
+  S3CsiWaitCondition:
+    Type: AWS::CloudFormation::WaitCondition
+    Properties:
+      Handle:
+        Fn::If:
+          - InstallS3CsiDriverCondition
+          - Ref: S3CsiWaitHandle
+          - Ref: AddonWaitHandle
+      Timeout: '1'
+      Count: 0
+    Metadata:
+      aws:cdk:path: MainInferenceOperatorAddonCfnTemplate/S3CsiWaitCondition
+  TieredCacheConfigWaitCondition:
+    Type: AWS::CloudFormation::WaitCondition
+    Properties:
+      Handle:
+        Fn::If:
+          - TieredKVCacheConfigCondition
+          - Ref: TieredCacheConfigWaitHandle
+          - Ref: AddonWaitHandle
+      Timeout: '1'
+      Count: 0
+    Metadata:
+      aws:cdk:path: MainInferenceOperatorAddonCfnTemplate/TieredCacheConfigWaitCondition
+  HyperPodInferenceAddonStack:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL:
+        Fn::If:
+          - CustomBucketCondition
+          - Fn::Sub: >-
+              https://${CustomBucketName}.s3.${AWS::Region}.amazonaws.com/templates/inference-operator-addon-template.yaml
+          - Fn::Sub: >-
+              https://aws-sagemaker-hyperpod-cluster-setup-${AWS::Region}-${Stage}.s3.${AWS::Region}.amazonaws.com/templates/inference-operator-addon-template.yaml
+      Parameters:
+        ResourceNamePrefix:
+          Ref: ResourceNamePrefix
+        EKSClusterName:
+          Ref: EKSClusterName
+        AddonVersion: v1.0.0-eksbuild.1
+        ExecutionRoleArn:
+          Fn::If:
+            - InferenceOperatorExecutionRoleProvidedCondition
+            - Ref: InferenceOperatorExecutionRoleArn
+            - Fn::GetAtt:
+                - InferenceAddonIamRolesStack
+                - Outputs.InferenceOperatorExecutionRoleArn
+        TlsCertificateS3Bucket:
+          Fn::If:
+            - CreateTlsBucketCondition
+            - Fn::GetAtt:
+                - TLSCertificatesS3BucketStack
+                - Outputs.TLSCertificatesBucketName
+            - Ref: TlsCertificateBucketName
+        KedaRoleArn:
+          Fn::If:
+            - KedaRoleProvidedCondition
+            - Ref: KedaRoleArn
+            - Fn::GetAtt:
+                - InferenceAddonIamRolesStack
+                - Outputs.KedaRoleArn
+        AlbControllerRoleArn:
+          Fn::If:
+            - AlbControllerRoleProvidedCondition
+            - Ref: AlbControllerRoleArn
+            - Fn::GetAtt:
+                - InferenceAddonIamRolesStack
+                - Outputs.AlbControllerRoleArn
+        JumpstartGatedModelRoleArn:
+          Fn::If:
+            - JumpstartGatedModelDownloadRoleProvidedCondition
+            - Ref: JumpstartGatedModelDownloadRoleArn
+            - Fn::GetAtt:
+                - InferenceAddonIamRolesStack
+                - Outputs.JumpstartGatedModelRoleArn
+        CustomResourceS3Bucket:
+          Fn::If:
+            - CustomBucketCondition
+            - Ref: CustomBucketName
+            - Fn::Sub: aws-sagemaker-hyperpod-cluster-setup-${AWS::Region}-${Stage}
+    DependsOn:
+      - CertManagerWaitCondition
+      - FsxCsiWaitCondition
+      - S3CsiWaitCondition
+      - TieredCacheConfigWaitCondition
+    Metadata:
+      aws:cdk:path: MainInferenceOperatorAddonCfnTemplate/HyperPodInferenceAddonStack
+Outputs:
+  InfOperatorIAMRoleArn:
+    Description: Inference Operator IAM Role ARN
+    Value:
+      Fn::If:
+        - CreateInferenceOperatorExecutionRoleCondition
+        - Fn::GetAtt:
+            - InferenceAddonIamRolesStack
+            - Outputs.InferenceOperatorExecutionRoleArn
+        - Ref: InferenceOperatorExecutionRoleArn
+    Export:
+      Name:
+        Fn::Sub: ${AWS::StackName}-InfOperatorIAMRoleArn
+  InfOperatorIAMRoleName:
+    Description: Inference Operator IAM Role Name
+    Value:
+      Fn::If:
+        - CreateInferenceOperatorExecutionRoleCondition
+        - Fn::GetAtt:
+            - InferenceAddonIamRolesStack
+            - Outputs.InferenceOperatorExecutionRoleName
+        - Fn::Select:
+            - 1
+            - Fn::Split:
+                - /
+                - Fn::Select:
+                    - 5
+                    - Fn::Split:
+                        - ':'
+                        - Ref: InferenceOperatorExecutionRoleArn
+    Export:
+      Name:
+        Fn::Sub: ${AWS::StackName}-InfOperatorIAMRoleName
+  TLSCertificatesBucketName:
+    Description: TLS Certificates S3 Bucket Name
+    Value:
+      Fn::If:
+        - CreateTlsBucketCondition
+        - Fn::GetAtt:
+            - TLSCertificatesS3BucketStack
+            - Outputs.TLSCertificatesBucketName
+        - Ref: TlsCertificateBucketName
+    Export:
+      Name:
+        Fn::Sub: ${AWS::StackName}-TLSCertificatesBucketName
+  TLSCertificatesBucketArn:
+    Description: TLS Certificates S3 Bucket ARN
+    Value:
+      Fn::If:
+        - CreateTlsBucketCondition
+        - Fn::GetAtt:
+            - TLSCertificatesS3BucketStack
+            - Outputs.TLSCertificatesBucketArn
+        - Fn::Sub: arn:aws:s3:::${TlsCertificateBucketName}
+    Export:
+      Name:
+        Fn::Sub: ${AWS::StackName}-TLSCertificatesBucketArn
+  DomainArn:
+    Description: SageMaker Domain ARN
+    Value:
+      Fn::GetAtt:
+        - SageMakerDomainStack
+        - Outputs.DomainArn
+    Export:
+      Name:
+        Fn::Sub: ${AWS::StackName}-DomainArn
+    Condition: CreateDomainCondition
+  UserProfileArn:
+    Description: SageMaker User Profile ARN
+    Value:
+      Fn::GetAtt:
+        - SageMakerDomainStack
+        - Outputs.UserProfileArn
+    Export:
+      Name:
+        Fn::Sub: ${AWS::StackName}-UserProfileArn
+    Condition: CreateDomainCondition
+  TieredCacheConfigStatus:
+    Description: Status of the tiered cache configuration
+    Value:
+      Fn::GetAtt:
+        - TieredCacheConfigStack
+        - Outputs.TieredCacheConfigStatus
+    Export:
+      Name:
+        Fn::Sub: ${AWS::StackName}-TieredCacheConfigStatus
+    Condition: TieredKVCacheConfigCondition
+  TieredCacheConfigReason:
+    Description: Reason for the tiered cache configuration status
+    Value:
+      Fn::GetAtt:
+        - TieredCacheConfigStack
+        - Outputs.TieredCacheConfigReason
+    Export:
+      Name:
+        Fn::Sub: ${AWS::StackName}-TieredCacheConfigReason
+    Condition: TieredKVCacheConfigCondition
+  DataScientistRole1Output:
+    Description: Data Scientist Role 1
+    Value:
+      Ref: DataScientistRole1
+  DataScientistRole1NamespacesOutput:
+    Description: Data Scientist Role 1 Namespaces
+    Value:
+      Ref: DataScientistRole1Namespaces
+  DataScientistRole2Output:
+    Description: Data Scientist Role 2
+    Value:
+      Ref: DataScientistRole2
+  DataScientistRole2NamespacesOutput:
+    Description: Data Scientist Role 2 Namespaces
+    Value:
+      Ref: DataScientistRole2Namespaces
+  DataScientistRole3Output:
+    Description: Data Scientist Role 3
+    Value:
+      Ref: DataScientistRole3
+  DataScientistRole3NamespacesOutput:
+    Description: Data Scientist Role 3 Namespaces
+    Value:
+      Ref: DataScientistRole3Namespaces
+  DataScientistRole4Output:
+    Description: Data Scientist Role 4
+    Value:
+      Ref: DataScientistRole4
+  DataScientistRole4NamespacesOutput:
+    Description: Data Scientist Role 4 Namespaces
+    Value:
+      Ref: DataScientistRole4Namespaces
+  DataScientistRole5Output:
+    Description: Data Scientist Role 5
+    Value:
+      Ref: DataScientistRole5
+  DataScientistRole5NamespacesOutput:
+    Description: Data Scientist Role 5 Namespaces
+    Value:
+      Ref: DataScientistRole5Namespaces
+  DataScientistRole6Output:
+    Description: Data Scientist Role 6
+    Value:
+      Ref: DataScientistRole6
+  DataScientistRole6NamespacesOutput:
+    Description: Data Scientist Role 6 Namespaces
+    Value:
+      Ref: DataScientistRole6Namespaces
+  DataScientistRole7Output:
+    Description: Data Scientist Role 7
+    Value:
+      Ref: DataScientistRole7
+  DataScientistRole7NamespacesOutput:
+    Description: Data Scientist Role 7 Namespaces
+    Value:
+      Ref: DataScientistRole7Namespaces
+  DataScientistRole8Output:
+    Description: Data Scientist Role 8
+    Value:
+      Ref: DataScientistRole8
+  DataScientistRole8NamespacesOutput:
+    Description: Data Scientist Role 8 Namespaces
+    Value:
+      Ref: DataScientistRole8Namespaces
+  DataScientistRole9Output:
+    Description: Data Scientist Role 9
+    Value:
+      Ref: DataScientistRole9
+  DataScientistRole9NamespacesOutput:
+    Description: Data Scientist Role 9 Namespaces
+    Value:
+      Ref: DataScientistRole9Namespaces
+  DataScientistRole10Output:
+    Description: Data Scientist Role 10
+    Value:
+      Ref: DataScientistRole10
+  DataScientistRole10NamespacesOutput:
+    Description: Data Scientist Role 10 Namespaces
+    Value:
+      Ref: DataScientistRole10Namespaces
+  UserProfileRoleArnOutput:
+    Description: SageMaker User Profile Execution Role ARN
+    Value:
+      Fn::GetAtt:
+        - SageMakerDomainStack
+        - Outputs.ExecutionRoleArn
+    Export:
+      Name:
+        Fn::Sub: ${AWS::StackName}-UserProfileRoleArn
+    Condition: CreateDomainCondition
+  DomainUserProfileRoleNamespacesOutput:
+    Description: Domain User Profile Role Namespaces
+    Value:
+      Ref: DomainUserProfileRoleNamespaces
