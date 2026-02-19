@@ -4,6 +4,10 @@ Parameters:
     Type: String
     Default: sagemaker-hyperpod-eks
     Description: Prefix to be used for all resources created by this template.
+  ResourceNameShortPrefix:
+    Type: String
+    Default: smhp1eks
+    Description: Short prefix (8-char hash from UI) for resources with name length constraints.
   AccessLogsBucketName:
     Type: String
     Default: ''
@@ -23,9 +27,9 @@ Resources:
               SSEAlgorithm: AES256
       BucketName:
         Fn::Sub:
-          - ${ResourceNamePrefix}-access-logs
-          - ResourceNamePrefix:
-              Ref: ResourceNamePrefix
+          - hp-${ResourceNameShortPrefix}-access-logs
+          - ResourceNameShortPrefix:
+              Ref: ResourceNameShortPrefix
       PublicAccessBlockConfiguration:
         BlockPublicAcls: true
         BlockPublicPolicy: true
@@ -77,7 +81,7 @@ Resources:
         Fn::Join:
           - '-'
           - - hyperpod-tls
-            - Ref: ResourceNamePrefix
+            - Ref: ResourceNameShortPrefix
             - Fn::Select:
                 - 0
                 - Fn::Split:

@@ -4,6 +4,10 @@ Parameters:
     Type: String
     Default: sagemaker-hyperpod-eks
     Description: Prefix to be used for all resources created by this template.
+  ResourceNameShortPrefix:
+    Type: String
+    Default: smhp1eks
+    Description: Short prefix (8-char hash from UI) for resources with name length constraints.
   HyperPodClusterArn:
     Type: String
     Description: ARN of the HyperPod cluster.
@@ -138,9 +142,9 @@ Resources:
     Properties:
       ManagedPolicyName:
         Fn::Sub:
-          - ${ResourceNamePrefix}-s3-csi-driver-policy-${UniqueSuffix}
-          - ResourceNamePrefix:
-              Ref: ResourceNamePrefix
+          - inf-${ResourceNameShortPrefix}-s3csi-policy-${UniqueSuffix}
+          - ResourceNameShortPrefix:
+              Ref: ResourceNameShortPrefix
             UniqueSuffix:
               Fn::Select:
                 - 0
@@ -188,9 +192,9 @@ Resources:
       Path: /
       RoleName:
         Fn::Sub:
-          - ${ResourceNamePrefix}-s3-csi-${UniqueSuffix}
-          - ResourceNamePrefix:
-              Ref: ResourceNamePrefix
+          - inf-${ResourceNameShortPrefix}-s3csi-${UniqueSuffix}
+          - ResourceNameShortPrefix:
+              Ref: ResourceNameShortPrefix
             UniqueSuffix:
               Fn::Select:
                 - 0
@@ -220,9 +224,9 @@ Resources:
       Path: /
       RoleName:
         Fn::Sub:
-          - ${ResourceNamePrefix}-fsx-csi-${UniqueSuffix}
-          - ResourceNamePrefix:
-              Ref: ResourceNamePrefix
+          - inf-${ResourceNameShortPrefix}-fsxcsi-${UniqueSuffix}
+          - ResourceNameShortPrefix:
+              Ref: ResourceNameShortPrefix
             UniqueSuffix:
               Fn::Select:
                 - 0
@@ -246,9 +250,9 @@ Resources:
     Properties:
       ManagedPolicyName:
         Fn::Sub:
-          - ${ResourceNamePrefix}-keda-policy-${UniqueSuffix}
-          - ResourceNamePrefix:
-              Ref: ResourceNamePrefix
+          - inf-${ResourceNameShortPrefix}-keda-policy-${UniqueSuffix}
+          - ResourceNameShortPrefix:
+              Ref: ResourceNameShortPrefix
             UniqueSuffix:
               Fn::Select:
                 - 0
@@ -289,9 +293,9 @@ Resources:
       Path: /
       RoleName:
         Fn::Sub:
-          - ${ResourceNamePrefix}-keda-role-${UniqueSuffix}
-          - ResourceNamePrefix:
-              Ref: ResourceNamePrefix
+          - inf-${ResourceNameShortPrefix}-keda-${UniqueSuffix}
+          - ResourceNameShortPrefix:
+              Ref: ResourceNameShortPrefix
             UniqueSuffix:
               Fn::Select:
                 - 0
@@ -310,9 +314,9 @@ Resources:
     Properties:
       ManagedPolicyName:
         Fn::Sub:
-          - ${ResourceNamePrefix}-alb-controller-policy-${UniqueSuffix}
-          - ResourceNamePrefix:
-              Ref: ResourceNamePrefix
+          - inf-${ResourceNameShortPrefix}-lbc-policy-${UniqueSuffix}
+          - ResourceNameShortPrefix:
+              Ref: ResourceNameShortPrefix
             UniqueSuffix:
               Fn::Select:
                 - 0
@@ -516,9 +520,9 @@ Resources:
       Path: /
       RoleName:
         Fn::Sub:
-          - ${ResourceNamePrefix}-alb-ctrl-${UniqueSuffix}
-          - ResourceNamePrefix:
-              Ref: ResourceNamePrefix
+          - inf-${ResourceNameShortPrefix}-lbc-${UniqueSuffix}
+          - ResourceNameShortPrefix:
+              Ref: ResourceNameShortPrefix
             UniqueSuffix:
               Fn::Select:
                 - 0
@@ -543,9 +547,9 @@ Resources:
       Path: /
       RoleName:
         Fn::Sub:
-          - ${ResourceNamePrefix}-js-gated-${UniqueSuffix}
-          - ResourceNamePrefix:
-              Ref: ResourceNamePrefix
+          - inf-${ResourceNameShortPrefix}-gate-${UniqueSuffix}
+          - ResourceNameShortPrefix:
+              Ref: ResourceNameShortPrefix
             UniqueSuffix:
               Fn::Select:
                 - 0

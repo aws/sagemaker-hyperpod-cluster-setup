@@ -4,6 +4,10 @@ Parameters:
     Type: String
     Default: sagemaker-hyperpod-eks
     Description: Prefix to be used for all resources created by this template.
+  ResourceNameShortPrefix:
+    Type: String
+    Default: smhp1eks
+    Description: Short prefix (8-char hash from UI) for resources with name length constraints.
   EKSClusterName:
     Type: String
     Default: hyperpod-eks-cluster
@@ -108,7 +112,7 @@ Resources:
           Ref: LayerS3Key
       Description: Lambda Layer for kubectl, helm, and git tools
       LayerName:
-        Fn::Sub: ${ResourceNamePrefix}-inf-helm-layer
+        Fn::Sub: inf-${ResourceNameShortPrefix}-helm-layer
     Metadata:
       aws:cdk:path: InferenceHelmChartCfnTemplate/HelmCustomResourceLayer
   HelmCustomResourceFunction:
@@ -141,7 +145,7 @@ Resources:
           JUMPSTART_GATED_ROLE_ARN:
             Ref: JumpstartGatedModelDownloadRoleArn
           S3_CSI_ROLE_NAME:
-            Fn::Sub: ${ResourceNamePrefix}-inf-s3-csi-driver-role
+            Fn::Sub: inf-${ResourceNameShortPrefix}-s3csi-role
           KEDA_ROLE_ARN:
             Ref: KedaRoleArn
           TLS_BUCKET_NAME:
@@ -153,7 +157,7 @@ Resources:
           KUBECONFIG: /tmp/.kube/config
           LD_LIBRARY_PATH: /opt/python/lib
       FunctionName:
-        Fn::Sub: ${ResourceNamePrefix}infhelm
+        Fn::Sub: inf-${ResourceNameShortPrefix}-helm
       Handler: lambda_function.lambda_handler
       Layers:
         - Ref: HelmCustomResourceLayer

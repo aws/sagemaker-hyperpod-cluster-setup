@@ -4,6 +4,10 @@ Parameters:
     Type: String
     Default: sagemaker-hyperpod-eks
     Description: Prefix to be used for all resources created by this template.
+  ResourceNameShortPrefix:
+    Type: String
+    Default: smhp1eks
+    Description: Short prefix (8-char hash from UI) for resources with name length constraints.
   EKSClusterName:
     Type: String
     Default: hyperpod-eks-cluster
@@ -125,7 +129,7 @@ Resources:
           Ref: LayerS3Key
       Description: Lambda Layer for kubectl, and eksctl
       LayerName:
-        Fn::Sub: ${ResourceNamePrefix}-inf-sa-creation-layer
+        Fn::Sub: inf-${ResourceNameShortPrefix}-sa-layer
     Metadata:
       aws:cdk:path: InferenceServiceAccountCfnTemplate/ServiceAccountsCustomResourceLayer
   ServiceAccountsCustomResourceFunction:
@@ -151,13 +155,13 @@ Resources:
           S3_CSI_IAM_POLICY_ARN:
             Ref: S3CsiPolicyArn
           S3_CSI_IAM_ROLE_NAME:
-            Fn::Sub: ${ResourceNamePrefix}-inf-s3-csi-driver-role
+            Fn::Sub: inf-${ResourceNameShortPrefix}-s3csi-role
           PATH: /opt/python/bin:/var/lang/bin:/usr/local/bin:/usr/bin/:/bin
           GIT_EXEC_PATH: /opt/python/libexec/git-core
           KUBECONFIG: /tmp/.kube/config
           LD_LIBRARY_PATH: /opt/python/lib
       FunctionName:
-        Fn::Sub: ${ResourceNamePrefix}-infsa
+        Fn::Sub: inf-${ResourceNameShortPrefix}-sa
       Handler: lambda_function.lambda_handler
       Layers:
         - Ref: ServiceAccountsCustomResourceLayer

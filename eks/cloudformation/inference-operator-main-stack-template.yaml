@@ -4,6 +4,10 @@ Parameters:
     Type: String
     Default: sagemaker-hyperpod-eks
     Description: Prefix to be used for all resources created by this template.
+  ResourceNameShortPrefix:
+    Type: String
+    Default: smhp1eks
+    Description: Short prefix to be used for resources with name length constraints.
   AccessLogsBucketName:
     Type: String
     Default: sagemaker-hyperpod-eks-logs
@@ -69,6 +73,8 @@ Resources:
       Parameters:
         ResourceNamePrefix:
           Ref: ResourceNamePrefix
+        ResourceNameShortPrefix:
+          Ref: ResourceNameShortPrefix
         AccessLogsBucketName:
           Ref: AccessLogsBucketName
     Metadata:
@@ -85,6 +91,8 @@ Resources:
       Parameters:
         ResourceNamePrefix:
           Ref: ResourceNamePrefix
+        ResourceNameShortPrefix:
+          Ref: ResourceNameShortPrefix
         EKSClusterName:
           Ref: EKSClusterName
         OIDCProviderURL:
@@ -111,6 +119,8 @@ Resources:
       Parameters:
         ResourceNamePrefix:
           Ref: ResourceNamePrefix
+        ResourceNameShortPrefix:
+          Ref: ResourceNameShortPrefix
         EKSClusterName:
           Ref: EKSClusterName
         CustomResourceS3Bucket:
@@ -144,6 +154,8 @@ Resources:
       Parameters:
         ResourceNamePrefix:
           Ref: ResourceNamePrefix
+        ResourceNameShortPrefix:
+          Ref: ResourceNameShortPrefix
         HelmRepoUrl:
           Ref: HelmRepoUrl
         HelmRepoPath:

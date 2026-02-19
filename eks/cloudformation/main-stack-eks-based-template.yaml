@@ -469,7 +469,7 @@ Parameters:
     Description: Prefix to be used for all resources created by this template.
   ResourceNameShortPrefix:
     Type: String
-    Default: sm-hyp-eks
+    Default: smhp1eks
     Description: 'Short prefix for resources (format: truncated-name-shortUuid). Used for resources with name length constraints.'
   VpcCIDR:
     Type: String
@@ -2072,6 +2072,8 @@ Resources:
               https://aws-sagemaker-hyperpod-cluster-setup-${AWS::Region}-${Stage}.s3.${AWS::Region}.amazonaws.com/templates/inference-operator-main-stack-template.yaml
       Parameters:
         ResourceNamePrefix:
+          Ref: ResourceNamePrefix
+        ResourceNameShortPrefix:
           Ref: ResourceNameShortPrefix
         Stage:
           Ref: Stage
@@ -2143,6 +2145,8 @@ Resources:
               https://aws-sagemaker-hyperpod-cluster-setup-${AWS::Region}-${Stage}.s3.${AWS::Region}.amazonaws.com/templates/main-stack-inference-operator-addon-template.yaml
       Parameters:
         ResourceNamePrefix:
+          Ref: ResourceNamePrefix
+        ResourceNameShortPrefix:
           Ref: ResourceNameShortPrefix
         Stage:
           Ref: Stage

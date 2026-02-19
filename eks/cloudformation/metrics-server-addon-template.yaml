@@ -4,6 +4,10 @@ Parameters:
     Type: String
     Default: sagemaker-hyperpod-eks
     Description: Prefix to be used for all resources created by this template.
+  ResourceNameShortPrefix:
+    Type: String
+    Default: smhp1eks
+    Description: Short prefix (8-char hash from UI) for resources with name length constraints.
   EKSClusterName:
     Type: String
     Description: The name of the EKS cluster where the add-on will be installed.
@@ -142,7 +146,7 @@ Resources:
           Ref: LayerS3Key
       Description: Lambda Layer for metrics-server installation (boto3 dependencies)
       LayerName:
-        Fn::Sub: ${ResourceNamePrefix}-${ShortenedAddonName}-layer
+        Fn::Sub: inf-${ResourceNameShortPrefix}-${ShortenedAddonName}-layer
     Metadata:
       aws:cdk:path: MetricsServerAddonCfnTemplate/AddonCustomResourceLayer
   AddonCustomResourceFunction:
@@ -167,7 +171,7 @@ Resources:
             Ref: ServiceAccountRoleArn
       FunctionName:
         Fn::Sub:
-          - ${ResourceNamePrefix}-${ShortenedAddonName}-func-${UniqueSuffix}
+          - inf-${ResourceNameShortPrefix}-${ShortenedAddonName}-${UniqueSuffix}
           - UniqueSuffix:
               Fn::Select:
                 - 0

@@ -4,6 +4,10 @@ Parameters:
     Type: String
     Default: sagemaker-hyperpod-eks
     Description: Prefix to be used for all resources created by this template.
+  ResourceNameShortPrefix:
+    Type: String
+    Default: smhp1eks
+    Description: Short prefix (8-char hash from UI) for resources with name length constraints.
   EKSClusterName:
     Type: String
     Default: eks
@@ -253,7 +257,7 @@ Resources:
                 Action:
                   - iam:PassRole
                 Resource:
-                  Fn::Sub: arn:aws:iam::${AWS::AccountId}:role/${ResourceNamePrefix}IORole
+                  Fn::Sub: arn:aws:iam::${AWS::AccountId}:role/inf-${ResourceNameShortPrefix}-io-role
                 Condition:
                   StringEquals:
                     iam:PassedToService: sagemaker.amazonaws.com
@@ -304,7 +308,7 @@ Resources:
           PolicyName:
             Fn::Sub: ${ResourceNamePrefix}-InfOperator-Policy
       RoleName:
-        Fn::Sub: ${ResourceNamePrefix}IORole
+        Fn::Sub: inf-${ResourceNameShortPrefix}-io-role
     Metadata:
       aws:cdk:path: InfOperatorIamRoleCfnTemplate/ExecutionRole
   KedaRole:
@@ -334,7 +338,7 @@ Resources:
           PolicyName:
             Fn::Sub: ${ResourceNamePrefix}-keda-policy
       RoleName:
-        Fn::Sub: ${ResourceNamePrefix}KedaRole
+        Fn::Sub: inf-${ResourceNameShortPrefix}-keda-role
     Metadata:
       aws:cdk:path: InfOperatorIamRoleCfnTemplate/KedaRole
   GatedRole:
@@ -358,7 +362,7 @@ Resources:
           PolicyName:
             Fn::Sub: ${ResourceNamePrefix}-Gated-Policy
       RoleName:
-        Fn::Sub: ${ResourceNamePrefix}GateRole
+        Fn::Sub: inf-${ResourceNameShortPrefix}-gate-role
     Metadata:
       aws:cdk:path: InfOperatorIamRoleCfnTemplate/GatedRole
   ClusterRoleAccessEntry:
@@ -380,7 +384,7 @@ Resources:
     Type: AWS::IAM::ManagedPolicy
     Properties:
       ManagedPolicyName:
-        Fn::Sub: ${ResourceNamePrefix}-load-balancer-controller-policy
+        Fn::Sub: inf-${ResourceNameShortPrefix}-lbc-policy
       PolicyDocument:
         Version: 2012-10-17
         Statement:
@@ -566,7 +570,7 @@ Resources:
     Type: AWS::IAM::ManagedPolicy
     Properties:
       ManagedPolicyName:
-        Fn::Sub: ${ResourceNamePrefix}-s3-mountpoint-policy
+        Fn::Sub: inf-${ResourceNameShortPrefix}-s3mp-policy
       PolicyDocument:
         Version: 2012-10-17
         Statement:

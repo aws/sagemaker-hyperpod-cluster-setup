@@ -4,6 +4,10 @@ Parameters:
     Type: String
     Default: sagemaker-hyperpod-eks
     Description: Prefix to be used for all resources created by this template.
+  ResourceNameShortPrefix:
+    Type: String
+    Default: smhp1eks
+    Description: Short prefix (8-char hash from UI) for resources with name length constraints.
   DomainUserProfileRoleArn:
     Type: String
     Default: ''
@@ -45,7 +49,7 @@ Resources:
     Type: AWS::IAM::ManagedPolicy
     Properties:
       ManagedPolicyName:
-        Fn::Sub: ${ResourceNamePrefix}-sagemaker-execution-policy
+        Fn::Sub: inf-${ResourceNameShortPrefix}-sm-exec-policy
       PolicyDocument:
         Version: 2012-10-17
         Statement:
@@ -83,7 +87,7 @@ Resources:
         - Ref: SageMakerExecutionPolicy
       Path: /
       RoleName:
-        Fn::Sub: ${ResourceNamePrefix}-sagemaker-execution-role
+        Fn::Sub: inf-${ResourceNameShortPrefix}-sm-exec-role
     Metadata:
       aws:cdk:path: SageMakerDomainCfnTemplate/SageMakerExecutionRole
     Condition: ShouldCreateExecutionRole
@@ -104,13 +108,13 @@ Resources:
         Fn::If:
           - HasDomainNameCondition
           - Ref: DomainName
-          - Fn::Sub: ${ResourceNamePrefix}-sagemaker-domain
+          - Fn::Sub: ${ResourceNameShortPrefix}-sagemaker-domain
       SubnetIds:
         Ref: DomainSubnetIds
       Tags:
         - Key: Name
           Value:
-            Fn::Sub: ${ResourceNamePrefix}-sagemaker-domain
+            Fn::Sub: ${ResourceNameShortPrefix}-sagemaker-domain
       VpcId:
         Ref: DomainVpcId
     Metadata:
@@ -125,12 +129,12 @@ Resources:
       Tags:
         - Key: Name
           Value:
-            Fn::Sub: ${ResourceNamePrefix}-user-profile
+            Fn::Sub: ${ResourceNameShortPrefix}-user-profile
       UserProfileName:
         Fn::If:
           - HasUserProfileNameCondition
           - Ref: UserProfileName
-          - Fn::Sub: ${ResourceNamePrefix}-user-profile
+          - Fn::Sub: ${ResourceNameShortPrefix}-user-profile
       UserSettings:
         ExecutionRole:
           Fn::If:
