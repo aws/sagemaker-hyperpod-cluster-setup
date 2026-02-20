@@ -19,6 +19,15 @@ Parameters:
     Type: String
     Default: ''
     Description: Mount name of the FSx for Lustre file system
+  SlurmConfigStrategy:
+    Type: String
+    Default: ''
+    AllowedValues:
+      - Overwrite
+      - Managed
+      - Merge
+      - ''
+    Description: Strategy for managing Slurm configuration files (Overwrite, Managed, or Merge)
   HyperPodClusterName:
     Type: String
     Default: slurm-cluster
@@ -238,6 +247,8 @@ Resources:
             Ref: FsxDnsName
           FSX_MOUNT_NAME:
             Ref: FsxMountName
+          SLURM_CONFIG_STRATEGY:
+            Ref: SlurmConfigStrategy
           INSTANCE_GROUP_SETTINGS1:
             Ref: InstanceGroupSettings1
           INSTANCE_GROUP_SETTINGS2:
