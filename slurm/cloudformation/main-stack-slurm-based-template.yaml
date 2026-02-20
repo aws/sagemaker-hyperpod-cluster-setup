@@ -9,7 +9,6 @@ Metadata:
           - Stage
           - CustomBucketName
           - NodeRecovery
-          - SlurmConfigStrategy
           - Tags
       - Label:
           default: HyperPod Cluster
@@ -82,8 +81,6 @@ Metadata:
         default: Custom S3 Bucket Name
       NodeRecovery:
         default: Instance Recovery
-      SlurmConfigStrategy:
-        default: Slurm Configuration Strategy
       Tags:
         default: Resource Tags
       CreateHyperPodClusterStack:
@@ -181,15 +178,6 @@ Parameters:
       - Automatic
       - None
     Description: Specifies whether to enable or disable the automatic node recovery feature (Automatic or None).
-  SlurmConfigStrategy:
-    Type: String
-    Default: ''
-    AllowedValues:
-      - Overwrite
-      - Managed
-      - Merge
-      - ''
-    Description: Strategy for managing Slurm configuration files (Overwrite, Managed, or Merge).
   SageMakerIAMRoleName:
     Type: String
     Default: role
@@ -407,11 +395,6 @@ Conditions:
     Fn::Equals:
       - Ref: CreateHyperPodClusterStack
       - 'true'
-  SlurmConfigStrategyProvidedCondition:
-    Fn::Not:
-      - Fn::Equals:
-          - Ref: SlurmConfigStrategy
-          - ''
 Resources:
   VPCStack:
     Type: AWS::CloudFormation::Stack
@@ -650,11 +633,6 @@ Resources:
           Ref: InstanceGroupSettings20
         Tags:
           Ref: Tags
-        SlurmConfigStrategy:
-          Fn::If:
-            - SlurmConfigStrategyProvidedCondition
-            - Ref: SlurmConfigStrategy
-            - Ref: AWS::NoValue
         FsxDnsName:
           Fn::If:
             - CreateFsxStackCondition

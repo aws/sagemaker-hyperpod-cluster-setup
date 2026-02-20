@@ -309,15 +309,8 @@ def create_hyperpod_cluster(instance_groups):
     # Check if we're using SLURM orchestrator
     orchestrator_type = __get_orchestrator_type()
     if orchestrator_type == 'SLURM':
-        # Check if we're using the new API fields (SlurmConfig already exists in instance groups)
-        using_new_api = any('SlurmConfig' in group for group in instance_groups) if instance_groups else False
-        
-        if not using_new_api:
-            # Upload provisioning parameters JSON for legacy approach
-            upload_slurm_provisioning_parameters_json(instance_groups)
-        else:
-            __override_fsx_config_in_instance_groups(instance_groups)
-        
+        # For SLURM orchestrator, upload provisioning parameters JSON first
+        upload_slurm_provisioning_parameters_json(instance_groups)
         
         # Remove InstanceGroupType from instance groups for SLURM
         if instance_groups:
@@ -366,19 +359,6 @@ def create_hyperpod_cluster(instance_groups):
             }
         }
         create_params['Orchestrator'] = orchestrator
-    else:
-        # For SLURM orchestrator, only add if SlurmConfigStrategy is provided
-        slurm_config_strategy = os.environ.get('SLURM_CONFIG_STRATEGY', '')
-        
-        if slurm_config_strategy:
-            # Add Slurm orchestrator configuration with strategy
-            orchestrator = {
-                'Slurm': {
-                    'SlurmConfigStrategy': slurm_config_strategy
-                }
-            }
-            create_params['Orchestrator'] = orchestrator
-            print(f"Adding Slurm orchestrator with config strategy: {slurm_config_strategy}")
     
     # Only add instance groups if they exist
     if instance_groups:
@@ -599,52 +579,6 @@ def __get_orchestrator_type():
     str: Orchestrator type ('EKS' or 'SLURM')
     """
     return os.environ.get('ORCHESTRATOR_TYPE', 'EKS')
-
-def __override_fsx_config_in_instance_groups(instance_groups):
-    """
-    Add FSx configuration in InstanceStorageConfigs when FSx environment variables are provided.
-    This handles the case where CreateFsxStack=true and FSx outputs need to be used for FsxLustreConfig
-    or existing FSx configuration from the FileSystemId should be provided to FsxLustreConfig.
-    
-    Parameters:
-    instance_groups (list): List of instance group configurations
-    """
-    if not instance_groups:
-        return
-    
-    # Get FSx configuration from environment variables (from FSx stack outputs)
-    enabled_fsx = os.environ.get('ENABLED_FSX', 'false').lower() == 'true'
-    fsx_dns_name = os.environ.get('FSX_DNS_NAME', '')
-    fsx_mount_name = os.environ.get('FSX_MOUNT_NAME', '')
-    
-    # Only process if FSx is enabled and we have values from FSx stack
-    if not enabled_fsx or not fsx_dns_name or not fsx_mount_name:
-        return
-    
-    for instance_group in instance_groups:
-        instance_storage_configs = instance_group.get('InstanceStorageConfigs', [])
-        
-        # Find if FsxLustreConfig already exists
-        fsx_config_found = False
-        for storage_config in instance_storage_configs:
-            if 'FsxLustreConfig' in storage_config:
-                # Override with values from FSx stack outputs
-                storage_config['FsxLustreConfig']['DnsName'] = fsx_dns_name
-                storage_config['FsxLustreConfig']['MountName'] = fsx_mount_name
-                fsx_config_found = True
-        
-        # If FsxLustreConfig doesn't exist, add it
-        if not fsx_config_found:
-            fsx_lustre_config = {
-                'DnsName': fsx_dns_name,
-                'MountName': fsx_mount_name
-            }
-            # Add to existing InstanceStorageConfigs or create new one
-            if instance_storage_configs:
-                instance_storage_configs.append({'FsxLustreConfig': fsx_lustre_config})
-            else:
-                instance_group['InstanceStorageConfigs'] = [{'FsxLustreConfig': fsx_lustre_config}]
-            print(f"Added FsxLustreConfig to instance group {instance_group.get('InstanceGroupName')} with FSx stack outputs: DnsName={fsx_dns_name}, MountName={fsx_mount_name}")
 
 def __get_provisioning_parameters_file(instance_groups):
     config_data = {

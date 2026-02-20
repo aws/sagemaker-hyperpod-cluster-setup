@@ -792,8 +792,6 @@ Resources:
       Parameters:
         ResourceNamePrefix:
           Ref: ResourceNamePrefix
-        ResourceNameShortPrefix:
-          Ref: ResourceNameShortPrefix
         EKSClusterName:
           Ref: EKSClusterName
         HPClusterArn:
@@ -1028,8 +1026,6 @@ Resources:
       Parameters:
         ResourceNamePrefix:
           Ref: ResourceNamePrefix
-        ResourceNameShortPrefix:
-          Ref: ResourceNameShortPrefix
         EKSClusterName:
           Ref: EKSClusterName
         HyperPodClusterName:
