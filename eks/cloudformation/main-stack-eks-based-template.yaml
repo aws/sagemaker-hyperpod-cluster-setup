@@ -788,7 +788,7 @@ Parameters:
     Description: Fair share setting for the scheduler configuration
   IdleResourceSharing:
     Type: String
-    Default: Enabled
+    Default: Disabled
     AllowedValues:
       - Enabled
       - Disabled
@@ -2456,6 +2456,18 @@ Resources:
         Ref: CreatePrometheusWorkspace
       CreateGrafanaWorkspace:
         Ref: CreateGrafanaWorkspace
+      IsRIG:
+        Fn::If:
+          - CreateRigCondition
+          - 'true'
+          - 'false'
+      ExecutionRoleName:
+        Fn::If:
+          - CreateSageMakerIAMRoleStackCondition
+          - Fn::GetAtt:
+              - SageMakerIAMRoleStack
+              - Outputs.SageMakerIAMRoleName
+          - Ref: SageMakerIAMRoleName
     DependsOn:
       - HyperPodClusterStack
       - ObservabilityCustomResourceFunction

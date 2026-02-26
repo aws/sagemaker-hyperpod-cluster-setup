@@ -56,6 +56,17 @@ Parameters:
     Type: String
     Default: ''
     Description: The role to be used with Hyperpod Observability Grafana Custom Resources
+  IsRIG:
+    Type: String
+    Default: 'false'
+    AllowedValues:
+      - 'true'
+      - 'false'
+    Description: Specify whether this is a RIG cluster.
+  ExecutionRoleName:
+    Type: String
+    Default: ''
+    Description: The name of the cluster execution role.
   CreatePrometheusWorkspace:
     Type: String
     Default: 'false'
@@ -234,6 +245,10 @@ Conditions:
           - Ref: CreateGrafanaRole
           - 'true'
       - Condition: IsAmgAllowed
+  IsRIGCondition:
+    Fn::Equals:
+      - Ref: IsRIG
+      - 'true'
 Resources:
   GrafanaVPCEndpoint:
     Type: AWS::EC2::VPCEndpoint
@@ -361,6 +376,50 @@ Resources:
     Metadata:
       aws:cdk:path: ObservabilityCfnTemplate/HyperPodObservabilityAddonRole
     Condition: CreateHyperPodObservabilityRoleCondition
+  ExecutionRoleObservabilityPolicy:
+    Type: AWS::IAM::Policy
+    Properties:
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Sid: PrometheusAccess
+            Effect: Allow
+            Action:
+              - aps:RemoteWrite
+            Resource:
+              Fn::Sub:
+                - arn:aws:aps:${AWS::Region}:${AWS::AccountId}:workspace/${PrometheusWorkspaceId}
+                - PrometheusWorkspaceId:
+                    Fn::If:
+                      - PrometheusNewWorkspaceCondition
+                      - Fn::GetAtt:
+                          - PrometheusWorkspace
+                          - WorkspaceId
+                      - Ref: PrometheusWorkspaceId
+          - Sid: CloudwatchLogsAccess
+            Effect: Allow
+            Action:
+              - logs:CreateLogGroup
+              - logs:CreateLogStream
+              - logs:DescribeLogGroups
+              - logs:DescribeLogStreams
+              - logs:PutLogEvents
+              - logs:GetLogEvents
+              - logs:FilterLogEvents
+              - logs:GetLogRecord
+              - logs:StartQuery
+              - logs:StopQuery
+              - logs:GetQueryResults
+            Resource:
+              - Fn::Sub: arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/sagemaker/Clusters/*
+              - Fn::Sub: arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/sagemaker/Clusters/*:log-stream:*
+      PolicyName:
+        Fn::Sub: ${ResourceNamePrefix}-observability-policy
+      Roles:
+        - Ref: ExecutionRoleName
+    Metadata:
+      aws:cdk:path: ObservabilityCfnTemplate/ExecutionRoleObservabilityPolicy
+    Condition: IsRIGCondition
   GrafanaWorkspaceRole:
     Type: AWS::IAM::Role
     Properties:
