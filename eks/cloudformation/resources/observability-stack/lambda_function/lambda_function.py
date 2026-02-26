@@ -170,14 +170,6 @@ def on_create(event):
                 'ParameterKey': 'CreateGrafanaWorkspace',
                 'ParameterValue': props.get('CreateGrafanaWorkspace')
                 },
-                {
-                'ParameterKey': 'IsRIG',
-                'ParameterValue': props.get('IsRIG', 'false')
-                },
-                {
-                'ParameterKey': 'ExecutionRoleName',
-                'ParameterValue': props.get('ExecutionRoleName', '')
-                },
             ],
             Capabilities=['CAPABILITY_IAM', 'CAPABILITY_NAMED_IAM', 'CAPABILITY_AUTO_EXPAND'],
         )
@@ -312,14 +304,6 @@ def on_update(event):
                 {
                 'ParameterKey': 'CreateGrafanaWorkspace',
                 'ParameterValue': props.get('CreateGrafanaWorkspace')
-                },
-                {
-                'ParameterKey': 'IsRIG',
-                'ParameterValue': props.get('IsRIG', 'false')
-                },
-                {
-                'ParameterKey': 'ExecutionRoleName',
-                'ParameterValue': props.get('ExecutionRoleName', '')
                 },
             ],
             Capabilities=['CAPABILITY_IAM', 'CAPABILITY_NAMED_IAM', 'CAPABILITY_AUTO_EXPAND'],
