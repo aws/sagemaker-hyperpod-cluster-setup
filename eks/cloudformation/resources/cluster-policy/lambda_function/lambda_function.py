@@ -3,6 +3,7 @@ import boto3
 import cfnresponse
 import logging
 import traceback
+import time
 
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
@@ -117,6 +118,24 @@ def handler(event, context):
                     sagemaker.delete_cluster_scheduler_config(
                         ClusterSchedulerConfigId=physical_id
                     )
+                    
+                    # Wait for deletion to complete to ensure cluster can be deleted
+                    max_wait_time = 120  # scheduler config deletion is typically fast
+                    start_time = time.time()
+                    while time.time() - start_time < max_wait_time:
+                        try:
+                            sagemaker.describe_cluster_scheduler_config(
+                                ClusterSchedulerConfigId=physical_id
+                            )
+                            time.sleep(10)
+                        except Exception as describe_error:
+                            if 'ResourceNotFound' in str(describe_error):
+                                logger.info("Scheduler config deleted successfully")
+                                break
+                            else:
+                                logger.warning(f"Unexpected error during deletion wait: {str(describe_error)}")
+                                break
+                        
                 except Exception as e:
                     if 'ResourceNotFound' in str(e) or 'ValidationException' in str(e):
                         # Config already deleted or invalid ID format
