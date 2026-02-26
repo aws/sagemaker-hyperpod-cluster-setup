@@ -56,7 +56,6 @@ Metadata:
           - RetainS3CsiDriverStack
           - RetainMetricsServerStack
           - RetainS3EndpointStack
-          - RetainTlsCertificatesS3BucketStack
       - Label:
           default: HyperPod Data Scientist Setup
         Parameters:
@@ -302,13 +301,6 @@ Parameters:
       - 'true'
       - 'false'
     Description: Retain S3EndpointStack on deletion
-  RetainTlsCertificatesS3BucketStack:
-    Type: String
-    Default: 'true'
-    AllowedValues:
-      - 'true'
-      - 'false'
-    Description: Retain TlsCertificatesS3BucketStack on deletion
   InferenceOperatorExecutionRoleArn:
     Type: String
     Default: ''
@@ -647,10 +639,6 @@ Conditions:
     Fn::Equals:
       - Ref: RetainS3EndpointStack
       - 'true'
-  RetainTlsCertificatesS3BucketStackCondition:
-    Fn::Equals:
-      - Ref: RetainTlsCertificatesS3BucketStack
-      - 'true'
 Resources:
   EksOidcProviderStack:
     Type: AWS::CloudFormation::Stack
@@ -766,11 +754,7 @@ Resources:
     Metadata:
       aws:cdk:path: MainInferenceOperatorAddonCfnTemplate/TLSCertificatesS3BucketStack
     Condition: CreateTlsBucketCondition
-    DeletionPolicy:
-      Fn::If:
-        - RetainTlsCertificatesS3BucketStackCondition
-        - RetainExceptOnCreate
-        - Delete
+    DeletionPolicy: RetainExceptOnCreate
   S3EndpointStack:
     Type: AWS::CloudFormation::Stack
     Properties:
