@@ -407,10 +407,14 @@ def create_hyperpod_cluster(instance_groups):
         if os.environ.get('TIERED_STORAGE_CONFIG', ''):
             print("Warning: TieredStorageConfig is only supported for EKS-based HyperPod clusters and will be ignored for SLURM clusters")
 
-    if orchestrator_type != 'SLURM':
-        node_provisioning_mode = os.environ.get('NODE_PROVISIONING_MODE')
-        if node_provisioning_mode and node_provisioning_mode == 'Continuous':
-            create_params['NodeProvisioningMode'] = node_provisioning_mode;
+    # Add NodeProvisioningMode if provided (for both EKS and SLURM)
+    node_provisioning_mode = os.environ.get('NODE_PROVISIONING_MODE', '')
+    if node_provisioning_mode and node_provisioning_mode == 'Continuous':
+        create_params['NodeProvisioningMode'] = node_provisioning_mode
+        print(f"Adding NodeProvisioningMode: {node_provisioning_mode}")
+        
+        # AutoScaling and ClusterRole are only for EKS clusters
+        if orchestrator_type != 'SLURM':
             autoscaler_type = os.environ.get('AUTOSCALER_TYPE')
             if autoscaler_type != 'None':
                 create_params['AutoScaling'] = {

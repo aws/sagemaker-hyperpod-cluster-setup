@@ -9,6 +9,7 @@ Metadata:
           - Stage
           - CustomBucketName
           - NodeRecovery
+          - NodeProvisioningMode
           - SlurmConfigStrategy
           - Tags
       - Label:
@@ -82,6 +83,8 @@ Metadata:
         default: Custom S3 Bucket Name
       NodeRecovery:
         default: Instance Recovery
+      NodeProvisioningMode:
+        default: Instance Provisioning Mode
       SlurmConfigStrategy:
         default: Slurm Configuration Strategy
       Tags:
@@ -181,6 +184,13 @@ Parameters:
       - Automatic
       - None
     Description: Specifies whether to enable or disable the automatic node recovery feature (Automatic or None).
+  NodeProvisioningMode:
+    Type: String
+    Default: ''
+    AllowedValues:
+      - Continuous
+      - ''
+    Description: Enable or disable the continuous provisioning mode
   SlurmConfigStrategy:
     Type: String
     Default: ''
@@ -411,6 +421,11 @@ Conditions:
     Fn::Not:
       - Fn::Equals:
           - Ref: SlurmConfigStrategy
+          - ''
+  NodeProvisioningModeProvidedCondition:
+    Fn::Not:
+      - Fn::Equals:
+          - Ref: NodeProvisioningMode
           - ''
 Resources:
   VPCStack:
@@ -654,6 +669,11 @@ Resources:
           Fn::If:
             - SlurmConfigStrategyProvidedCondition
             - Ref: SlurmConfigStrategy
+            - Ref: AWS::NoValue
+        NodeProvisioningMode:
+          Fn::If:
+            - NodeProvisioningModeProvidedCondition
+            - Ref: NodeProvisioningMode
             - Ref: AWS::NoValue
         FsxDnsName:
           Fn::If:
