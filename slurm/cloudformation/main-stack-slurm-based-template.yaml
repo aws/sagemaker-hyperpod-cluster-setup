@@ -422,11 +422,6 @@ Conditions:
       - Fn::Equals:
           - Ref: SlurmConfigStrategy
           - ''
-  NodeProvisioningModeProvidedCondition:
-    Fn::Not:
-      - Fn::Equals:
-          - Ref: NodeProvisioningMode
-          - ''
 Resources:
   VPCStack:
     Type: AWS::CloudFormation::Stack
@@ -671,10 +666,7 @@ Resources:
             - Ref: SlurmConfigStrategy
             - Ref: AWS::NoValue
         NodeProvisioningMode:
-          Fn::If:
-            - NodeProvisioningModeProvidedCondition
-            - Ref: NodeProvisioningMode
-            - Ref: AWS::NoValue
+          Ref: NodeProvisioningMode
         FsxDnsName:
           Fn::If:
             - CreateFsxStackCondition

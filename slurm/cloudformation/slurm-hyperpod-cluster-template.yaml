@@ -39,6 +39,13 @@ Parameters:
       - Automatic
       - None
     Description: Enable or disable the automatic node recovery feature
+  NodeProvisioningMode:
+    Type: String
+    Default: ''
+    AllowedValues:
+      - Continuous
+      - ''
+    Description: Enable or disable the continuous provisioning mode
   SecurityGroupIds:
     Type: String
     Description: Comma-separated list of security group IDs for the HyperPod cluster
@@ -229,6 +236,8 @@ Resources:
             Ref: HyperPodClusterName
           NODE_RECOVERY:
             Ref: NodeRecovery
+          NODE_PROVISIONING_MODE:
+            Ref: NodeProvisioningMode
           SECURITY_GROUP_IDS:
             Ref: SecurityGroupIds
           PRIVATE_SUBNET_IDS:
