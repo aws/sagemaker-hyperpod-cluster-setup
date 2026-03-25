@@ -1965,6 +1965,7 @@ Resources:
         IdleResourceSharing:
           Ref: IdleResourceSharing
     DependsOn:
+      - CertManagerStack
       - EKSClusterStack
       - HyperPodClusterStack
       - TaskGovernanceClusterPolicyLambdaStack

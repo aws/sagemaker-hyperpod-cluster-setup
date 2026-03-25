@@ -13,7 +13,6 @@ Parameters:
     Description: The name of the EKS cluster where the inference operator addon will be installed.
   AddonVersion:
     Type: String
-    Default: v1.0.0-eksbuild.1
     Description: Version of the Hyperpod Inference Operator EKS addon to install
   ExecutionRoleArn:
     Type: String
