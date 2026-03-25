@@ -319,7 +319,7 @@ def on_create():
 
         cluster_name = os.environ[EKS_CLUSTER_NAME]
         addon_name = os.environ.get(ADDON_NAME, 'amazon-sagemaker-hyperpod-inference')
-        addon_version = os.environ.get(ADDON_VERSION, 'v1.0.0-eksbuild.1')
+        addon_version = os.environ.get(ADDON_VERSION, 'v1.0.1-eksbuild.1')
         
         # Build configuration
         configuration_values = build_inference_operator_configuration()
@@ -377,7 +377,7 @@ def on_update():
 
     cluster_name = os.environ[EKS_CLUSTER_NAME]
     addon_name = os.environ.get(ADDON_NAME, 'amazon-sagemaker-hyperpod-inference')
-    addon_version = os.environ.get(ADDON_VERSION, 'v1.0.0-eksbuild.1')
+    addon_version = os.environ.get(ADDON_VERSION, 'v1.0.1-eksbuild.1')
     
     # Build configuration
     configuration_values = build_inference_operator_configuration()

@@ -1281,16 +1281,12 @@
       "kpi",
       "training",
       "metrics",
-      "version-1.0.0"
+      "version-1.0.1"
     ],
     "templating": {
       "list": [
         {
-          "current": {
-            "selected": false,
-            "text": "ml-cluster",
-            "value": "ml-cluster"
-          },
+          "current": {},
           "datasource": {
             "type": "prometheus",
             "uid": "${datasource}"
@@ -1315,11 +1311,7 @@
           "type": "query"
         },
         {
-          "current": {
-            "selected": false,
-            "text": "89ff4i1ppjk2",
-            "value": "89ff4i1ppjk2"
-          },
+          "current": {},
           "datasource": {
             "type": "prometheus",
             "uid": "${datasource}"
@@ -1343,11 +1335,7 @@
           "type": "query"
         },
         {
-          "current": {
-            "selected": false,
-            "text": "sagemaker-hyperpod-eks-cluster-amp Prometheus ws-49b2ebe7-5440-44d3-b7fd-988a496e9367",
-            "value": "aepyi8uikgvlsa"
-          },
+          "current": {},
           "hide": 2,
           "includeAll": false,
           "multi": false,
@@ -1361,11 +1349,7 @@
           "type": "datasource"
         },
         {
-          "current": {
-            "selected": false,
-            "text": "test-training-job-1",
-            "value": "test-training-job-1"
-          },
+          "current": {},
           "datasource": {
             "type": "prometheus",
             "uid": "${datasource}"
@@ -1401,5 +1385,5 @@
     "version": 8,
     "weekStart": ""
   },
-  "message": ""
+  "message": "1.0.1: clear unused default values"
 }

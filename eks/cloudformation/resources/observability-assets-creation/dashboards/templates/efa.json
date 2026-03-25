@@ -2181,16 +2181,12 @@
       "sagemaker",
       "hyperpod",
       "fsx",
-      "version-1.0.0"
+      "version-1.0.1"
     ],
     "templating": {
       "list": [
         {
-          "current": {
-            "selected": false,
-            "text": "cloudwatch",
-            "value": "eeor7jvmre134b"
-          },
+          "current": {},
           "hide": 0,
           "includeAll": false,
           "label": "Datasource",
@@ -2205,11 +2201,7 @@
           "type": "datasource"
         },
         {
-          "current": {
-            "selected": false,
-            "text": "default",
-            "value": "default"
-          },
+          "current": {},
           "datasource": {
             "uid": "${datasource}"
           },
@@ -2307,5 +2299,5 @@
     "version": 18,
     "weekStart": ""
   },
-  "message": ""
+  "message": "1.0.1: clear unused default values"
 }

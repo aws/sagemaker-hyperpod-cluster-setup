@@ -3331,16 +3331,12 @@
       "hyperpod",
       "metrics",
       "model",
-      "version-1.2.1"
+      "version-1.2.2"
     ],
     "templating": {
       "list": [
         {
-          "current": {
-            "selected": false,
-            "text": "prometheus-old",
-            "value": "aeoom7y8kcg00e"
-          },
+          "current": {},
           "hide": 2,
           "includeAll": false,
           "label": "Datasource",
@@ -3355,11 +3351,7 @@
           "type": "datasource"
         },
         {
-          "current": {
-            "selected": false,
-            "text": "ml-cluster-gpu",
-            "value": "ml-cluster-gpu"
-          },
+          "current": {},
           "datasource": {
             "type": "prometheus",
             "uid": "${datasource}"
@@ -3383,11 +3375,7 @@
           "type": "query"
         },
         {
-          "current": {
-            "selected": false,
-            "text": "9476q1hxcfor",
-            "value": "9476q1hxcfor"
-          },
+          "current": {},
           "datasource": {
             "type": "prometheus",
             "uid": "${datasource}"
@@ -3411,11 +3399,7 @@
           "type": "query"
         },
         {
-          "current": {
-            "selected": false,
-            "text": "All",
-            "value": "$__all"
-          },
+          "current": {},
           "datasource": {
             "type": "prometheus",
             "uid": "${datasource}"
@@ -3438,11 +3422,7 @@
           "useTags": false
         },
         {
-          "current": {
-            "selected": false,
-            "text": "All",
-            "value": "$__all"
-          },
+          "current": {},
           "datasource": {
             "type": "prometheus",
             "uid": "${datasource}"
@@ -3465,11 +3445,7 @@
           "useTags": false
         },
         {
-          "current": {
-            "selected": false,
-            "text": "All",
-            "value": "$__all"
-          },
+          "current": {},
           "datasource": {
             "type": "prometheus",
             "uid": "${datasource}"
@@ -3517,5 +3493,5 @@
     "version": 18,
     "weekStart": ""
   },
-  "message": "1.2.1: Remove hardcoded URI filtering to support all endpoint patterns"
+  "message": "1.2.2: clear unused default values"
 }

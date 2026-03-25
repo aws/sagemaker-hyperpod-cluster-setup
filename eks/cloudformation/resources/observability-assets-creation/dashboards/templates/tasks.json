@@ -1127,16 +1127,12 @@
       "aws",
       "sagemaker",
       "pod",
-      "version-1.1.1"
+      "version-1.1.2"
     ],
     "templating": {
       "list": [
         {
-          "current": {
-            "selected": false,
-            "text": "ml-cluster-lt3",
-            "value": "ml-cluster-lt3"
-          },
+          "current": {},
           "datasource": {
             "type": "prometheus",
             "uid": "${datasource}"
@@ -1161,11 +1157,7 @@
           "type": "query"
         },
         {
-          "current": {
-            "selected": false,
-            "text": "0kns09eo5set",
-            "value": "0kns09eo5set"
-          },
+          "current": {},
           "datasource": {
             "type": "prometheus",
             "uid": "${datasource}"
@@ -1190,11 +1182,7 @@
           "type": "query"
         },
         {
-          "current": {
-            "selected": false,
-            "text": "Task Pod",
-            "value": "pod"
-          },
+          "current": {},
           "hide": 0,
           "includeAll": false,
           "label": "Aggregate by:",
@@ -1223,11 +1211,7 @@
           "type": "custom"
         },
         {
-          "current": {
-            "selected": false,
-            "text": "prometheus",
-            "value": "ceqqurbbc6ps0c"
-          },
+          "current": {},
           "description": "Data source to query metrics from",
           "hide": 2,
           "includeAll": false,
@@ -1410,5 +1394,5 @@
     "version": 20,
     "weekStart": ""
   },
-  "message": "1.1.1: Update panel name for GPU Partition utilization"
+  "message": "1.1.2: clear unused default values"
 }
