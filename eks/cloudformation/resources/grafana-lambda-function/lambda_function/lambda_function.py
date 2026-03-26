@@ -249,7 +249,11 @@ def create_prometheus_datasource():
 def create_dashboard(template_name):
     try:
         extract_dir = download_and_extract_assets()
-        dashboard_path = os.path.join(extract_dir, 'dashboards', 'templates', f'{template_name}.json')
+        orchestrator = os.environ.get('ORCHESTRATOR_TYPE', 'eks')
+        if orchestrator == 'slurm':
+            dashboard_path = os.path.join(extract_dir, 'dashboards', 'slurmTemplates', f'{template_name}.json')
+        else:
+            dashboard_path = os.path.join(extract_dir, 'dashboards', 'templates', f'{template_name}.json')
         logger.info(f"Loading dashboard template from: {dashboard_path}")
 
         with open(dashboard_path, 'r', encoding='utf-8') as f:
@@ -477,7 +481,11 @@ def on_create():
         response_data["resources"]["folder"] = folder_result
 
         # Create dashboards
-        dashboard_templates = ['cluster', 'efa', 'training', 'inference', 'tasks']
+        orchestrator = os.environ.get('ORCHESTRATOR_TYPE', 'eks')
+        if orchestrator == 'slurm':
+            dashboard_templates = ['acceleratedMetrics', 'efa', 'node', 'nccl', 'cluster', 'job']
+        else:
+            dashboard_templates = ['cluster', 'efa', 'training', 'inference', 'tasks']
         for template in dashboard_templates:
             try:
                 result = create_dashboard(template)
