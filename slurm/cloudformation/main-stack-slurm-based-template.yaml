@@ -383,6 +383,108 @@ Parameters:
     Type: String
     Default: '[]'
     Description: JSON array string containing instance group configurations.
+  EnableObservabilityFeature:
+    Type: String
+    Default: 'false'
+    AllowedValues:
+      - 'true'
+      - 'false'
+    Description: Set to "true" to enable observability, "false" otherwise.
+  CreatePrometheusWorkspace:
+    Type: String
+    Default: 'false'
+    AllowedValues:
+      - 'true'
+      - 'false'
+    Description: Specify whether to create a new Prometheus workspace.
+  PrometheusWorkspaceId:
+    Type: String
+    Default: ''
+    Description: Existing Prometheus workspace ID.
+  PrometheusWorkspaceArn:
+    Type: String
+    Default: ''
+    Description: Existing Prometheus workspace ARN.
+  PrometheusWorkspaceEndpoint:
+    Type: String
+    Default: ''
+    Description: Existing Prometheus workspace endpoint.
+  CreateGrafanaWorkspace:
+    Type: String
+    Default: 'false'
+    AllowedValues:
+      - 'true'
+      - 'false'
+      - disabled
+    Description: Specify whether to create a new Grafana workspace.
+  GrafanaWorkspaceId:
+    Type: String
+    Default: ''
+    Description: Existing Grafana workspace ID.
+  GrafanaWorkspaceName:
+    Type: String
+    Default: ''
+    Description: Existing Grafana workspace name.
+  GrafanaWorkspaceArn:
+    Type: String
+    Default: ''
+    Description: Existing Grafana workspace ARN.
+  CreateGrafanaRole:
+    Type: String
+    Default: 'false'
+    AllowedValues:
+      - 'true'
+      - 'false'
+    Description: Specify whether to create a new Grafana role.
+  GrafanaRole:
+    Type: String
+    Default: ''
+    Description: Existing Grafana role ARN.
+  NodeMetricLevel:
+    Type: String
+    Default: BASIC
+    AllowedValues:
+      - BASIC
+      - ADVANCED
+      - DISABLED
+    Description: The level of node metrics.
+  AcceleratedComputeMetricLevel:
+    Type: String
+    Default: BASIC
+    AllowedValues:
+      - BASIC
+      - ADVANCED
+      - DISABLED
+    Description: The level of accelerated compute metrics.
+  NetworkMetricLevel:
+    Type: String
+    Default: DISABLED
+    AllowedValues:
+      - BASIC
+      - ADVANCED
+      - DISABLED
+    Description: The level of network metrics.
+  ClusterMetricLevel:
+    Type: String
+    Default: BASIC
+    AllowedValues:
+      - BASIC
+      - DISABLED
+    Description: The level of cluster metrics.
+  NcclMetricLevel:
+    Type: String
+    Default: DISABLED
+    AllowedValues:
+      - BASIC
+      - DISABLED
+    Description: The level of NCCL metrics.
+  JobMetricLevel:
+    Type: String
+    Default: BASIC
+    AllowedValues:
+      - BASIC
+      - DISABLED
+    Description: The level of job metrics.
 Conditions:
   CreateVPCStackCondition:
     Fn::Equals:
@@ -422,6 +524,10 @@ Conditions:
       - Fn::Equals:
           - Ref: SlurmConfigStrategy
           - ''
+  EnableObservabilityCondition:
+    Fn::Equals:
+      - Ref: EnableObservabilityFeature
+      - 'true'
 Resources:
   VPCStack:
     Type: AWS::CloudFormation::Stack
@@ -694,3 +800,91 @@ Resources:
     Metadata:
       aws:cdk:path: MainSlurmBasedCfnTemplate/HyperPodClusterStack
     Condition: CreateHyperPodClusterStackCondition
+  ObservabilityStack:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL:
+        Fn::If:
+          - CustomBucketCondition
+          - Fn::Sub: >-
+              https://${CustomBucketName}.s3.${AWS::Region}.amazonaws.com/templates-slurm/slurm-observability-template.yaml
+          - Fn::Sub: >-
+              https://aws-sagemaker-hyperpod-cluster-setup-${AWS::Region}-${Stage}.s3.${AWS::Region}.amazonaws.com/templates-slurm/slurm-observability-template.yaml
+      Parameters:
+        ResourceNamePrefix:
+          Ref: ResourceNamePrefix
+        VpcId:
+          Fn::If:
+            - CreateVPCStackCondition
+            - Fn::GetAtt:
+                - VPCStack
+                - Outputs.VpcId
+            - Ref: VpcId
+        SecurityGroupId:
+          Fn::If:
+            - CreateSecurityGroupStackCondition
+            - Fn::GetAtt:
+                - SecurityGroupStack
+                - Outputs.SlurmSecurityGroupId
+            - Ref: SecurityGroupId
+        PrivateSubnetIds:
+          Fn::If:
+            - CreateVPCStackCondition
+            - Fn::GetAtt:
+                - VPCStack
+                - Outputs.PrivateSubnetIds
+            - Ref: PrivateSubnetIds
+        ExecutionRoleName:
+          Fn::If:
+            - CreateSageMakerIAMRoleStackCondition
+            - Fn::GetAtt:
+                - IamRoleStack
+                - Outputs.AmazonSagemakerClusterExecutionRoleName
+            - Ref: SageMakerIAMRoleName
+        LCSBucketName:
+          Fn::If:
+            - CreateS3BucketStackCondition
+            - Fn::GetAtt:
+                - LifeCycleScriptStack
+                - Outputs.SlurmLifeCycleScriptSourceS3BucketName
+            - Ref: S3BucketName
+        CustomResourceS3Bucket:
+          Fn::If:
+            - CustomBucketCondition
+            - Ref: CustomBucketName
+            - Fn::Sub: aws-sagemaker-hyperpod-cluster-setup-${AWS::Region}-${Stage}
+        CreatePrometheusWorkspace:
+          Ref: CreatePrometheusWorkspace
+        PrometheusWorkspaceId:
+          Ref: PrometheusWorkspaceId
+        PrometheusWorkspaceArn:
+          Ref: PrometheusWorkspaceArn
+        PrometheusWorkspaceEndpoint:
+          Ref: PrometheusWorkspaceEndpoint
+        CreateGrafanaWorkspace:
+          Ref: CreateGrafanaWorkspace
+        GrafanaWorkspaceId:
+          Ref: GrafanaWorkspaceId
+        GrafanaWorkspaceName:
+          Ref: GrafanaWorkspaceName
+        GrafanaWorkspaceArn:
+          Ref: GrafanaWorkspaceArn
+        CreateGrafanaRole:
+          Ref: CreateGrafanaRole
+        GrafanaRole:
+          Ref: GrafanaRole
+        NodeMetricLevel:
+          Ref: NodeMetricLevel
+        AcceleratedComputeMetricLevel:
+          Ref: AcceleratedComputeMetricLevel
+        NetworkMetricLevel:
+          Ref: NetworkMetricLevel
+        ClusterMetricLevel:
+          Ref: ClusterMetricLevel
+        NcclMetricLevel:
+          Ref: NcclMetricLevel
+        JobMetricLevel:
+          Ref: JobMetricLevel
+    Metadata:
+      aws:cdk:path: MainSlurmBasedCfnTemplate/ObservabilityStack
+    Condition: EnableObservabilityCondition

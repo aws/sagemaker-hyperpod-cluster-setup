@@ -1,15 +1,11 @@
-Description: Sagemaker Hyperpod Observability Stack
+Description: Sagemaker Hyperpod Slurm Observability Stack
 Transform:
   - AWS::LanguageExtensions
 Parameters:
   ResourceNamePrefix:
     Type: String
-    Default: sagemaker-hyperpod-eks
+    Default: sagemaker-hyperpod-slurm
     Description: Prefix to be used for all resources created by this template.
-  EKSClusterName:
-    Type: String
-    Default: eks
-    Description: The name of the EKS cluster.
   CustomResourceS3Bucket:
     Type: String
     Default: aws-sagemaker-hyperpod-cluster-setup-us-east-2-prod
@@ -26,43 +22,32 @@ Parameters:
     Type: String
     Default: resources/artifacts/grafana-service-token-lambda-function.zip
     Description: The S3 key for the lambda function zip file.
-  AddonUpdateFunctionS3Key:
-    Type: String
-    Default: resources/artifacts/observability-eksaddon-update-lambda-function.zip
-    Description: The S3 key for the addon update lambda function zip file.
   ObservabilityAssetsS3Key:
     Type: String
     Default: resources/artifacts/observability-assets.zip
     Description: The S3 key for observability assets zip file.
-  CreateHyperPodObservabilityRole:
+  ConfigWriterFunctionS3Key:
     Type: String
-    Default: 'false'
-    AllowedValues:
-      - 'true'
-      - 'false'
-    Description: Specify whether to create new role for Hyperpod Observability AddOn
-  HyperPodObservabilityRole:
+    Default: resources/artifacts/slurm-observability-config-writer-lambda-function.zip
+    Description: The S3 key for the config writer lambda function zip file.
+  LCSBucketName:
     Type: String
-    Default: ''
-    Description: The role to be used with Hyperpod Observability AddOn
+    Description: S3 bucket where lifecycle scripts are stored.
+  LCSConfigS3Key:
+    Type: String
+    Default: observability/observability-config.yaml
+    Description: S3 key path for the observability-config.yaml file.
   CreateGrafanaRole:
     Type: String
     Default: 'false'
     AllowedValues:
       - 'true'
       - 'false'
-    Description: Specify whether to create new role for Hyperpod Observability Grafana Custom Resources
+    Description: Specify whether to create new role for Hyperpod Observability Grafana Custom Resources.
   GrafanaRole:
     Type: String
     Default: ''
-    Description: The role to be used with Hyperpod Observability Grafana Custom Resources
-  IsRIG:
-    Type: String
-    Default: 'false'
-    AllowedValues:
-      - 'true'
-      - 'false'
-    Description: Specify whether this is a RIG cluster.
+    Description: The role to be used with Hyperpod Observability Grafana Custom Resources.
   ExecutionRoleName:
     Type: String
     Default: ''
@@ -73,7 +58,7 @@ Parameters:
     AllowedValues:
       - 'true'
       - 'false'
-    Description: Specify whether to create new prometheus workspace
+    Description: Specify whether to create new prometheus workspace.
   PrometheusWorkspaceId:
     Type: String
     Default: ''
@@ -93,7 +78,7 @@ Parameters:
       - 'true'
       - 'false'
       - disabled
-    Description: Specify whether to create new grafana workspace
+    Description: Specify whether to create new grafana workspace.
   GrafanaWorkspaceId:
     Type: String
     Default: ''
@@ -106,74 +91,63 @@ Parameters:
     Type: String
     Default: ''
     Description: The Arn of the existing Amazon Managed Service for Grafana (AMG) workspace.
-  TrainingMetricLevel:
-    Type: String
-    Default: BASIC
-    AllowedValues:
-      - BASIC
-      - ADVANCED
-    Description: The level of training metric for EKS AddOn.
-  TaskGovernanceMetricLevel:
-    Type: String
-    Default: DISABLED
-    AllowedValues:
-      - DISABLED
-      - ADVANCED
-    Description: The level of task governance metric for EKS AddOn.
-  ScalingMetricLevel:
-    Type: String
-    Default: DISABLED
-    AllowedValues:
-      - DISABLED
-      - ADVANCED
-    Description: The level of scaling metric for EKS AddOn.
-  ClusterMetricLevel:
-    Type: String
-    Default: BASIC
-    AllowedValues:
-      - BASIC
-      - ADVANCED
-    Description: The level of cluster metric for EKS AddOn.
   NodeMetricLevel:
     Type: String
     Default: BASIC
     AllowedValues:
       - BASIC
       - ADVANCED
-    Description: The level of node metric for EKS AddOn.
-  NetworkMetricLevel:
-    Type: String
-    Default: DISABLED
-    AllowedValues:
       - DISABLED
-      - ADVANCED
-    Description: The level of network metric for EKS AddOn.
+    Description: The level of node metrics.
   AcceleratedComputeMetricLevel:
     Type: String
     Default: BASIC
     AllowedValues:
       - BASIC
       - ADVANCED
-    Description: The level of accelerated compute metric for EKS AddOn.
-  Logging:
+      - DISABLED
+    Description: The level of accelerated compute metrics.
+  NetworkMetricLevel:
     Type: String
-    Default: 'false'
+    Default: DISABLED
     AllowedValues:
-      - 'true'
-      - 'false'
-    Description: Specify whether to enable logging
+      - BASIC
+      - ADVANCED
+      - DISABLED
+    Description: The level of network metrics.
+  ClusterMetricLevel:
+    Type: String
+    Default: BASIC
+    AllowedValues:
+      - BASIC
+      - DISABLED
+    Description: The level of cluster metrics.
+  NcclMetricLevel:
+    Type: String
+    Default: DISABLED
+    AllowedValues:
+      - BASIC
+      - DISABLED
+    Description: The level of NCCL metrics.
+  JobMetricLevel:
+    Type: String
+    Default: BASIC
+    AllowedValues:
+      - BASIC
+      - DISABLED
+    Description: The level of job metrics.
   VpcId:
     Type: String
     Default: vpc-1234567890abcdef0
-    Description: The ID of the VPC where endpoints will be created
+    Description: The ID of the VPC where endpoints will be created.
   SecurityGroupId:
     Type: String
     Default: ''
-    Description: The security of the VPC
+    Description: The security group of the VPC.
   PrivateSubnetIds:
     Type: CommaDelimitedList
     Default: subnet-1234567890abcdef0,subnet-1234567890abcdef1
-    Description: List of private subnet IDs for VPC endpoints
+    Description: List of private subnet IDs for VPC endpoints.
 Mappings:
   AMGRegionMapping:
     us-east-1:
@@ -228,27 +202,12 @@ Conditions:
       - Fn::Equals:
           - Ref: CreateGrafanaWorkspace
           - 'true'
-  EnableLoggingCondition:
-    Fn::Equals:
-      - Ref: Logging
-      - 'true'
-  DisableLoggingCondition:
-    Fn::Not:
-      - Condition: EnableLoggingCondition
-  CreateHyperPodObservabilityRoleCondition:
-    Fn::Equals:
-      - Ref: CreateHyperPodObservabilityRole
-      - 'true'
   CreateGrafanaRoleCondition:
     Fn::And:
       - Fn::Equals:
           - Ref: CreateGrafanaRole
           - 'true'
       - Condition: IsAmgAllowed
-  IsRIGCondition:
-    Fn::Equals:
-      - Ref: IsRIG
-      - 'true'
 Resources:
   GrafanaVPCEndpoint:
     Type: AWS::EC2::VPCEndpoint
@@ -272,7 +231,7 @@ Resources:
       VpcId:
         Ref: VpcId
     Metadata:
-      aws:cdk:path: ObservabilityCfnTemplate/GrafanaVPCEndpoint
+      aws:cdk:path: ObservabilitySlurmCfnTemplate/GrafanaVPCEndpoint
     Condition: IsAmgAllowed
   PrometheusVPCEndpoint:
     Type: AWS::EC2::VPCEndpoint
@@ -296,7 +255,7 @@ Resources:
       VpcId:
         Ref: VpcId
     Metadata:
-      aws:cdk:path: ObservabilityCfnTemplate/PrometheusVPCEndpoint
+      aws:cdk:path: ObservabilitySlurmCfnTemplate/PrometheusVPCEndpoint
   PrometheusWorkspace:
     Type: AWS::APS::Workspace
     Properties:
@@ -311,71 +270,8 @@ Resources:
     UpdateReplacePolicy: Retain
     DeletionPolicy: Retain
     Metadata:
-      aws:cdk:path: ObservabilityCfnTemplate/PrometheusWorkspace
+      aws:cdk:path: ObservabilitySlurmCfnTemplate/PrometheusWorkspace
     Condition: PrometheusNewWorkspaceCondition
-  HyperPodObservabilityAddonRole:
-    Type: AWS::IAM::Role
-    Properties:
-      AssumeRolePolicyDocument:
-        Version: 2012-10-17
-        Statement:
-          - Sid: AllowEksAuthToAssumeRoleForPodIdentity
-            Effect: Allow
-            Principal:
-              Service: pods.eks.amazonaws.com
-            Action:
-              - sts:AssumeRole
-              - sts:TagSession
-            Condition:
-              StringEquals:
-                aws:SourceAccount:
-                  Fn::Sub: ${AWS::AccountId}
-                aws:SourceArn:
-                  Fn::Sub: arn:aws:eks:${AWS::Region}:${AWS::AccountId}:cluster/${EKSClusterName}
-      MaxSessionDuration: 3600
-      Path: /service-role/
-      Policies:
-        - PolicyDocument:
-            Version: 2012-10-17
-            Statement:
-              - Sid: PrometheusAccess
-                Effect: Allow
-                Action:
-                  - aps:RemoteWrite
-                Resource:
-                  Fn::Sub:
-                    - arn:aws:aps:${AWS::Region}:${AWS::AccountId}:workspace/${PrometheusWorkspaceId}
-                    - PrometheusWorkspaceId:
-                        Fn::If:
-                          - PrometheusNewWorkspaceCondition
-                          - Fn::GetAtt:
-                              - PrometheusWorkspace
-                              - WorkspaceId
-                          - Ref: PrometheusWorkspaceId
-              - Sid: CloudwatchLogsAccess
-                Effect: Allow
-                Action:
-                  - logs:CreateLogGroup
-                  - logs:CreateLogStream
-                  - logs:DescribeLogGroups
-                  - logs:DescribeLogStreams
-                  - logs:PutLogEvents
-                  - logs:GetLogEvents
-                  - logs:FilterLogEvents
-                  - logs:GetLogRecord
-                  - logs:StartQuery
-                  - logs:StopQuery
-                  - logs:GetQueryResults
-                Resource:
-                  - Fn::Sub: arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/sagemaker/Clusters/*
-                  - Fn::Sub: arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/sagemaker/Clusters/*:log-stream:*
-          PolicyName:
-            Fn::Sub: ${ResourceNamePrefix}-OnPol
-      RoleName:
-        Fn::Sub: ${ResourceNamePrefix}-AddOn
-    Metadata:
-      aws:cdk:path: ObservabilityCfnTemplate/HyperPodObservabilityAddonRole
-    Condition: CreateHyperPodObservabilityRoleCondition
   ExecutionRoleObservabilityPolicy:
     Type: AWS::IAM::Policy
     Properties:
@@ -396,30 +292,12 @@ Resources:
                           - PrometheusWorkspace
                           - WorkspaceId
                       - Ref: PrometheusWorkspaceId
-          - Sid: CloudwatchLogsAccess
-            Effect: Allow
-            Action:
-              - logs:CreateLogGroup
-              - logs:CreateLogStream
-              - logs:DescribeLogGroups
-              - logs:DescribeLogStreams
-              - logs:PutLogEvents
-              - logs:GetLogEvents
-              - logs:FilterLogEvents
-              - logs:GetLogRecord
-              - logs:StartQuery
-              - logs:StopQuery
-              - logs:GetQueryResults
-            Resource:
-              - Fn::Sub: arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/sagemaker/Clusters/*
-              - Fn::Sub: arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/sagemaker/Clusters/*:log-stream:*
       PolicyName:
-        Fn::Sub: ${ResourceNamePrefix}-observability-policy
+        Fn::Sub: ${ResourceNamePrefix}-obs-policy
       Roles:
         - Ref: ExecutionRoleName
     Metadata:
-      aws:cdk:path: ObservabilityCfnTemplate/ExecutionRoleObservabilityPolicy
-    Condition: IsRIGCondition
+      aws:cdk:path: ObservabilitySlurmCfnTemplate/ExecutionRoleObservabilityPolicy
   GrafanaWorkspaceRole:
     Type: AWS::IAM::Role
     Properties:
@@ -440,63 +318,21 @@ Resources:
         - PolicyDocument:
             Version: 2012-10-17
             Statement:
-              - Sid: AllowReadingMetricsFromCloudWatch
-                Effect: Allow
-                Action:
-                  - cloudwatch:ListMetrics
-                  - cloudwatch:GetMetricStatistics
-                  - cloudwatch:GetMetricData
-                  - cloudwatch:DescribeAlarmsForMetric
-                  - cloudwatch:GetInsightRuleReport
-                Resource: '*'
-              - Sid: AllowReadingAlarmsFromCloudWatch
-                Effect: Allow
-                Action:
-                  - cloudwatch:DescribeAlarmHistory
-                  - cloudwatch:DescribeAlarms
-                Resource: arn:aws:cloudwatch:*:*:alarm:*
-              - Sid: AllowReadingLogsFromCloudWatch
-                Effect: Allow
-                Action:
-                  - logs:DescribeLogGroups
-                  - logs:StopQuery
-                  - logs:GetLogEvents
-                Resource: '*'
-              - Sid: AllowQueryLogsFromCloudWatch
-                Effect: Allow
-                Action:
-                  - logs:GetLogGroupFields
-                  - logs:StartQuery
-                  - logs:GetQueryResults
-                  - logs:GetLogEvents
-                Resource:
-                  - arn:aws:logs:*:*:log-group:*
-                  - arn:aws:logs:*:*:log-group:*:log-stream:*
-              - Sid: AllowReadingTagsInstancesRegionsFromEC2
-                Effect: Allow
-                Action:
-                  - ec2:DescribeTags
-                  - ec2:DescribeInstances
-                  - ec2:DescribeRegions
-                Resource: '*'
-              - Sid: AllowReadingResourcesForTags
-                Effect: Allow
-                Action: tag:GetResources
-                Resource: '*'
-              - Sid: AllowListWorkspacesFromPrometheus
-                Effect: Allow
-                Action:
-                  - aps:ListWorkspaces
-                Resource: '*'
               - Sid: AllowReadingMetricsFromPrometheus
                 Effect: Allow
                 Action:
+                  - aps:ListWorkspaces
                   - aps:DescribeWorkspace
                   - aps:QueryMetrics
                   - aps:GetLabels
                   - aps:GetSeries
                   - aps:GetMetricMetadata
                 Resource: arn:aws:aps:*:*:workspace/*
+              - Sid: AllowListWorkspacesFromPrometheus
+                Effect: Allow
+                Action:
+                  - aps:ListWorkspaces
+                Resource: '*'
               - Sid: AllowReadingAlertsFromPrometheus
                 Effect: Allow
                 Action:
@@ -513,122 +349,8 @@ Resources:
       RoleName:
         Fn::Sub: ${ResourceNamePrefix}-GraAcc
     Metadata:
-      aws:cdk:path: ObservabilityCfnTemplate/GrafanaWorkspaceRole
+      aws:cdk:path: ObservabilitySlurmCfnTemplate/GrafanaWorkspaceRole
     Condition: CreateGrafanaRoleCondition
-  EksAddOnWithoutAmgWithLogging:
-    Type: AWS::EKS::Addon
-    Properties:
-      AddonName: amazon-sagemaker-hyperpod-observability
-      ClusterName:
-        Ref: EKSClusterName
-      ConfigurationValues:
-        Fn::Join:
-          - ''
-          - - '{"ampWorkspace":{"prometheusEndpoint":"https://aps-workspaces.'
-            - Fn::Sub: ${AWS::Region}
-            - .amazonaws.com/workspaces/
-            - Fn::If:
-                - PrometheusNewWorkspaceCondition
-                - Fn::GetAtt:
-                    - PrometheusWorkspace
-                    - WorkspaceId
-                - Ref: PrometheusWorkspaceId
-            - '","arn":"'
-            - Fn::If:
-                - PrometheusNewWorkspaceCondition
-                - Fn::GetAtt:
-                    - PrometheusWorkspace
-                    - Arn
-                - Ref: PrometheusWorkspaceArn
-            - '"},"metricsProvider":{"trainingMetrics":{"level":"'
-            - Ref: TrainingMetricLevel
-            - >-
-              ","scrapeInterval":30},"inferenceMetrics":{"level":"BASIC","scrapeInterval":30},"taskGovernanceMetrics":{"level":"
-            - Ref: TaskGovernanceMetricLevel
-            - '","scrapeInterval":30},"scalingMetrics":{"level":"'
-            - Ref: ScalingMetricLevel
-            - '","scrapeInterval":30},"customMetrics":{"level":"'
-            - Ref: ClusterMetricLevel
-            - '","scrapeInterval":30},"nodeMetrics":{"level":"'
-            - Ref: NodeMetricLevel
-            - '","scrapeInterval":30},"acceleratedComputeMetrics":{"level":"'
-            - Ref: AcceleratedComputeMetricLevel
-            - '","scrapeInterval":30},"networkMetrics":{"level":"'
-            - Ref: NetworkMetricLevel
-            - '","scrapeInterval":30}},"logging":{"enabled":true}}'
-      PodIdentityAssociations:
-        - RoleArn:
-            Fn::If:
-              - CreateHyperPodObservabilityRoleCondition
-              - Fn::GetAtt:
-                  - HyperPodObservabilityAddonRole
-                  - Arn
-              - Ref: HyperPodObservabilityRole
-          ServiceAccount: hyperpod-observability-operator-otel-collector
-      ResolveConflicts: OVERWRITE
-      Tags:
-        - Key: SageMaker
-          Value: 'true'
-    Metadata:
-      aws:cdk:path: ObservabilityCfnTemplate/EksAddOnWithoutAmgWithLogging
-    Condition: EnableLoggingCondition
-  EksAddOnWithoutAmgWithoutLogging:
-    Type: AWS::EKS::Addon
-    Properties:
-      AddonName: amazon-sagemaker-hyperpod-observability
-      ClusterName:
-        Ref: EKSClusterName
-      ConfigurationValues:
-        Fn::Join:
-          - ''
-          - - '{"ampWorkspace":{"prometheusEndpoint":"https://aps-workspaces.'
-            - Fn::Sub: ${AWS::Region}
-            - .amazonaws.com/workspaces/
-            - Fn::If:
-                - PrometheusNewWorkspaceCondition
-                - Fn::GetAtt:
-                    - PrometheusWorkspace
-                    - WorkspaceId
-                - Ref: PrometheusWorkspaceId
-            - '","arn":"'
-            - Fn::If:
-                - PrometheusNewWorkspaceCondition
-                - Fn::GetAtt:
-                    - PrometheusWorkspace
-                    - Arn
-                - Ref: PrometheusWorkspaceArn
-            - '"},"metricsProvider":{"trainingMetrics":{"level":"'
-            - Ref: TrainingMetricLevel
-            - >-
-              ","scrapeInterval":30},"inferenceMetrics":{"level":"BASIC","scrapeInterval":30},"taskGovernanceMetrics":{"level":"
-            - Ref: TaskGovernanceMetricLevel
-            - '","scrapeInterval":30},"scalingMetrics":{"level":"'
-            - Ref: ScalingMetricLevel
-            - '","scrapeInterval":30},"customMetrics":{"level":"'
-            - Ref: ClusterMetricLevel
-            - '","scrapeInterval":30},"nodeMetrics":{"level":"'
-            - Ref: NodeMetricLevel
-            - '","scrapeInterval":30},"acceleratedComputeMetrics":{"level":"'
-            - Ref: AcceleratedComputeMetricLevel
-            - '","scrapeInterval":30},"networkMetrics":{"level":"'
-            - Ref: NetworkMetricLevel
-            - '","scrapeInterval":30}},"logging":{"enabled":false}}'
-      PodIdentityAssociations:
-        - RoleArn:
-            Fn::If:
-              - CreateHyperPodObservabilityRoleCondition
-              - Fn::GetAtt:
-                  - HyperPodObservabilityAddonRole
-                  - Arn
-              - Ref: HyperPodObservabilityRole
-          ServiceAccount: hyperpod-observability-operator-otel-collector
-      ResolveConflicts: OVERWRITE
-      Tags:
-        - Key: SageMaker
-          Value: 'true'
-    Metadata:
-      aws:cdk:path: ObservabilityCfnTemplate/EksAddOnWithoutAmgWithoutLogging
-    Condition: DisableLoggingCondition
   GrafanaWorkspaceCustomResourceRole:
     Type: AWS::IAM::Role
     Properties:
@@ -663,6 +385,16 @@ Resources:
             Statement:
               - Effect: Allow
                 Action:
+                  - iam:CreateServiceLinkedRole
+                Resource:
+                  - Fn::Sub: arn:aws:iam::${AWS::AccountId}:role/*
+          PolicyName:
+            Fn::Sub: ${ResourceNamePrefix}-AMGWSSLR
+        - PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action:
                   - ec2:GetManagedPrefixListEntries
                   - kms:Decrypt
                 Resource:
@@ -684,20 +416,10 @@ Resources:
                   - '*'
           PolicyName:
             Fn::Sub: ${ResourceNamePrefix}-AMGWS
-        - PolicyDocument:
-            Version: 2012-10-17
-            Statement:
-              - Effect: Allow
-                Action:
-                  - iam:CreateServiceLinkedRole
-                Resource:
-                  - Fn::Sub: arn:aws:iam::${AWS::AccountId}:role/*
-          PolicyName:
-            Fn::Sub: ${ResourceNamePrefix}-AMGWSSLR
       RoleName:
         Fn::Sub: ${ResourceNamePrefix}-AMGWS
     Metadata:
-      aws:cdk:path: ObservabilityCfnTemplate/GrafanaWorkspaceCustomResourceRole
+      aws:cdk:path: ObservabilitySlurmCfnTemplate/GrafanaWorkspaceCustomResourceRole
     Condition: IsAmgAllowed
   GrafanaWorkspaceCustomResourceFunction:
     Type: AWS::Lambda::Function
@@ -735,13 +457,13 @@ Resources:
         Fn::GetAtt:
           - GrafanaWorkspaceCustomResourceRole
           - Arn
-      Runtime: python3.12
+      Runtime: python3.14
       Tags:
         - Key: SageMaker
           Value: 'true'
       Timeout: 900
     Metadata:
-      aws:cdk:path: ObservabilityCfnTemplate/GrafanaWorkspaceCustomResourceFunction
+      aws:cdk:path: ObservabilitySlurmCfnTemplate/GrafanaWorkspaceCustomResourceFunction
     Condition: GrafanaNewWorkspaceCondition
   GrafanaWorkspaceCustomResource:
     Type: AWS::CloudFormation::CustomResource
@@ -751,97 +473,8 @@ Resources:
           - GrafanaWorkspaceCustomResourceFunction
           - Arn
     Metadata:
-      aws:cdk:path: ObservabilityCfnTemplate/GrafanaWorkspaceCustomResource
+      aws:cdk:path: ObservabilitySlurmCfnTemplate/GrafanaWorkspaceCustomResource
     Condition: GrafanaNewWorkspaceCondition
-  AddOnUpdateLambdaRole:
-    Type: AWS::IAM::Role
-    Properties:
-      AssumeRolePolicyDocument:
-        Statement:
-          - Action: sts:AssumeRole
-            Effect: Allow
-            Principal:
-              Service: lambda.amazonaws.com
-        Version: 2012-10-17
-      ManagedPolicyArns:
-        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
-        - arn:aws:iam::aws:policy/AmazonSageMakerHyperPodObservabilityAdminAccess
-      Policies:
-        - PolicyDocument:
-            Version: 2012-10-17
-            Statement:
-              - Effect: Allow
-                Action:
-                  - eks:UpdateAddon
-                  - eks:DescribeAddon
-                Resource:
-                  - Fn::Sub: arn:${AWS::Partition}:eks:${AWS::Region}:${AWS::AccountId}:addon/${EKSClusterName}/*/*
-                  - Fn::If:
-                      - EnableLoggingCondition
-                      - Fn::GetAtt:
-                          - EksAddOnWithoutAmgWithLogging
-                          - Arn
-                      - Fn::GetAtt:
-                          - EksAddOnWithoutAmgWithoutLogging
-                          - Arn
-          PolicyName: EKSAddOnUpdatePolicy
-      RoleName:
-        Fn::Sub: ${ResourceNamePrefix}-AddOnUpdate
-    Metadata:
-      aws:cdk:path: ObservabilityCfnTemplate/AddOnUpdateLambdaRole
-    Condition: IsAmgAllowed
-  AddOnUpdateLambdaFunction:
-    Type: AWS::Lambda::Function
-    Properties:
-      Code:
-        S3Bucket:
-          Ref: CustomResourceS3Bucket
-        S3Key:
-          Ref: AddonUpdateFunctionS3Key
-      Environment:
-        Variables:
-          CLUSTER_NAME:
-            Ref: EKSClusterName
-          GRAFANA_WORKSPACE_NAME:
-            Fn::If:
-              - GrafanaNewWorkspaceCondition
-              - Fn::GetAtt:
-                  - GrafanaWorkspaceCustomResource
-                  - Name
-              - Ref: GrafanaWorkspaceName
-          GRAFANA_WORKSPACE_ARN:
-            Fn::If:
-              - GrafanaNewWorkspaceCondition
-              - Fn::GetAtt:
-                  - GrafanaWorkspaceCustomResource
-                  - Arn
-              - Ref: GrafanaWorkspaceArn
-      FunctionName:
-        Fn::Sub: ${ResourceNamePrefix}-AddOnUpdate
-      Handler: lambda_function.lambda_handler
-      MemorySize: 2048
-      Role:
-        Fn::GetAtt:
-          - AddOnUpdateLambdaRole
-          - Arn
-      Runtime: python3.12
-      Tags:
-        - Key: SageMaker
-          Value: 'true'
-      Timeout: 900
-    Metadata:
-      aws:cdk:path: ObservabilityCfnTemplate/AddOnUpdateLambdaFunction
-    Condition: IsAmgAllowed
-  AddOnUpdateCustomResource:
-    Type: AWS::CloudFormation::CustomResource
-    Properties:
-      ServiceToken:
-        Fn::GetAtt:
-          - AddOnUpdateLambdaFunction
-          - Arn
-    Metadata:
-      aws:cdk:path: ObservabilityCfnTemplate/AddOnUpdateCustomResource
-    Condition: IsAmgAllowed
   GrafanaServiceAccountLambdaRole:
     Type: AWS::IAM::Role
     Properties:
@@ -858,7 +491,7 @@ Resources:
       RoleName:
         Fn::Sub: ${ResourceNamePrefix}-SA
     Metadata:
-      aws:cdk:path: ObservabilityCfnTemplate/GrafanaServiceAccountLambdaRole
+      aws:cdk:path: ObservabilitySlurmCfnTemplate/GrafanaServiceAccountLambdaRole
     Condition: IsAmgAllowed
   GrafanaServiceAccountLambdaFunction:
     Type: AWS::Lambda::Function
@@ -889,13 +522,13 @@ Resources:
         Fn::GetAtt:
           - GrafanaServiceAccountLambdaRole
           - Arn
-      Runtime: python3.12
+      Runtime: python3.14
       Tags:
         - Key: SageMaker
           Value: 'true'
       Timeout: 900
     Metadata:
-      aws:cdk:path: ObservabilityCfnTemplate/GrafanaServiceAccountLambdaFunction
+      aws:cdk:path: ObservabilitySlurmCfnTemplate/GrafanaServiceAccountLambdaFunction
     Condition: IsAmgAllowed
   GrafanaServiceAccountCustomResource:
     Type: AWS::CloudFormation::CustomResource
@@ -905,7 +538,7 @@ Resources:
           - GrafanaServiceAccountLambdaFunction
           - Arn
     Metadata:
-      aws:cdk:path: ObservabilityCfnTemplate/GrafanaServiceAccountCustomResource
+      aws:cdk:path: ObservabilitySlurmCfnTemplate/GrafanaServiceAccountCustomResource
     Condition: IsAmgAllowed
   GrafanaCustomResourceRole:
     Type: AWS::IAM::Role
@@ -980,7 +613,7 @@ Resources:
       RoleName:
         Fn::Sub: ${ResourceNamePrefix}-AMGCR
     Metadata:
-      aws:cdk:path: ObservabilityCfnTemplate/GrafanaCustomResourceRole
+      aws:cdk:path: ObservabilitySlurmCfnTemplate/GrafanaCustomResourceRole
     Condition: IsAmgAllowed
   GrafanaCustomResourceFunction:
     Type: AWS::Lambda::Function
@@ -1020,7 +653,7 @@ Resources:
             Ref: CustomResourceS3Bucket
           DASHBOARD_PREFIX_S3_KEY:
             Ref: ObservabilityAssetsS3Key
-          ORCHESTRATOR_TYPE: eks
+          ORCHESTRATOR_TYPE: slurm
       FunctionName:
         Fn::Sub: ${ResourceNamePrefix}-grafunc
       Handler: lambda_function.lambda_handler
@@ -1029,7 +662,7 @@ Resources:
         Fn::GetAtt:
           - GrafanaCustomResourceRole
           - Arn
-      Runtime: python3.12
+      Runtime: python3.14
       Tags:
         - Key: SageMaker
           Value: 'true'
@@ -1046,7 +679,7 @@ Resources:
     DependsOn:
       - GrafanaServiceAccountCustomResource
     Metadata:
-      aws:cdk:path: ObservabilityCfnTemplate/GrafanaCustomResourceFunction
+      aws:cdk:path: ObservabilitySlurmCfnTemplate/GrafanaCustomResourceFunction
     Condition: IsAmgAllowed
   GrafanaHttpCustomResources:
     Type: AWS::CloudFormation::CustomResource
@@ -1056,42 +689,148 @@ Resources:
           - GrafanaCustomResourceFunction
           - Arn
     Metadata:
-      aws:cdk:path: ObservabilityCfnTemplate/GrafanaHttpCustomResources
+      aws:cdk:path: ObservabilitySlurmCfnTemplate/GrafanaHttpCustomResources
     Condition: IsAmgAllowed
+  ConfigWriterLambdaRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Statement:
+          - Action: sts:AssumeRole
+            Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+        Version: 2012-10-17
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        - PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action:
+                  - s3:PutObject
+                  - s3:DeleteObject
+                Resource:
+                  Fn::Sub: arn:aws:s3:::${LCSBucketName}/${LCSConfigS3Key}
+          PolicyName:
+            Fn::Sub: ${ResourceNamePrefix}-CfgWrS3
+      RoleName:
+        Fn::Sub: ${ResourceNamePrefix}-CfgWr
+    Metadata:
+      aws:cdk:path: ObservabilitySlurmCfnTemplate/ConfigWriterLambdaRole
+  ConfigWriterLambdaFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      Code:
+        S3Bucket:
+          Ref: CustomResourceS3Bucket
+        S3Key:
+          Ref: ConfigWriterFunctionS3Key
+      Environment:
+        Variables:
+          LCS_BUCKET_NAME:
+            Ref: LCSBucketName
+          LCS_CONFIG_S3_KEY:
+            Ref: LCSConfigS3Key
+          AMP_REMOTE_WRITE_URL:
+            Fn::Join:
+              - ''
+              - - https://aps-workspaces.
+                - Fn::Sub: ${AWS::Region}
+                - .amazonaws.com/workspaces/
+                - Fn::If:
+                    - PrometheusNewWorkspaceCondition
+                    - Fn::GetAtt:
+                        - PrometheusWorkspace
+                        - WorkspaceId
+                    - Ref: PrometheusWorkspaceId
+                - /api/v1/remote_write
+          AMP_WORKSPACE_ARN:
+            Fn::If:
+              - PrometheusNewWorkspaceCondition
+              - Fn::GetAtt:
+                  - PrometheusWorkspace
+                  - Arn
+              - Ref: PrometheusWorkspaceArn
+          PROMETHEUS_ENDPOINT:
+            Fn::If:
+              - PrometheusNewWorkspaceCondition
+              - Fn::GetAtt:
+                  - PrometheusWorkspace
+                  - PrometheusEndpoint
+              - Ref: PrometheusWorkspaceEndpoint
+          REGION:
+            Fn::Sub: ${AWS::Region}
+          AMG_WORKSPACE_NAME:
+            Fn::If:
+              - GrafanaNewWorkspaceCondition
+              - Fn::GetAtt:
+                  - GrafanaWorkspaceCustomResource
+                  - WorkspaceId
+              - Ref: GrafanaWorkspaceId
+          AMG_WORKSPACE_ARN:
+            Fn::If:
+              - GrafanaNewWorkspaceCondition
+              - Fn::GetAtt:
+                  - GrafanaWorkspaceCustomResource
+                  - Arn
+              - Ref: GrafanaWorkspaceArn
+          NODE_METRIC_LEVEL:
+            Ref: NodeMetricLevel
+          ACCELERATED_COMPUTE_METRIC_LEVEL:
+            Ref: AcceleratedComputeMetricLevel
+          NETWORK_METRIC_LEVEL:
+            Ref: NetworkMetricLevel
+          CLUSTER_METRIC_LEVEL:
+            Ref: ClusterMetricLevel
+          NCCL_METRIC_LEVEL:
+            Ref: NcclMetricLevel
+          JOB_METRIC_LEVEL:
+            Ref: JobMetricLevel
+      FunctionName:
+        Fn::Sub: ${ResourceNamePrefix}-CfgWriter
+      Handler: lambda_function.lambda_handler
+      MemorySize: 256
+      Role:
+        Fn::GetAtt:
+          - ConfigWriterLambdaRole
+          - Arn
+      Runtime: python3.14
+      Tags:
+        - Key: SageMaker
+          Value: 'true'
+      Timeout: 60
+    Metadata:
+      aws:cdk:path: ObservabilitySlurmCfnTemplate/ConfigWriterLambdaFunction
+  ConfigWriterCustomResource:
+    Type: AWS::CloudFormation::CustomResource
+    Properties:
+      ServiceToken:
+        Fn::GetAtt:
+          - ConfigWriterLambdaFunction
+          - Arn
+    Metadata:
+      aws:cdk:path: ObservabilitySlurmCfnTemplate/ConfigWriterCustomResource
 Outputs:
-  ObservabilityRoleArn:
-    Description: HyperPod Observability IAM Role ARN
+  AMPRemoteWriteURL:
+    Description: AMP Remote Write URL for observability-config.yaml
     Value:
-      Fn::If:
-        - CreateHyperPodObservabilityRoleCondition
-        - Fn::GetAtt:
-            - HyperPodObservabilityAddonRole
-            - Arn
-        - Ref: HyperPodObservabilityRole
+      Fn::Join:
+        - ''
+        - - https://aps-workspaces.
+          - Fn::Sub: ${AWS::Region}
+          - .amazonaws.com/workspaces/
+          - Fn::If:
+              - PrometheusNewWorkspaceCondition
+              - Fn::GetAtt:
+                  - PrometheusWorkspace
+                  - WorkspaceId
+              - Ref: PrometheusWorkspaceId
+          - /api/v1/remote_write
     Export:
       Name:
-        Fn::Sub: ${AWS::StackName}-ObservabilityRoleArn
-  GrafanaWorkspaceRoleArn:
-    Description: HyperPod Observability Grafana IAM Role ARN
-    Value:
-      Fn::If:
-        - CreateGrafanaRoleCondition
-        - Fn::GetAtt:
-            - GrafanaWorkspaceRole
-            - Arn
-        - Ref: GrafanaRole
-    Export:
-      Name:
-        Fn::Sub: ${AWS::StackName}-GrafanaWorkspaceRoleArn
-    Condition: IsAmgAllowed
-  GrafanaVPCEndpointId:
-    Description: Grafana VPC Endpoint ID
-    Value:
-      Ref: GrafanaVPCEndpoint
-    Export:
-      Name:
-        Fn::Sub: ${AWS::StackName}-GrafanaVPCEndpointId
-    Condition: IsAmgAllowed
+        Fn::Sub: ${AWS::StackName}-AMPRemoteWriteURL
   PrometheusVPCEndpointId:
     Description: Prometheus VPC Endpoint ID
     Value:
@@ -1112,7 +851,7 @@ Outputs:
       Name:
         Fn::Sub: ${AWS::StackName}-PrometheusWorkspaceId
   HyperpodPrometheusWorkspaceArn:
-    Description: Prometheus Workspace Arn
+    Description: Prometheus Workspace ARN
     Value:
       Fn::If:
         - PrometheusNewWorkspaceCondition
@@ -1135,19 +874,6 @@ Outputs:
     Export:
       Name:
         Fn::Sub: ${AWS::StackName}-PrometheusWorkspaceEndpoint
-  HyperpodGrafanaWorkspaceArn:
-    Description: Grafana Workspace Arn
-    Value:
-      Fn::If:
-        - GrafanaNewWorkspaceCondition
-        - Fn::GetAtt:
-            - GrafanaWorkspaceCustomResource
-            - Arn
-        - Ref: GrafanaWorkspaceArn
-    Export:
-      Name:
-        Fn::Sub: ${AWS::StackName}-GrafanaWorkspaceArn
-    Condition: IsAmgAllowed
   HyperpodGrafanaWorkspaceId:
     Description: Grafana Workspace ID
     Value:
@@ -1161,17 +887,33 @@ Outputs:
       Name:
         Fn::Sub: ${AWS::StackName}-GrafanaWorkspaceId
     Condition: IsAmgAllowed
-  HyperpodObservabilityAddOnArn:
-    Description: Observability AddOn ARN
+  HyperpodGrafanaWorkspaceArn:
+    Description: Grafana Workspace ARN
     Value:
       Fn::If:
-        - EnableLoggingCondition
+        - GrafanaNewWorkspaceCondition
         - Fn::GetAtt:
-            - EksAddOnWithoutAmgWithLogging
+            - GrafanaWorkspaceCustomResource
             - Arn
-        - Fn::GetAtt:
-            - EksAddOnWithoutAmgWithoutLogging
-            - Arn
+        - Ref: GrafanaWorkspaceArn
     Export:
       Name:
-        Fn::Sub: ${AWS::StackName}-AddOnArn
+        Fn::Sub: ${AWS::StackName}-GrafanaWorkspaceArn
+    Condition: IsAmgAllowed
+  GrafanaVPCEndpointId:
+    Description: Grafana VPC Endpoint ID
+    Value:
+      Ref: GrafanaVPCEndpoint
+    Export:
+      Name:
+        Fn::Sub: ${AWS::StackName}-GrafanaVPCEndpointId
+    Condition: IsAmgAllowed
+  ObservabilityConfigS3Uri:
+    Description: S3 URI of the observability-config.yaml file
+    Value:
+      Fn::GetAtt:
+        - ConfigWriterCustomResource
+        - ConfigS3Uri
+    Export:
+      Name:
+        Fn::Sub: ${AWS::StackName}-ObservabilityConfigS3Uri
