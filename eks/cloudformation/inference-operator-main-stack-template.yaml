@@ -138,6 +138,19 @@ Resources:
           Fn::GetAtt:
             - InfOperatorIAMRoleStack
             - Outputs.S3MountpointPolicyArn
+        S3CsiRoleName:
+          Fn::Sub:
+            - inf-${ResourceNameShortPrefix}-s3csi-role-${UniqueSuffix}
+            - UniqueSuffix:
+                Fn::Select:
+                  - 0
+                  - Fn::Split:
+                      - '-'
+                      - Fn::Select:
+                          - 2
+                          - Fn::Split:
+                              - /
+                              - Ref: AWS::StackId
     DependsOn:
       - InfOperatorIAMRoleStack
     Metadata:
@@ -183,6 +196,19 @@ Resources:
           Fn::GetAtt:
             - InfOperatorIAMRoleStack
             - Outputs.KedaRoleArn
+        S3CsiRoleName:
+          Fn::Sub:
+            - inf-${ResourceNameShortPrefix}-s3csi-role-${UniqueSuffix}
+            - UniqueSuffix:
+                Fn::Select:
+                  - 0
+                  - Fn::Split:
+                      - '-'
+                      - Fn::Select:
+                          - 2
+                          - Fn::Split:
+                              - /
+                              - Ref: AWS::StackId
         TLSBucketName:
           Fn::Sub:
             - s3://${BucketName}

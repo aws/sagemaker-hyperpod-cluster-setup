@@ -257,7 +257,18 @@ Resources:
                 Action:
                   - iam:PassRole
                 Resource:
-                  Fn::Sub: arn:aws:iam::${AWS::AccountId}:role/inf-${ResourceNameShortPrefix}-io-role
+                  Fn::Sub:
+                    - arn:aws:iam::${AWS::AccountId}:role/inf-${ResourceNameShortPrefix}-io-role-${UniqueSuffix}
+                    - UniqueSuffix:
+                        Fn::Select:
+                          - 0
+                          - Fn::Split:
+                              - '-'
+                              - Fn::Select:
+                                  - 2
+                                  - Fn::Split:
+                                      - /
+                                      - Ref: AWS::StackId
                 Condition:
                   StringEquals:
                     iam:PassedToService: sagemaker.amazonaws.com
@@ -308,7 +319,20 @@ Resources:
           PolicyName:
             Fn::Sub: ${ResourceNamePrefix}-InfOperator-Policy
       RoleName:
-        Fn::Sub: inf-${ResourceNameShortPrefix}-io-role
+        Fn::Sub:
+          - inf-${ResourceNameShortPrefix}-io-role-${UniqueSuffix}
+          - ResourceNameShortPrefix:
+              Ref: ResourceNameShortPrefix
+            UniqueSuffix:
+              Fn::Select:
+                - 0
+                - Fn::Split:
+                    - '-'
+                    - Fn::Select:
+                        - 2
+                        - Fn::Split:
+                            - /
+                            - Ref: AWS::StackId
     Metadata:
       aws:cdk:path: InfOperatorIamRoleCfnTemplate/ExecutionRole
   KedaRole:
@@ -338,7 +362,20 @@ Resources:
           PolicyName:
             Fn::Sub: ${ResourceNamePrefix}-keda-policy
       RoleName:
-        Fn::Sub: inf-${ResourceNameShortPrefix}-keda-role
+        Fn::Sub:
+          - inf-${ResourceNameShortPrefix}-keda-role-${UniqueSuffix}
+          - ResourceNameShortPrefix:
+              Ref: ResourceNameShortPrefix
+            UniqueSuffix:
+              Fn::Select:
+                - 0
+                - Fn::Split:
+                    - '-'
+                    - Fn::Select:
+                        - 2
+                        - Fn::Split:
+                            - /
+                            - Ref: AWS::StackId
     Metadata:
       aws:cdk:path: InfOperatorIamRoleCfnTemplate/KedaRole
   GatedRole:
@@ -362,7 +399,20 @@ Resources:
           PolicyName:
             Fn::Sub: ${ResourceNamePrefix}-Gated-Policy
       RoleName:
-        Fn::Sub: inf-${ResourceNameShortPrefix}-gate-role
+        Fn::Sub:
+          - inf-${ResourceNameShortPrefix}-gate-role-${UniqueSuffix}
+          - ResourceNameShortPrefix:
+              Ref: ResourceNameShortPrefix
+            UniqueSuffix:
+              Fn::Select:
+                - 0
+                - Fn::Split:
+                    - '-'
+                    - Fn::Select:
+                        - 2
+                        - Fn::Split:
+                            - /
+                            - Ref: AWS::StackId
     Metadata:
       aws:cdk:path: InfOperatorIamRoleCfnTemplate/GatedRole
   ClusterRoleAccessEntry:
@@ -384,7 +434,20 @@ Resources:
     Type: AWS::IAM::ManagedPolicy
     Properties:
       ManagedPolicyName:
-        Fn::Sub: inf-${ResourceNameShortPrefix}-lbc-policy
+        Fn::Sub:
+          - inf-${ResourceNameShortPrefix}-lbc-policy-${UniqueSuffix}
+          - ResourceNameShortPrefix:
+              Ref: ResourceNameShortPrefix
+            UniqueSuffix:
+              Fn::Select:
+                - 0
+                - Fn::Split:
+                    - '-'
+                    - Fn::Select:
+                        - 2
+                        - Fn::Split:
+                            - /
+                            - Ref: AWS::StackId
       PolicyDocument:
         Version: 2012-10-17
         Statement:
@@ -570,7 +633,20 @@ Resources:
     Type: AWS::IAM::ManagedPolicy
     Properties:
       ManagedPolicyName:
-        Fn::Sub: inf-${ResourceNameShortPrefix}-s3mp-policy
+        Fn::Sub:
+          - inf-${ResourceNameShortPrefix}-s3mp-policy-${UniqueSuffix}
+          - ResourceNameShortPrefix:
+              Ref: ResourceNameShortPrefix
+            UniqueSuffix:
+              Fn::Select:
+                - 0
+                - Fn::Split:
+                    - '-'
+                    - Fn::Select:
+                        - 2
+                        - Fn::Split:
+                            - /
+                            - Ref: AWS::StackId
       PolicyDocument:
         Version: 2012-10-17
         Statement:
