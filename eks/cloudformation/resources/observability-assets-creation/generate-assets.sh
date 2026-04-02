@@ -12,8 +12,7 @@ node -e "
 const fs = require('fs');
 const {
   clusterJson, efaJson, inferenceJson, tasksJson, trainingJson, rulesYaml,
-  slurmAcceleratedMetricsJson, slurmEfaJson, slurmNodeJson, slurmNcclJson, slurmClusterJson,
-  slurmJobJson
+  slurmClustersJson, slurmJobsJson
 } = require('@amzn/hyperpod-observability-assets');
 
 // Create directories
@@ -29,12 +28,8 @@ fs.writeFileSync('dashboards/templates/tasks.json', JSON.stringify(tasksJson, nu
 fs.writeFileSync('dashboards/templates/training.json', JSON.stringify(trainingJson, null, 2));
 
 // Write Slurm dashboard files
-fs.writeFileSync('dashboards/slurmTemplates/acceleratedMetrics.json', JSON.stringify(slurmAcceleratedMetricsJson, null, 2));
-fs.writeFileSync('dashboards/slurmTemplates/efa.json', JSON.stringify(slurmEfaJson, null, 2));
-fs.writeFileSync('dashboards/slurmTemplates/node.json', JSON.stringify(slurmNodeJson, null, 2));
-fs.writeFileSync('dashboards/slurmTemplates/nccl.json', JSON.stringify(slurmNcclJson, null, 2));
-fs.writeFileSync('dashboards/slurmTemplates/cluster.json', JSON.stringify(slurmClusterJson, null, 2));
-fs.writeFileSync('dashboards/slurmTemplates/job.json', JSON.stringify(slurmJobJson, null, 2));
+fs.writeFileSync('dashboards/slurmTemplates/clusters.json', JSON.stringify(slurmClustersJson, null, 2));
+fs.writeFileSync('dashboards/slurmTemplates/jobs.json', JSON.stringify(slurmJobsJson, null, 2));
 
 // Write rules file
 fs.writeFileSync('alerts/alert-rules.yaml', rulesYaml);

@@ -483,7 +483,7 @@ def on_create():
         # Create dashboards
         orchestrator = os.environ.get('ORCHESTRATOR_TYPE', 'eks')
         if orchestrator == 'slurm':
-            dashboard_templates = ['acceleratedMetrics', 'efa', 'node', 'nccl', 'cluster', 'job']
+            dashboard_templates = ['clusters', 'jobs']
         else:
             dashboard_templates = ['cluster', 'efa', 'training', 'inference', 'tasks']
         for template in dashboard_templates:

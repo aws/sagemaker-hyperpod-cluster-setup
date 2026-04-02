@@ -1,0 +1,2909 @@
+{
+  "dashboard": {
+    "annotations": {
+      "list": [
+        {
+          "builtIn": 1,
+          "datasource": {
+            "type": "datasource",
+            "uid": "grafana"
+          },
+          "enable": true,
+          "hide": true,
+          "iconColor": "rgba(0, 211, 255, 1)",
+          "name": "Annotations & Alerts",
+          "type": "dashboard"
+        }
+      ]
+    },
+    "description": "AWS HyperPod Slurm Job Dashboard",
+    "editable": true,
+    "fiscalYearStartMonth": 0,
+    "graphTooltip": 1,
+    "id": null,
+    "links": [
+      {
+        "asDropdown": false,
+        "icon": "external link",
+        "includeVars": false,
+        "keepTime": true,
+        "tags": [
+          "hyperpod-slurm"
+        ],
+        "targetBlank": false,
+        "title": "",
+        "tooltip": "",
+        "type": "dashboards",
+        "url": ""
+      }
+    ],
+    "panels": [
+      {
+        "type": "row",
+        "collapsed": false,
+        "gridPos": {
+          "h": 1,
+          "w": 24,
+          "x": 0,
+          "y": 0
+        },
+        "id": 1,
+        "panels": [],
+        "title": "Job Exporter"
+      },
+      {
+        "datasource": {
+          "type": "prometheus",
+          "uid": "${datasource}"
+        },
+        "description": "",
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "shades"
+            },
+            "custom": {
+              "align": "auto",
+              "cellOptions": {
+                "type": "auto"
+              },
+              "filterable": false,
+              "inspect": false
+            },
+            "mappings": [],
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "green",
+                  "value": null
+                }
+              ]
+            }
+          },
+          "overrides": []
+        },
+        "gridPos": {
+          "h": 10,
+          "w": 24,
+          "x": 0,
+          "y": 1
+        },
+        "id": 2,
+        "options": {
+          "cellHeight": "sm",
+          "footer": {
+            "countRows": false,
+            "enablePagination": true,
+            "fields": [],
+            "reducer": [
+              "sum"
+            ],
+            "show": false
+          },
+          "frameIndex": 0,
+          "showHeader": true,
+          "sortBy": []
+        },
+        "targets": [
+          {
+            "datasource": {
+              "type": "prometheus",
+              "uid": "${datasource}"
+            },
+            "editorMode": "code",
+            "expr": "slurm_job_memory_rss_bytes{slurm_cluster_name=~\"${slurm_cluster_name}\", hostname=~\"${hostname}\", slurm_job_id=~\"${slurm_job_id}\", slurm_job_name=~\"${slurm_job_name}\", slurm_job_user=~\"${slurm_job_user}\", slurm_job_account=~\"${slurm_job_account}\", slurm_job_partition=~\"${slurm_job_partition}\", aws_sagemaker_hyperpod_cluster_name=~\"$cluster_name\", aws_sagemaker_hyperpod_cluster_id=~\"$cluster_id\"}",
+            "format": "table",
+            "instant": true,
+            "legendFormat": "__auto",
+            "refId": "RSS"
+          },
+          {
+            "datasource": {
+              "type": "prometheus",
+              "uid": "${datasource}"
+            },
+            "editorMode": "code",
+            "expr": "slurm_job_thread_count{slurm_cluster_name=~\"${slurm_cluster_name}\", hostname=~\"${hostname}\", slurm_job_id=~\"${slurm_job_id}\", slurm_job_name=~\"${slurm_job_name}\", slurm_job_user=~\"${slurm_job_user}\", slurm_job_account=~\"${slurm_job_account}\", slurm_job_partition=~\"${slurm_job_partition}\", aws_sagemaker_hyperpod_cluster_name=~\"$cluster_name\", aws_sagemaker_hyperpod_cluster_id=~\"$cluster_id\"}",
+            "format": "table",
+            "instant": true,
+            "legendFormat": "__auto",
+            "refId": "Threads"
+          },
+          {
+            "datasource": {
+              "type": "prometheus",
+              "uid": "${datasource}"
+            },
+            "editorMode": "code",
+            "expr": "slurm_job_process_count{slurm_cluster_name=~\"${slurm_cluster_name}\", hostname=~\"${hostname}\", slurm_job_id=~\"${slurm_job_id}\", slurm_job_name=~\"${slurm_job_name}\", slurm_job_user=~\"${slurm_job_user}\", slurm_job_account=~\"${slurm_job_account}\", slurm_job_partition=~\"${slurm_job_partition}\", aws_sagemaker_hyperpod_cluster_name=~\"$cluster_name\", aws_sagemaker_hyperpod_cluster_id=~\"$cluster_id\"}",
+            "format": "table",
+            "instant": true,
+            "legendFormat": "__auto",
+            "refId": "Tasks"
+          },
+          {
+            "datasource": {
+              "type": "prometheus",
+              "uid": "${datasource}"
+            },
+            "editorMode": "code",
+            "expr": "rate(slurm_job_cpu_seconds_total{slurm_cluster_name=~\"${slurm_cluster_name}\", hostname=~\"${hostname}\", slurm_job_id=~\"${slurm_job_id}\", slurm_job_name=~\"${slurm_job_name}\", slurm_job_user=~\"${slurm_job_user}\", slurm_job_account=~\"${slurm_job_account}\", slurm_job_partition=~\"${slurm_job_partition}\", aws_sagemaker_hyperpod_cluster_name=~\"$cluster_name\", aws_sagemaker_hyperpod_cluster_id=~\"$cluster_id\"}[$__rate_interval])",
+            "format": "table",
+            "instant": true,
+            "legendFormat": "__auto",
+            "refId": "CPU"
+          }
+        ],
+        "title": "Running Jobs Overview (Grouped by Job Name)",
+        "transformations": [
+          {
+            "id": "joinByField",
+            "options": {
+              "byField": "slurm_job_id",
+              "mode": "outer"
+            }
+          },
+          {
+            "id": "organize",
+            "options": {
+              "excludeByName": {},
+              "includeByName": {},
+              "renameByName": {
+                "Value #RSS": "Memory",
+                "Value #Threads": "Threads",
+                "Value #Tasks": "Processes",
+                "Value #CPU": "CPU Usage",
+                "slurm_job_id": "Job ID",
+                "slurm_job_name 1": "Job Name",
+                "slurm_job_user 1": "User",
+                "slurm_job_account 1": "Account",
+                "slurm_job_partition 1": "Partition",
+                "hostname 1": "Node"
+              }
+            }
+          },
+          {
+            "id": "calculateField",
+            "options": {
+              "alias": "Mem",
+              "mode": "reduceRow",
+              "reduce": {
+                "include": [
+                  "Memory"
+                ],
+                "reducer": "sum"
+              }
+            }
+          },
+          {
+            "id": "calculateField",
+            "options": {
+              "alias": "CPU %",
+              "mode": "reduceRow",
+              "reduce": {
+                "include": [
+                  "CPU Usage"
+                ],
+                "reducer": "sum"
+              }
+            }
+          },
+          {
+            "id": "filterFieldsByName",
+            "options": {
+              "byVariable": false,
+              "include": {
+                "names": [
+                  "Job ID",
+                  "Job Name",
+                  "User",
+                  "Account",
+                  "Partition",
+                  "Node",
+                  "Memory",
+                  "Threads",
+                  "Processes",
+                  "CPU Usage",
+                  "Mem",
+                  "CPU %"
+                ]
+              }
+            }
+          },
+          {
+            "id": "groupToNestedTable",
+            "options": {
+              "fields": {
+                "Job Name": {
+                  "aggregations": [],
+                  "operation": "groupby"
+                },
+                "Account": {
+                  "aggregations": [],
+                  "operation": "groupby"
+                },
+                "Mem": {
+                  "aggregations": [
+                    "mean"
+                  ],
+                  "operation": "aggregate"
+                },
+                "CPU %": {
+                  "aggregations": [
+                    "mean"
+                  ],
+                  "operation": "aggregate"
+                }
+              },
+              "showSubframeHeaders": true
+            }
+          }
+        ],
+        "type": "table"
+      },
+      {
+        "datasource": {
+          "type": "prometheus",
+          "uid": "${datasource}"
+        },
+        "description": "CPU usage for the selected job",
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "palette-classic"
+            },
+            "custom": {
+              "axisBorderShow": false,
+              "axisCenteredZero": false,
+              "axisColorMode": "text",
+              "axisLabel": "CPU cores",
+              "axisPlacement": "auto",
+              "barAlignment": 0,
+              "drawStyle": "line",
+              "fillOpacity": 0,
+              "gradientMode": "none",
+              "hideFrom": {
+                "legend": false,
+                "tooltip": false,
+                "viz": false
+              },
+              "insertNulls": false,
+              "lineInterpolation": "linear",
+              "lineWidth": 1,
+              "pointSize": 5,
+              "scaleDistribution": {
+                "type": "linear"
+              },
+              "showPoints": "never",
+              "spanNulls": false,
+              "stacking": {
+                "group": "A",
+                "mode": "none"
+              },
+              "thresholdsStyle": {
+                "mode": "off"
+              }
+            },
+            "mappings": [],
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "green",
+                  "value": null
+                }
+              ]
+            },
+            "unit": "s"
+          },
+          "overrides": []
+        },
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 0,
+          "y": 11
+        },
+        "id": 3,
+        "options": {
+          "legend": {
+            "calcs": [
+              "mean",
+              "lastNotNull",
+              "max"
+            ],
+            "displayMode": "table",
+            "placement": "bottom",
+            "showLegend": true,
+            "sortBy": "Name",
+            "sortDesc": true
+          },
+          "tooltip": {
+            "mode": "single",
+            "sort": "none"
+          }
+        },
+        "targets": [
+          {
+            "datasource": {
+              "uid": "${datasource}"
+            },
+            "editorMode": "code",
+            "expr": "avg(rate(slurm_job_cpu_seconds_total{slurm_cluster_name=~\"${slurm_cluster_name}\", hostname=~\"${hostname}\", slurm_job_id=~\"${slurm_job_id}\", slurm_job_name=~\"${slurm_job_name}\", slurm_job_user=~\"${slurm_job_user}\", slurm_job_account=~\"${slurm_job_account}\", slurm_job_partition=~\"${slurm_job_partition}\", aws_sagemaker_hyperpod_cluster_name=~\"$cluster_name\", aws_sagemaker_hyperpod_cluster_id=~\"$cluster_id\"}[$__rate_interval])) by ($aggregated_by)",
+            "legendFormat": "__auto",
+            "range": true,
+            "refId": "A"
+          }
+        ],
+        "title": "CPU Usage: $slurm_job_id",
+        "type": "timeseries"
+      },
+      {
+        "datasource": {
+          "type": "prometheus",
+          "uid": "${datasource}"
+        },
+        "description": "Memory usage for the selected job",
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "palette-classic"
+            },
+            "custom": {
+              "axisBorderShow": false,
+              "axisCenteredZero": false,
+              "axisColorMode": "text",
+              "axisLabel": "Memory",
+              "axisPlacement": "auto",
+              "barAlignment": 0,
+              "drawStyle": "line",
+              "fillOpacity": 0,
+              "gradientMode": "none",
+              "hideFrom": {
+                "legend": false,
+                "tooltip": false,
+                "viz": false
+              },
+              "insertNulls": false,
+              "lineInterpolation": "linear",
+              "lineWidth": 1,
+              "pointSize": 5,
+              "scaleDistribution": {
+                "type": "linear"
+              },
+              "showPoints": "never",
+              "spanNulls": false,
+              "stacking": {
+                "group": "A",
+                "mode": "none"
+              },
+              "thresholdsStyle": {
+                "mode": "off"
+              }
+            },
+            "mappings": [],
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "green",
+                  "value": null
+                }
+              ]
+            },
+            "unit": "bytes"
+          },
+          "overrides": []
+        },
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 12,
+          "y": 11
+        },
+        "id": 4,
+        "options": {
+          "legend": {
+            "calcs": [
+              "mean",
+              "lastNotNull",
+              "max"
+            ],
+            "displayMode": "table",
+            "placement": "bottom",
+            "showLegend": true,
+            "sortBy": "Last *",
+            "sortDesc": true
+          },
+          "tooltip": {
+            "mode": "single",
+            "sort": "none"
+          }
+        },
+        "targets": [
+          {
+            "datasource": {
+              "uid": "${datasource}"
+            },
+            "editorMode": "code",
+            "expr": "avg(slurm_job_memory_rss_bytes{slurm_cluster_name=~\"${slurm_cluster_name}\", hostname=~\"${hostname}\", slurm_job_id=~\"${slurm_job_id}\", slurm_job_name=~\"${slurm_job_name}\", slurm_job_user=~\"${slurm_job_user}\", slurm_job_account=~\"${slurm_job_account}\", slurm_job_partition=~\"${slurm_job_partition}\", aws_sagemaker_hyperpod_cluster_name=~\"$cluster_name\", aws_sagemaker_hyperpod_cluster_id=~\"$cluster_id\"}) by ($aggregated_by)",
+            "legendFormat": "__auto",
+            "range": true,
+            "refId": "A"
+          }
+        ],
+        "title": "Memory Usage: $slurm_job_id",
+        "type": "timeseries"
+      },
+      {
+        "datasource": {
+          "type": "prometheus",
+          "uid": "${datasource}"
+        },
+        "description": "GPU utilization per job",
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "palette-classic"
+            },
+            "custom": {
+              "axisBorderShow": false,
+              "axisCenteredZero": false,
+              "axisColorMode": "text",
+              "axisLabel": "Utilization",
+              "axisPlacement": "auto",
+              "barAlignment": 0,
+              "drawStyle": "line",
+              "fillOpacity": 0,
+              "gradientMode": "none",
+              "hideFrom": {
+                "legend": false,
+                "tooltip": false,
+                "viz": false
+              },
+              "insertNulls": false,
+              "lineInterpolation": "linear",
+              "lineWidth": 1,
+              "pointSize": 5,
+              "scaleDistribution": {
+                "type": "linear"
+              },
+              "showPoints": "never",
+              "spanNulls": false,
+              "stacking": {
+                "group": "A",
+                "mode": "none"
+              },
+              "thresholdsStyle": {
+                "mode": "off"
+              }
+            },
+            "mappings": [],
+            "min": 0,
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "green",
+                  "value": null
+                },
+                {
+                  "color": "red",
+                  "value": 90
+                }
+              ]
+            },
+            "unit": "percent"
+          },
+          "overrides": []
+        },
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 0,
+          "y": 19
+        },
+        "id": 5,
+        "options": {
+          "legend": {
+            "calcs": [
+              "mean",
+              "lastNotNull",
+              "max"
+            ],
+            "displayMode": "table",
+            "placement": "bottom",
+            "showLegend": true,
+            "sortBy": "Last *",
+            "sortDesc": true
+          },
+          "tooltip": {
+            "mode": "single",
+            "sort": "none"
+          }
+        },
+        "targets": [
+          {
+            "datasource": {
+              "uid": "${datasource}"
+            },
+            "editorMode": "code",
+            "expr": "avg(DCGM_FI_DEV_GPU_UTIL{instance=~\"${hostname}\", hpc_job=~\"${slurm_job_id}\", aws_sagemaker_hyperpod_cluster_name=~\"$cluster_name\", aws_sagemaker_hyperpod_cluster_id=~\"$cluster_id\"}) by (gpu, hpc_job)",
+            "legendFormat": "Job {{hpc_job}} GPU:{{gpu}}",
+            "range": true,
+            "refId": "A"
+          }
+        ],
+        "title": "GPU Utilization: $slurm_job_id",
+        "type": "timeseries"
+      },
+      {
+        "datasource": {
+          "type": "prometheus",
+          "uid": "${datasource}"
+        },
+        "description": "GPU memory usage per job",
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "palette-classic"
+            },
+            "custom": {
+              "axisBorderShow": false,
+              "axisCenteredZero": false,
+              "axisColorMode": "text",
+              "axisLabel": "Memory",
+              "axisPlacement": "auto",
+              "barAlignment": 0,
+              "drawStyle": "line",
+              "fillOpacity": 0,
+              "gradientMode": "none",
+              "hideFrom": {
+                "legend": false,
+                "tooltip": false,
+                "viz": false
+              },
+              "insertNulls": false,
+              "lineInterpolation": "linear",
+              "lineWidth": 1,
+              "pointSize": 5,
+              "scaleDistribution": {
+                "type": "linear"
+              },
+              "showPoints": "never",
+              "spanNulls": false,
+              "stacking": {
+                "group": "A",
+                "mode": "none"
+              },
+              "thresholdsStyle": {
+                "mode": "off"
+              }
+            },
+            "mappings": [],
+            "min": 0,
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "green",
+                  "value": null
+                }
+              ]
+            },
+            "unit": "decmbytes"
+          },
+          "overrides": []
+        },
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 12,
+          "y": 19
+        },
+        "id": 6,
+        "options": {
+          "legend": {
+            "calcs": [
+              "mean",
+              "lastNotNull",
+              "max"
+            ],
+            "displayMode": "table",
+            "placement": "bottom",
+            "showLegend": true,
+            "sortBy": "Last *",
+            "sortDesc": true
+          },
+          "tooltip": {
+            "mode": "single",
+            "sort": "none"
+          }
+        },
+        "targets": [
+          {
+            "datasource": {
+              "uid": "${datasource}"
+            },
+            "editorMode": "code",
+            "expr": "avg(DCGM_FI_DEV_FB_USED{instance=~\"${hostname}\", hpc_job=~\"${slurm_job_id}\", aws_sagemaker_hyperpod_cluster_name=~\"$cluster_name\", aws_sagemaker_hyperpod_cluster_id=~\"$cluster_id\"}) by (hpc_job)",
+            "legendFormat": "Job {{hpc_job}}",
+            "range": true,
+            "refId": "A"
+          }
+        ],
+        "title": "GPU Memory: $slurm_job_id",
+        "type": "timeseries"
+      },
+      {
+        "datasource": {
+          "type": "prometheus",
+          "uid": "${datasource}"
+        },
+        "description": "Total bytes read and written including filesystem cache per job",
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "palette-classic"
+            },
+            "custom": {
+              "axisBorderShow": false,
+              "axisCenteredZero": false,
+              "axisColorMode": "text",
+              "axisLabel": "read (-) / write (+)",
+              "axisPlacement": "auto",
+              "barAlignment": 0,
+              "drawStyle": "line",
+              "fillOpacity": 0,
+              "gradientMode": "none",
+              "hideFrom": {
+                "legend": false,
+                "tooltip": false,
+                "viz": false
+              },
+              "insertNulls": false,
+              "lineInterpolation": "linear",
+              "lineWidth": 1,
+              "pointSize": 5,
+              "scaleDistribution": {
+                "type": "linear"
+              },
+              "showPoints": "never",
+              "spanNulls": false,
+              "stacking": {
+                "group": "A",
+                "mode": "none"
+              },
+              "thresholdsStyle": {
+                "mode": "off"
+              }
+            },
+            "mappings": [],
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "green",
+                  "value": null
+                }
+              ]
+            },
+            "unit": "Bps"
+          },
+          "overrides": [
+            {
+              "matcher": {
+                "id": "byRegexp",
+                "options": "/.*Read.*/"
+              },
+              "properties": [
+                {
+                  "id": "custom.transform",
+                  "value": "negative-Y"
+                }
+              ]
+            }
+          ]
+        },
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 0,
+          "y": 27
+        },
+        "id": 7,
+        "options": {
+          "legend": {
+            "calcs": [
+              "mean",
+              "lastNotNull",
+              "max"
+            ],
+            "displayMode": "table",
+            "placement": "bottom",
+            "showLegend": true
+          },
+          "tooltip": {
+            "mode": "single",
+            "sort": "none"
+          }
+        },
+        "targets": [
+          {
+            "datasource": {
+              "uid": "${datasource}"
+            },
+            "editorMode": "code",
+            "expr": "avg(rate(slurm_job_rchar_bytes_total{slurm_cluster_name=~\"${slurm_cluster_name}\", hostname=~\"${hostname}\", slurm_job_id=~\"${slurm_job_id}\", slurm_job_name=~\"${slurm_job_name}\", slurm_job_user=~\"${slurm_job_user}\", slurm_job_account=~\"${slurm_job_account}\", slurm_job_partition=~\"${slurm_job_partition}\", aws_sagemaker_hyperpod_cluster_name=~\"$cluster_name\", aws_sagemaker_hyperpod_cluster_id=~\"$cluster_id\"}[$__rate_interval])) by ($aggregated_by)",
+            "legendFormat": "{{$aggregated_by}} Read",
+            "range": true,
+            "refId": "A"
+          },
+          {
+            "datasource": {
+              "uid": "${datasource}"
+            },
+            "editorMode": "code",
+            "expr": "avg(rate(slurm_job_wchar_bytes_total{slurm_cluster_name=~\"${slurm_cluster_name}\", hostname=~\"${hostname}\", slurm_job_id=~\"${slurm_job_id}\", slurm_job_name=~\"${slurm_job_name}\", slurm_job_user=~\"${slurm_job_user}\", slurm_job_account=~\"${slurm_job_account}\", slurm_job_partition=~\"${slurm_job_partition}\", aws_sagemaker_hyperpod_cluster_name=~\"$cluster_name\", aws_sagemaker_hyperpod_cluster_id=~\"$cluster_id\"}[$__rate_interval])) by ($aggregated_by)",
+            "legendFormat": "{{$aggregated_by}} Write",
+            "range": true,
+            "refId": "B"
+          }
+        ],
+        "title": "Total Disk I/O (includes cache)",
+        "type": "timeseries"
+      },
+      {
+        "type": "row",
+        "collapsed": true,
+        "gridPos": {
+          "h": 1,
+          "w": 24,
+          "x": 0,
+          "y": 35
+        },
+        "id": 8,
+        "panels": [
+          {
+            "datasource": {
+              "uid": "${datasource}"
+            },
+            "fieldConfig": {
+              "defaults": {
+                "color": {
+                  "mode": "palette-classic"
+                },
+                "custom": {
+                  "axisBorderShow": false,
+                  "axisCenteredZero": false,
+                  "axisColorMode": "text",
+                  "axisLabel": "",
+                  "axisPlacement": "auto",
+                  "barAlignment": 0,
+                  "drawStyle": "line",
+                  "fillOpacity": 10,
+                  "gradientMode": "none",
+                  "hideFrom": {
+                    "legend": false,
+                    "tooltip": false,
+                    "viz": false
+                  },
+                  "insertNulls": false,
+                  "lineInterpolation": "linear",
+                  "lineWidth": 2,
+                  "pointSize": 5,
+                  "scaleDistribution": {
+                    "type": "linear"
+                  },
+                  "showPoints": "never",
+                  "spanNulls": false,
+                  "stacking": {
+                    "group": "A",
+                    "mode": "none"
+                  },
+                  "thresholdsStyle": {
+                    "mode": "off"
+                  }
+                },
+                "links": [],
+                "mappings": [],
+                "thresholds": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "green",
+                      "value": null
+                    },
+                    {
+                      "color": "red",
+                      "value": 80
+                    }
+                  ]
+                },
+                "unit": "celsius"
+              },
+              "overrides": []
+            },
+            "gridPos": {
+              "h": 8,
+              "w": 18,
+              "x": 0,
+              "y": 36
+            },
+            "id": 9,
+            "options": {
+              "legend": {
+                "calcs": [
+                  "mean",
+                  "lastNotNull",
+                  "max"
+                ],
+                "displayMode": "table",
+                "placement": "right",
+                "showLegend": true
+              },
+              "tooltip": {
+                "mode": "multi",
+                "sort": "none"
+              }
+            },
+            "pluginVersion": "10.4.1",
+            "targets": [
+              {
+                "datasource": {
+                  "uid": "${datasource}"
+                },
+                "expr": "DCGM_FI_DEV_GPU_TEMP{instance=~\"${hostname}\", gpu=~\"${gpu}\", hpc_job=~\"${slurm_job_id}\", aws_sagemaker_hyperpod_cluster_name=~\"$cluster_name\", aws_sagemaker_hyperpod_cluster_id=~\"$cluster_id\"}",
+                "instant": false,
+                "interval": "",
+                "legendFormat": "GPU {{gpu}}",
+                "refId": "A"
+              }
+            ],
+            "title": "GPU Temperature",
+            "type": "timeseries"
+          },
+          {
+            "datasource": {
+              "uid": "${datasource}"
+            },
+            "fieldConfig": {
+              "defaults": {
+                "color": {
+                  "mode": "thresholds"
+                },
+                "mappings": [],
+                "max": 100,
+                "min": 0,
+                "thresholds": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "green",
+                      "value": null
+                    },
+                    {
+                      "color": "#EAB839",
+                      "value": 83
+                    },
+                    {
+                      "color": "red",
+                      "value": 87
+                    }
+                  ]
+                },
+                "unit": "celsius"
+              },
+              "overrides": []
+            },
+            "gridPos": {
+              "h": 8,
+              "w": 6,
+              "x": 18,
+              "y": 36
+            },
+            "id": 10,
+            "options": {
+              "minVizHeight": 75,
+              "minVizWidth": 75,
+              "orientation": "auto",
+              "reduceOptions": {
+                "calcs": [
+                  "mean"
+                ],
+                "fields": "",
+                "values": false
+              },
+              "showThresholdLabels": false,
+              "showThresholdMarkers": true,
+              "sizing": "auto"
+            },
+            "pluginVersion": "10.4.1",
+            "targets": [
+              {
+                "datasource": {
+                  "uid": "${datasource}"
+                },
+                "expr": "avg(DCGM_FI_DEV_GPU_TEMP{instance=~\"${hostname}\", gpu=~\"${gpu}\", hpc_job=~\"${slurm_job_id}\", aws_sagemaker_hyperpod_cluster_name=~\"$cluster_name\", aws_sagemaker_hyperpod_cluster_id=~\"$cluster_id\"})",
+                "interval": "",
+                "legendFormat": "",
+                "refId": "A"
+              }
+            ],
+            "title": "GPU Avg. Temp",
+            "type": "gauge"
+          },
+          {
+            "datasource": {
+              "uid": "${datasource}"
+            },
+            "fieldConfig": {
+              "defaults": {
+                "color": {
+                  "mode": "palette-classic"
+                },
+                "custom": {
+                  "axisBorderShow": false,
+                  "axisCenteredZero": false,
+                  "axisColorMode": "text",
+                  "axisLabel": "",
+                  "axisPlacement": "auto",
+                  "barAlignment": 0,
+                  "drawStyle": "line",
+                  "fillOpacity": 10,
+                  "gradientMode": "none",
+                  "hideFrom": {
+                    "legend": false,
+                    "tooltip": false,
+                    "viz": false
+                  },
+                  "insertNulls": false,
+                  "lineInterpolation": "linear",
+                  "lineWidth": 2,
+                  "pointSize": 5,
+                  "scaleDistribution": {
+                    "type": "linear"
+                  },
+                  "showPoints": "never",
+                  "spanNulls": false,
+                  "stacking": {
+                    "group": "A",
+                    "mode": "none"
+                  },
+                  "thresholdsStyle": {
+                    "mode": "off"
+                  }
+                },
+                "links": [],
+                "mappings": [],
+                "thresholds": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "green",
+                      "value": null
+                    },
+                    {
+                      "color": "red",
+                      "value": 80
+                    }
+                  ]
+                },
+                "unit": "watt"
+              },
+              "overrides": []
+            },
+            "gridPos": {
+              "h": 8,
+              "w": 18,
+              "x": 0,
+              "y": 44
+            },
+            "id": 11,
+            "options": {
+              "legend": {
+                "calcs": [
+                  "mean",
+                  "lastNotNull",
+                  "max"
+                ],
+                "displayMode": "table",
+                "placement": "right",
+                "showLegend": true
+              },
+              "tooltip": {
+                "mode": "multi",
+                "sort": "none"
+              }
+            },
+            "pluginVersion": "10.4.1",
+            "targets": [
+              {
+                "datasource": {
+                  "uid": "${datasource}"
+                },
+                "expr": "DCGM_FI_DEV_POWER_USAGE{instance=~\"${hostname}\", gpu=~\"${gpu}\", hpc_job=~\"${slurm_job_id}\", aws_sagemaker_hyperpod_cluster_name=~\"$cluster_name\", aws_sagemaker_hyperpod_cluster_id=~\"$cluster_id\"}",
+                "interval": "",
+                "legendFormat": "GPU {{gpu}}",
+                "refId": "A"
+              }
+            ],
+            "title": "GPU Power Usage",
+            "type": "timeseries"
+          },
+          {
+            "datasource": {
+              "uid": "${datasource}"
+            },
+            "fieldConfig": {
+              "defaults": {
+                "color": {
+                  "mode": "thresholds"
+                },
+                "mappings": [],
+                "max": 2400,
+                "min": 0,
+                "thresholds": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "green",
+                      "value": null
+                    },
+                    {
+                      "color": "#EAB839",
+                      "value": 1800
+                    },
+                    {
+                      "color": "red",
+                      "value": 2200
+                    }
+                  ]
+                },
+                "unit": "watt"
+              },
+              "overrides": []
+            },
+            "gridPos": {
+              "h": 8,
+              "w": 6,
+              "x": 18,
+              "y": 44
+            },
+            "id": 12,
+            "options": {
+              "minVizHeight": 75,
+              "minVizWidth": 75,
+              "orientation": "horizontal",
+              "reduceOptions": {
+                "calcs": [
+                  "sum"
+                ],
+                "fields": "",
+                "values": false
+              },
+              "showThresholdLabels": false,
+              "showThresholdMarkers": true,
+              "sizing": "auto"
+            },
+            "pluginVersion": "10.4.1",
+            "targets": [
+              {
+                "datasource": {
+                  "uid": "${datasource}"
+                },
+                "expr": "sum(DCGM_FI_DEV_POWER_USAGE{instance=~\"${hostname}\", gpu=~\"${gpu}\", hpc_job=~\"${slurm_job_id}\", aws_sagemaker_hyperpod_cluster_name=~\"$cluster_name\", aws_sagemaker_hyperpod_cluster_id=~\"$cluster_id\"})",
+                "interval": "",
+                "legendFormat": "",
+                "refId": "A"
+              }
+            ],
+            "title": "GPU Power Total",
+            "type": "gauge"
+          },
+          {
+            "datasource": {
+              "uid": "${datasource}"
+            },
+            "fieldConfig": {
+              "defaults": {
+                "color": {
+                  "mode": "palette-classic"
+                },
+                "custom": {
+                  "axisBorderShow": false,
+                  "axisCenteredZero": false,
+                  "axisColorMode": "text",
+                  "axisLabel": "",
+                  "axisPlacement": "auto",
+                  "barAlignment": 0,
+                  "drawStyle": "line",
+                  "fillOpacity": 10,
+                  "gradientMode": "none",
+                  "hideFrom": {
+                    "legend": false,
+                    "tooltip": false,
+                    "viz": false
+                  },
+                  "insertNulls": false,
+                  "lineInterpolation": "linear",
+                  "lineWidth": 2,
+                  "pointSize": 5,
+                  "scaleDistribution": {
+                    "type": "linear"
+                  },
+                  "showPoints": "never",
+                  "spanNulls": false,
+                  "stacking": {
+                    "group": "A",
+                    "mode": "none"
+                  },
+                  "thresholdsStyle": {
+                    "mode": "off"
+                  }
+                },
+                "links": [],
+                "mappings": [],
+                "thresholds": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "green",
+                      "value": null
+                    },
+                    {
+                      "color": "red",
+                      "value": 80
+                    }
+                  ]
+                },
+                "unit": "hertz"
+              },
+              "overrides": []
+            },
+            "gridPos": {
+              "h": 8,
+              "w": 12,
+              "x": 0,
+              "y": 52
+            },
+            "id": 13,
+            "interval": "",
+            "options": {
+              "legend": {
+                "calcs": [
+                  "mean",
+                  "lastNotNull",
+                  "max"
+                ],
+                "displayMode": "table",
+                "placement": "right",
+                "showLegend": true
+              },
+              "tooltip": {
+                "mode": "multi",
+                "sort": "none"
+              }
+            },
+            "pluginVersion": "10.4.1",
+            "targets": [
+              {
+                "datasource": {
+                  "uid": "${datasource}"
+                },
+                "expr": "DCGM_FI_DEV_SM_CLOCK{instance=~\"${hostname}\", gpu=~\"${gpu}\", hpc_job=~\"${slurm_job_id}\", aws_sagemaker_hyperpod_cluster_name=~\"$cluster_name\", aws_sagemaker_hyperpod_cluster_id=~\"$cluster_id\"} * 1000000",
+                "format": "time_series",
+                "interval": "",
+                "intervalFactor": 1,
+                "legendFormat": "GPU {{gpu}}",
+                "refId": "A"
+              }
+            ],
+            "title": "GPU SM Clocks",
+            "type": "timeseries"
+          },
+          {
+            "datasource": {
+              "uid": "${datasource}"
+            },
+            "fieldConfig": {
+              "defaults": {
+                "color": {
+                  "mode": "palette-classic"
+                },
+                "custom": {
+                  "axisBorderShow": false,
+                  "axisCenteredZero": false,
+                  "axisColorMode": "text",
+                  "axisLabel": "",
+                  "axisPlacement": "auto",
+                  "barAlignment": 0,
+                  "drawStyle": "line",
+                  "fillOpacity": 10,
+                  "gradientMode": "none",
+                  "hideFrom": {
+                    "legend": false,
+                    "tooltip": false,
+                    "viz": false
+                  },
+                  "insertNulls": false,
+                  "lineInterpolation": "linear",
+                  "lineWidth": 2,
+                  "pointSize": 5,
+                  "scaleDistribution": {
+                    "type": "linear"
+                  },
+                  "showPoints": "never",
+                  "spanNulls": false,
+                  "stacking": {
+                    "group": "A",
+                    "mode": "none"
+                  },
+                  "thresholdsStyle": {
+                    "mode": "off"
+                  }
+                },
+                "links": [],
+                "mappings": [],
+                "max": 100,
+                "min": 0,
+                "thresholds": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "green",
+                      "value": null
+                    },
+                    {
+                      "color": "red",
+                      "value": 80
+                    }
+                  ]
+                },
+                "unit": "percent"
+              },
+              "overrides": []
+            },
+            "gridPos": {
+              "h": 8,
+              "w": 12,
+              "x": 12,
+              "y": 52
+            },
+            "id": 14,
+            "options": {
+              "legend": {
+                "calcs": [
+                  "mean",
+                  "lastNotNull",
+                  "max"
+                ],
+                "displayMode": "table",
+                "placement": "right",
+                "showLegend": true
+              },
+              "tooltip": {
+                "mode": "multi",
+                "sort": "none"
+              }
+            },
+            "pluginVersion": "10.4.1",
+            "targets": [
+              {
+                "datasource": {
+                  "uid": "${datasource}"
+                },
+                "expr": "DCGM_FI_DEV_GPU_UTIL{instance=~\"${hostname}\", gpu=~\"${gpu}\", hpc_job=~\"${slurm_job_id}\", aws_sagemaker_hyperpod_cluster_name=~\"$cluster_name\", aws_sagemaker_hyperpod_cluster_id=~\"$cluster_id\"}",
+                "interval": "",
+                "legendFormat": "GPU {{gpu}}",
+                "refId": "A"
+              }
+            ],
+            "title": "GPU Utilization",
+            "type": "timeseries"
+          },
+          {
+            "datasource": {
+              "uid": "${datasource}"
+            },
+            "fieldConfig": {
+              "defaults": {
+                "color": {
+                  "mode": "palette-classic"
+                },
+                "custom": {
+                  "axisBorderShow": false,
+                  "axisCenteredZero": false,
+                  "axisColorMode": "text",
+                  "axisLabel": "",
+                  "axisPlacement": "auto",
+                  "barAlignment": 0,
+                  "drawStyle": "line",
+                  "fillOpacity": 10,
+                  "gradientMode": "none",
+                  "hideFrom": {
+                    "legend": false,
+                    "tooltip": false,
+                    "viz": false
+                  },
+                  "insertNulls": false,
+                  "lineInterpolation": "linear",
+                  "lineWidth": 2,
+                  "pointSize": 5,
+                  "scaleDistribution": {
+                    "type": "linear"
+                  },
+                  "showPoints": "never",
+                  "spanNulls": false,
+                  "stacking": {
+                    "group": "A",
+                    "mode": "none"
+                  },
+                  "thresholdsStyle": {
+                    "mode": "off"
+                  }
+                },
+                "links": [],
+                "mappings": [],
+                "max": 1,
+                "min": 0,
+                "thresholds": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "green",
+                      "value": null
+                    },
+                    {
+                      "color": "red",
+                      "value": 80
+                    }
+                  ]
+                },
+                "unit": "percentunit"
+              },
+              "overrides": []
+            },
+            "gridPos": {
+              "h": 8,
+              "w": 12,
+              "x": 0,
+              "y": 60
+            },
+            "id": 15,
+            "options": {
+              "legend": {
+                "calcs": [
+                  "mean",
+                  "lastNotNull",
+                  "max"
+                ],
+                "displayMode": "table",
+                "placement": "right",
+                "showLegend": true
+              },
+              "tooltip": {
+                "mode": "multi",
+                "sort": "none"
+              }
+            },
+            "pluginVersion": "10.4.1",
+            "targets": [
+              {
+                "datasource": {
+                  "uid": "${datasource}"
+                },
+                "expr": "DCGM_FI_PROF_PIPE_TENSOR_ACTIVE{instance=~\"${hostname}\", gpu=~\"${gpu}\", hpc_job=~\"${slurm_job_id}\", aws_sagemaker_hyperpod_cluster_name=~\"$cluster_name\", aws_sagemaker_hyperpod_cluster_id=~\"$cluster_id\"}",
+                "interval": "",
+                "legendFormat": "GPU {{gpu}}",
+                "refId": "A"
+              }
+            ],
+            "title": "Tensor Core Utilization",
+            "type": "timeseries"
+          },
+          {
+            "datasource": {
+              "uid": "${datasource}"
+            },
+            "fieldConfig": {
+              "defaults": {
+                "color": {
+                  "mode": "palette-classic"
+                },
+                "custom": {
+                  "axisBorderShow": false,
+                  "axisCenteredZero": false,
+                  "axisColorMode": "text",
+                  "axisLabel": "",
+                  "axisPlacement": "auto",
+                  "barAlignment": 0,
+                  "drawStyle": "line",
+                  "fillOpacity": 10,
+                  "gradientMode": "none",
+                  "hideFrom": {
+                    "legend": false,
+                    "tooltip": false,
+                    "viz": false
+                  },
+                  "insertNulls": false,
+                  "lineInterpolation": "linear",
+                  "lineWidth": 2,
+                  "pointSize": 5,
+                  "scaleDistribution": {
+                    "type": "linear"
+                  },
+                  "showPoints": "never",
+                  "spanNulls": false,
+                  "stacking": {
+                    "group": "A",
+                    "mode": "none"
+                  },
+                  "thresholdsStyle": {
+                    "mode": "off"
+                  }
+                },
+                "links": [],
+                "mappings": [],
+                "thresholds": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "green",
+                      "value": null
+                    },
+                    {
+                      "color": "red",
+                      "value": 80
+                    }
+                  ]
+                },
+                "unit": "decmbytes"
+              },
+              "overrides": []
+            },
+            "gridPos": {
+              "h": 8,
+              "w": 12,
+              "x": 12,
+              "y": 60
+            },
+            "id": 16,
+            "options": {
+              "legend": {
+                "calcs": [
+                  "mean",
+                  "max"
+                ],
+                "displayMode": "list",
+                "placement": "right",
+                "showLegend": true
+              },
+              "tooltip": {
+                "mode": "multi",
+                "sort": "none"
+              }
+            },
+            "pluginVersion": "10.4.1",
+            "targets": [
+              {
+                "datasource": {
+                  "uid": "${datasource}"
+                },
+                "expr": "DCGM_FI_DEV_FB_USED{instance=~\"${hostname}\", gpu=~\"${gpu}\", hpc_job=~\"${slurm_job_id}\", aws_sagemaker_hyperpod_cluster_name=~\"$cluster_name\", aws_sagemaker_hyperpod_cluster_id=~\"$cluster_id\"}",
+                "interval": "",
+                "legendFormat": "GPU {{gpu}}",
+                "refId": "A"
+              }
+            ],
+            "title": "GPU Framebuffer Mem Used",
+            "type": "timeseries"
+          }
+        ],
+        "title": "Accelerator Metrics"
+      },
+      {
+        "type": "row",
+        "collapsed": true,
+        "gridPos": {
+          "h": 1,
+          "w": 24,
+          "x": 0,
+          "y": 36
+        },
+        "id": 17,
+        "panels": [
+          {
+            "datasource": {
+              "uid": "${datasource}"
+            },
+            "fieldConfig": {
+              "defaults": {
+                "color": {
+                  "mode": "palette-classic"
+                },
+                "custom": {
+                  "axisBorderShow": false,
+                  "axisCenteredZero": false,
+                  "axisColorMode": "text",
+                  "axisLabel": "",
+                  "axisPlacement": "auto",
+                  "barAlignment": 0,
+                  "drawStyle": "line",
+                  "fillOpacity": 0,
+                  "gradientMode": "none",
+                  "hideFrom": {
+                    "legend": false,
+                    "tooltip": false,
+                    "viz": false
+                  },
+                  "insertNulls": false,
+                  "lineInterpolation": "linear",
+                  "lineWidth": 1,
+                  "pointSize": 5,
+                  "scaleDistribution": {
+                    "type": "linear"
+                  },
+                  "showPoints": "never",
+                  "spanNulls": false,
+                  "stacking": {
+                    "group": "A",
+                    "mode": "none"
+                  },
+                  "thresholdsStyle": {
+                    "mode": "off"
+                  }
+                },
+                "mappings": [],
+                "thresholds": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "green",
+                      "value": null
+                    }
+                  ]
+                },
+                "unit": "Gbits"
+              },
+              "overrides": []
+            },
+            "gridPos": {
+              "h": 9,
+              "w": 12,
+              "x": 0,
+              "y": 37
+            },
+            "id": 18,
+            "options": {
+              "legend": {
+                "calcs": [
+                  "mean",
+                  "max"
+                ],
+                "displayMode": "table",
+                "placement": "right",
+                "showLegend": true
+              },
+              "tooltip": {
+                "mode": "multi",
+                "sort": "desc"
+              }
+            },
+            "targets": [
+              {
+                "datasource": {
+                  "uid": "${datasource}"
+                },
+                "editorMode": "code",
+                "expr": "nccl_algorithm_bandwidth_gbs{instance=~\"${hostname}\", slurm_job_id=~\"${slurm_job_id}\", slurm_job=~\"${slurm_job_name}\", gpu_device_id=~\"${gpu_device_id}\", aws_sagemaker_hyperpod_cluster_name=~\"$cluster_name\", aws_sagemaker_hyperpod_cluster_id=~\"$cluster_id\"}",
+                "legendFormat": "Job {{slurm_job_id}} {{collective}} gpu:{{gpu_device_id}} rank:{{rank}}",
+                "range": true,
+                "refId": "A"
+              }
+            ],
+            "title": "NCCL Algorithm Bandwidth",
+            "type": "timeseries"
+          },
+          {
+            "datasource": {
+              "uid": "${datasource}"
+            },
+            "fieldConfig": {
+              "defaults": {
+                "color": {
+                  "mode": "palette-classic"
+                },
+                "custom": {
+                  "axisBorderShow": false,
+                  "axisCenteredZero": false,
+                  "axisColorMode": "text",
+                  "axisLabel": "",
+                  "axisPlacement": "auto",
+                  "barAlignment": 0,
+                  "drawStyle": "line",
+                  "fillOpacity": 0,
+                  "gradientMode": "none",
+                  "hideFrom": {
+                    "legend": false,
+                    "tooltip": false,
+                    "viz": false
+                  },
+                  "insertNulls": false,
+                  "lineInterpolation": "linear",
+                  "lineWidth": 1,
+                  "pointSize": 5,
+                  "scaleDistribution": {
+                    "type": "linear"
+                  },
+                  "showPoints": "never",
+                  "spanNulls": false,
+                  "stacking": {
+                    "group": "A",
+                    "mode": "none"
+                  },
+                  "thresholdsStyle": {
+                    "mode": "off"
+                  }
+                },
+                "mappings": [],
+                "thresholds": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "green",
+                      "value": null
+                    }
+                  ]
+                },
+                "unit": "Gbits"
+              },
+              "overrides": []
+            },
+            "gridPos": {
+              "h": 9,
+              "w": 12,
+              "x": 12,
+              "y": 37
+            },
+            "id": 19,
+            "options": {
+              "legend": {
+                "calcs": [
+                  "mean",
+                  "max"
+                ],
+                "displayMode": "table",
+                "placement": "right",
+                "showLegend": true
+              },
+              "tooltip": {
+                "mode": "multi",
+                "sort": "desc"
+              }
+            },
+            "targets": [
+              {
+                "datasource": {
+                  "uid": "${datasource}"
+                },
+                "editorMode": "code",
+                "expr": "nccl_bus_bandwidth_gbs{instance=~\"${hostname}\", slurm_job_id=~\"${slurm_job_id}\", slurm_job=~\"${slurm_job_name}\", gpu_device_id=~\"${gpu_device_id}\", aws_sagemaker_hyperpod_cluster_name=~\"$cluster_name\", aws_sagemaker_hyperpod_cluster_id=~\"$cluster_id\"}",
+                "legendFormat": "Job {{slurm_job_id}} {{collective}} gpu:{{gpu_device_id}} rank:{{rank}}",
+                "range": true,
+                "refId": "A"
+              }
+            ],
+            "title": "NCCL Bus Bandwidth",
+            "type": "timeseries"
+          },
+          {
+            "datasource": {
+              "uid": "${datasource}"
+            },
+            "fieldConfig": {
+              "defaults": {
+                "color": {
+                  "mode": "palette-classic"
+                },
+                "custom": {
+                  "axisBorderShow": false,
+                  "axisCenteredZero": false,
+                  "axisColorMode": "text",
+                  "axisLabel": "",
+                  "axisPlacement": "auto",
+                  "barAlignment": 0,
+                  "drawStyle": "line",
+                  "fillOpacity": 0,
+                  "gradientMode": "none",
+                  "hideFrom": {
+                    "legend": false,
+                    "tooltip": false,
+                    "viz": false
+                  },
+                  "insertNulls": false,
+                  "lineInterpolation": "linear",
+                  "lineWidth": 1,
+                  "pointSize": 5,
+                  "scaleDistribution": {
+                    "type": "linear"
+                  },
+                  "showPoints": "never",
+                  "spanNulls": false,
+                  "stacking": {
+                    "group": "A",
+                    "mode": "none"
+                  },
+                  "thresholdsStyle": {
+                    "mode": "off"
+                  }
+                },
+                "mappings": [],
+                "thresholds": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "green",
+                      "value": null
+                    }
+                  ]
+                },
+                "unit": "µs"
+              },
+              "overrides": []
+            },
+            "gridPos": {
+              "h": 9,
+              "w": 12,
+              "x": 0,
+              "y": 46
+            },
+            "id": 20,
+            "options": {
+              "legend": {
+                "calcs": [
+                  "mean",
+                  "max"
+                ],
+                "displayMode": "table",
+                "placement": "right",
+                "showLegend": true
+              },
+              "tooltip": {
+                "mode": "multi",
+                "sort": "desc"
+              }
+            },
+            "targets": [
+              {
+                "datasource": {
+                  "uid": "${datasource}"
+                },
+                "editorMode": "code",
+                "expr": "nccl_collective_exec_time_microseconds{instance=~\"${hostname}\", slurm_job_id=~\"${slurm_job_id}\", slurm_job=~\"${slurm_job_name}\", gpu_device_id=~\"${gpu_device_id}\", aws_sagemaker_hyperpod_cluster_name=~\"$cluster_name\", aws_sagemaker_hyperpod_cluster_id=~\"$cluster_id\"}",
+                "legendFormat": "Job {{slurm_job_id}} {{collective}} gpu:{{gpu_device_id}} rank:{{rank}}",
+                "range": true,
+                "refId": "A"
+              }
+            ],
+            "title": "NCCL Collective Execution Time",
+            "type": "timeseries"
+          },
+          {
+            "datasource": {
+              "uid": "${datasource}"
+            },
+            "fieldConfig": {
+              "defaults": {
+                "color": {
+                  "mode": "palette-classic"
+                },
+                "custom": {
+                  "axisBorderShow": false,
+                  "axisCenteredZero": false,
+                  "axisColorMode": "text",
+                  "axisLabel": "",
+                  "axisPlacement": "auto",
+                  "barAlignment": 0,
+                  "drawStyle": "line",
+                  "fillOpacity": 0,
+                  "gradientMode": "none",
+                  "hideFrom": {
+                    "legend": false,
+                    "tooltip": false,
+                    "viz": false
+                  },
+                  "insertNulls": false,
+                  "lineInterpolation": "linear",
+                  "lineWidth": 1,
+                  "pointSize": 5,
+                  "scaleDistribution": {
+                    "type": "linear"
+                  },
+                  "showPoints": "never",
+                  "spanNulls": false,
+                  "stacking": {
+                    "group": "A",
+                    "mode": "normal"
+                  },
+                  "thresholdsStyle": {
+                    "mode": "off"
+                  }
+                },
+                "mappings": [],
+                "thresholds": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "green",
+                      "value": null
+                    }
+                  ]
+                },
+                "unit": "Gbits"
+              },
+              "overrides": []
+            },
+            "gridPos": {
+              "h": 9,
+              "w": 12,
+              "x": 12,
+              "y": 46
+            },
+            "id": 21,
+            "options": {
+              "legend": {
+                "calcs": [
+                  "mean"
+                ],
+                "displayMode": "table",
+                "placement": "right",
+                "showLegend": true
+              },
+              "tooltip": {
+                "mode": "multi",
+                "sort": "desc"
+              }
+            },
+            "targets": [
+              {
+                "datasource": {
+                  "uid": "${datasource}"
+                },
+                "editorMode": "code",
+                "expr": "avg(nccl_bus_bandwidth_gbs{instance=~\"${hostname}\", slurm_job_id=~\"${slurm_job_id}\", slurm_job=~\"${slurm_job_name}\", aws_sagemaker_hyperpod_cluster_name=~\"$cluster_name\", aws_sagemaker_hyperpod_cluster_id=~\"$cluster_id\"}) by (slurm_job_id, collective)",
+                "legendFormat": "Job {{slurm_job_id}} {{collective}}",
+                "range": true,
+                "refId": "A"
+              }
+            ],
+            "title": "Avg Bus Bandwidth by Collective Type",
+            "type": "timeseries"
+          },
+          {
+            "datasource": {
+              "uid": "${datasource}"
+            },
+            "fieldConfig": {
+              "defaults": {
+                "color": {
+                  "mode": "palette-classic"
+                },
+                "custom": {
+                  "axisBorderShow": false,
+                  "axisCenteredZero": false,
+                  "axisColorMode": "text",
+                  "axisLabel": "",
+                  "axisPlacement": "auto",
+                  "barAlignment": 0,
+                  "drawStyle": "line",
+                  "fillOpacity": 0,
+                  "gradientMode": "none",
+                  "hideFrom": {
+                    "legend": false,
+                    "tooltip": false,
+                    "viz": false
+                  },
+                  "insertNulls": false,
+                  "lineInterpolation": "linear",
+                  "lineWidth": 1,
+                  "pointSize": 5,
+                  "scaleDistribution": {
+                    "type": "linear"
+                  },
+                  "showPoints": "never",
+                  "spanNulls": false,
+                  "stacking": {
+                    "group": "A",
+                    "mode": "normal"
+                  },
+                  "thresholdsStyle": {
+                    "mode": "off"
+                  }
+                },
+                "mappings": [],
+                "thresholds": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "green",
+                      "value": null
+                    }
+                  ]
+                },
+                "unit": "µs"
+              },
+              "overrides": []
+            },
+            "gridPos": {
+              "h": 9,
+              "w": 12,
+              "x": 0,
+              "y": 55
+            },
+            "id": 22,
+            "options": {
+              "legend": {
+                "calcs": [
+                  "mean"
+                ],
+                "displayMode": "table",
+                "placement": "right",
+                "showLegend": true
+              },
+              "tooltip": {
+                "mode": "multi",
+                "sort": "desc"
+              }
+            },
+            "targets": [
+              {
+                "datasource": {
+                  "uid": "${datasource}"
+                },
+                "editorMode": "code",
+                "expr": "avg(nccl_collective_exec_time_microseconds{instance=~\"${hostname}\", slurm_job_id=~\"${slurm_job_id}\", slurm_job=~\"${slurm_job_name}\", aws_sagemaker_hyperpod_cluster_name=~\"$cluster_name\", aws_sagemaker_hyperpod_cluster_id=~\"$cluster_id\"}) by (slurm_job_id, collective)",
+                "legendFormat": "Job {{slurm_job_id}} {{collective}}",
+                "range": true,
+                "refId": "A"
+              }
+            ],
+            "title": "Avg Execution Time by Collective Type",
+            "type": "timeseries"
+          },
+          {
+            "datasource": {
+              "uid": "${datasource}"
+            },
+            "fieldConfig": {
+              "defaults": {
+                "color": {
+                  "mode": "palette-classic"
+                },
+                "custom": {
+                  "axisBorderShow": false,
+                  "axisCenteredZero": false,
+                  "axisColorMode": "text",
+                  "axisLabel": "",
+                  "axisPlacement": "auto",
+                  "barAlignment": 0,
+                  "drawStyle": "line",
+                  "fillOpacity": 0,
+                  "gradientMode": "none",
+                  "hideFrom": {
+                    "legend": false,
+                    "tooltip": false,
+                    "viz": false
+                  },
+                  "insertNulls": false,
+                  "lineInterpolation": "linear",
+                  "lineWidth": 1,
+                  "pointSize": 5,
+                  "scaleDistribution": {
+                    "type": "linear"
+                  },
+                  "showPoints": "never",
+                  "spanNulls": false,
+                  "stacking": {
+                    "group": "A",
+                    "mode": "none"
+                  },
+                  "thresholdsStyle": {
+                    "mode": "off"
+                  }
+                },
+                "mappings": [],
+                "thresholds": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "green",
+                      "value": null
+                    }
+                  ]
+                },
+                "unit": "Gbits"
+              },
+              "overrides": []
+            },
+            "gridPos": {
+              "h": 9,
+              "w": 12,
+              "x": 12,
+              "y": 55
+            },
+            "id": 23,
+            "options": {
+              "legend": {
+                "calcs": [
+                  "mean",
+                  "max"
+                ],
+                "displayMode": "table",
+                "placement": "right",
+                "showLegend": true
+              },
+              "tooltip": {
+                "mode": "multi",
+                "sort": "desc"
+              }
+            },
+            "targets": [
+              {
+                "datasource": {
+                  "uid": "${datasource}"
+                },
+                "editorMode": "code",
+                "expr": "avg(nccl_bus_bandwidth_gbs{instance=~\"${hostname}\", slurm_job_id=~\"${slurm_job_id}\", slurm_job=~\"${slurm_job_name}\", aws_sagemaker_hyperpod_cluster_name=~\"$cluster_name\", aws_sagemaker_hyperpod_cluster_id=~\"$cluster_id\"}) by (slurm_job_id, gpu_device_id)",
+                "legendFormat": "Job {{slurm_job_id}} GPU {{gpu_device_id}}",
+                "range": true,
+                "refId": "A"
+              }
+            ],
+            "title": "Avg Bus Bandwidth by GPU Device",
+            "type": "timeseries"
+          }
+        ],
+        "title": "NCCL Metrics"
+      },
+      {
+        "type": "row",
+        "collapsed": true,
+        "gridPos": {
+          "h": 1,
+          "w": 24,
+          "x": 0,
+          "y": 37
+        },
+        "id": 24,
+        "panels": [
+          {
+            "datasource": {
+              "type": "prometheus",
+              "uid": "${datasource}"
+            },
+            "description": "Bytes read from and written to storage devices per job",
+            "fieldConfig": {
+              "defaults": {
+                "color": {
+                  "mode": "palette-classic"
+                },
+                "custom": {
+                  "axisBorderShow": false,
+                  "axisCenteredZero": false,
+                  "axisColorMode": "text",
+                  "axisLabel": "read (-) / write (+)",
+                  "axisPlacement": "auto",
+                  "barAlignment": 0,
+                  "drawStyle": "line",
+                  "fillOpacity": 0,
+                  "gradientMode": "none",
+                  "hideFrom": {
+                    "legend": false,
+                    "tooltip": false,
+                    "viz": false
+                  },
+                  "insertNulls": false,
+                  "lineInterpolation": "linear",
+                  "lineWidth": 1,
+                  "pointSize": 5,
+                  "scaleDistribution": {
+                    "type": "linear"
+                  },
+                  "showPoints": "never",
+                  "spanNulls": false,
+                  "stacking": {
+                    "group": "A",
+                    "mode": "none"
+                  },
+                  "thresholdsStyle": {
+                    "mode": "off"
+                  }
+                },
+                "mappings": [],
+                "thresholds": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "green",
+                      "value": null
+                    }
+                  ]
+                },
+                "unit": "Bps"
+              },
+              "overrides": [
+                {
+                  "matcher": {
+                    "id": "byRegexp",
+                    "options": "/.*Read.*/"
+                  },
+                  "properties": [
+                    {
+                      "id": "custom.transform",
+                      "value": "negative-Y"
+                    }
+                  ]
+                }
+              ]
+            },
+            "gridPos": {
+              "h": 8,
+              "w": 12,
+              "x": 0,
+              "y": 38
+            },
+            "id": 25,
+            "options": {
+              "legend": {
+                "calcs": [
+                  "mean",
+                  "lastNotNull",
+                  "max"
+                ],
+                "displayMode": "table",
+                "placement": "bottom",
+                "showLegend": true
+              },
+              "tooltip": {
+                "mode": "single",
+                "sort": "none"
+              }
+            },
+            "targets": [
+              {
+                "datasource": {
+                  "uid": "${datasource}"
+                },
+                "editorMode": "code",
+                "expr": "avg(rate(slurm_job_read_bytes_total{slurm_cluster_name=~\"${slurm_cluster_name}\", hostname=~\"${hostname}\", slurm_job_id=~\"${slurm_job_id}\", slurm_job_name=~\"${slurm_job_name}\", slurm_job_user=~\"${slurm_job_user}\", slurm_job_account=~\"${slurm_job_account}\", slurm_job_partition=~\"${slurm_job_partition}\", aws_sagemaker_hyperpod_cluster_name=~\"$cluster_name\", aws_sagemaker_hyperpod_cluster_id=~\"$cluster_id\"}[$__rate_interval])) by ($aggregated_by)",
+                "legendFormat": "{{$aggregated_by}} Read",
+                "range": true,
+                "refId": "A"
+              },
+              {
+                "datasource": {
+                  "uid": "${datasource}"
+                },
+                "editorMode": "code",
+                "expr": "avg(rate(slurm_job_write_bytes_total{slurm_cluster_name=~\"${slurm_cluster_name}\", hostname=~\"${hostname}\", slurm_job_id=~\"${slurm_job_id}\", slurm_job_name=~\"${slurm_job_name}\", slurm_job_user=~\"${slurm_job_user}\", slurm_job_account=~\"${slurm_job_account}\", slurm_job_partition=~\"${slurm_job_partition}\", aws_sagemaker_hyperpod_cluster_name=~\"$cluster_name\", aws_sagemaker_hyperpod_cluster_id=~\"$cluster_id\"}[$__rate_interval])) by ($aggregated_by)",
+                "legendFormat": "{{$aggregated_by}} Write",
+                "range": true,
+                "refId": "B"
+              }
+            ],
+            "title": "Physical Disk I/O",
+            "type": "timeseries"
+          },
+          {
+            "datasource": {
+              "type": "prometheus",
+              "uid": "${datasource}"
+            },
+            "description": "Number of running processes per job",
+            "fieldConfig": {
+              "defaults": {
+                "color": {
+                  "mode": "palette-classic"
+                },
+                "custom": {
+                  "axisBorderShow": false,
+                  "axisCenteredZero": false,
+                  "axisColorMode": "text",
+                  "axisLabel": "",
+                  "axisPlacement": "auto",
+                  "barAlignment": 0,
+                  "drawStyle": "line",
+                  "fillOpacity": 0,
+                  "gradientMode": "none",
+                  "hideFrom": {
+                    "legend": false,
+                    "tooltip": false,
+                    "viz": false
+                  },
+                  "insertNulls": false,
+                  "lineInterpolation": "linear",
+                  "lineWidth": 1,
+                  "pointSize": 5,
+                  "scaleDistribution": {
+                    "type": "linear"
+                  },
+                  "showPoints": "never",
+                  "spanNulls": false,
+                  "stacking": {
+                    "group": "A",
+                    "mode": "none"
+                  },
+                  "thresholdsStyle": {
+                    "mode": "off"
+                  }
+                },
+                "mappings": [],
+                "thresholds": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "green",
+                      "value": null
+                    }
+                  ]
+                },
+                "unit": "short"
+              },
+              "overrides": []
+            },
+            "gridPos": {
+              "h": 8,
+              "w": 12,
+              "x": 0,
+              "y": 46
+            },
+            "id": 26,
+            "options": {
+              "legend": {
+                "calcs": [
+                  "mean",
+                  "lastNotNull",
+                  "max"
+                ],
+                "displayMode": "table",
+                "placement": "bottom",
+                "showLegend": true
+              },
+              "tooltip": {
+                "mode": "single",
+                "sort": "none"
+              }
+            },
+            "targets": [
+              {
+                "datasource": {
+                  "uid": "${datasource}"
+                },
+                "editorMode": "code",
+                "expr": "avg(slurm_job_process_count{slurm_cluster_name=~\"${slurm_cluster_name}\", hostname=~\"${hostname}\", slurm_job_id=~\"${slurm_job_id}\", slurm_job_name=~\"${slurm_job_name}\", slurm_job_user=~\"${slurm_job_user}\", slurm_job_account=~\"${slurm_job_account}\", slurm_job_partition=~\"${slurm_job_partition}\", aws_sagemaker_hyperpod_cluster_name=~\"$cluster_name\", aws_sagemaker_hyperpod_cluster_id=~\"$cluster_id\"}) by ($aggregated_by)",
+                "legendFormat": "__auto",
+                "range": true,
+                "refId": "A"
+              }
+            ],
+            "title": "Process Count",
+            "type": "timeseries"
+          },
+          {
+            "datasource": {
+              "type": "prometheus",
+              "uid": "${datasource}"
+            },
+            "description": "Number of threads across all job processes",
+            "fieldConfig": {
+              "defaults": {
+                "color": {
+                  "mode": "palette-classic"
+                },
+                "custom": {
+                  "axisBorderShow": false,
+                  "axisCenteredZero": false,
+                  "axisColorMode": "text",
+                  "axisLabel": "",
+                  "axisPlacement": "auto",
+                  "barAlignment": 0,
+                  "drawStyle": "line",
+                  "fillOpacity": 0,
+                  "gradientMode": "none",
+                  "hideFrom": {
+                    "legend": false,
+                    "tooltip": false,
+                    "viz": false
+                  },
+                  "insertNulls": false,
+                  "lineInterpolation": "linear",
+                  "lineWidth": 1,
+                  "pointSize": 5,
+                  "scaleDistribution": {
+                    "type": "linear"
+                  },
+                  "showPoints": "never",
+                  "spanNulls": false,
+                  "stacking": {
+                    "group": "A",
+                    "mode": "none"
+                  },
+                  "thresholdsStyle": {
+                    "mode": "off"
+                  }
+                },
+                "mappings": [],
+                "thresholds": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "green",
+                      "value": null
+                    }
+                  ]
+                },
+                "unit": "short"
+              },
+              "overrides": []
+            },
+            "gridPos": {
+              "h": 8,
+              "w": 12,
+              "x": 12,
+              "y": 46
+            },
+            "id": 27,
+            "options": {
+              "legend": {
+                "calcs": [
+                  "mean",
+                  "lastNotNull",
+                  "max"
+                ],
+                "displayMode": "table",
+                "placement": "bottom",
+                "showLegend": true
+              },
+              "tooltip": {
+                "mode": "single",
+                "sort": "none"
+              }
+            },
+            "targets": [
+              {
+                "datasource": {
+                  "uid": "${datasource}"
+                },
+                "editorMode": "code",
+                "expr": "avg(slurm_job_thread_count{slurm_cluster_name=~\"${slurm_cluster_name}\", hostname=~\"${hostname}\", slurm_job_id=~\"${slurm_job_id}\", slurm_job_name=~\"${slurm_job_name}\", slurm_job_user=~\"${slurm_job_user}\", slurm_job_account=~\"${slurm_job_account}\", slurm_job_partition=~\"${slurm_job_partition}\", aws_sagemaker_hyperpod_cluster_name=~\"$cluster_name\", aws_sagemaker_hyperpod_cluster_id=~\"$cluster_id\"}) by ($aggregated_by)",
+                "legendFormat": "__auto",
+                "range": true,
+                "refId": "A"
+              }
+            ],
+            "title": "Thread Count",
+            "type": "timeseries"
+          },
+          {
+            "datasource": {
+              "type": "prometheus",
+              "uid": "${datasource}"
+            },
+            "description": "Major page faults per job",
+            "fieldConfig": {
+              "defaults": {
+                "color": {
+                  "mode": "palette-classic"
+                },
+                "custom": {
+                  "axisBorderShow": false,
+                  "axisCenteredZero": false,
+                  "axisColorMode": "text",
+                  "axisLabel": "",
+                  "axisPlacement": "auto",
+                  "barAlignment": 0,
+                  "drawStyle": "line",
+                  "fillOpacity": 0,
+                  "gradientMode": "none",
+                  "hideFrom": {
+                    "legend": false,
+                    "tooltip": false,
+                    "viz": false
+                  },
+                  "insertNulls": false,
+                  "lineInterpolation": "linear",
+                  "lineWidth": 1,
+                  "pointSize": 5,
+                  "scaleDistribution": {
+                    "type": "linear"
+                  },
+                  "showPoints": "never",
+                  "spanNulls": false,
+                  "stacking": {
+                    "group": "A",
+                    "mode": "none"
+                  },
+                  "thresholdsStyle": {
+                    "mode": "off"
+                  }
+                },
+                "mappings": [],
+                "thresholds": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "green",
+                      "value": null
+                    }
+                  ]
+                },
+                "unit": "ops"
+              },
+              "overrides": []
+            },
+            "gridPos": {
+              "h": 8,
+              "w": 12,
+              "x": 12,
+              "y": 54
+            },
+            "id": 28,
+            "options": {
+              "legend": {
+                "calcs": [
+                  "mean",
+                  "lastNotNull",
+                  "max"
+                ],
+                "displayMode": "table",
+                "placement": "bottom",
+                "showLegend": true
+              },
+              "tooltip": {
+                "mode": "single",
+                "sort": "none"
+              }
+            },
+            "targets": [
+              {
+                "datasource": {
+                  "uid": "${datasource}"
+                },
+                "editorMode": "code",
+                "expr": "avg(rate(slurm_job_page_faults_major_total{slurm_cluster_name=~\"${slurm_cluster_name}\", hostname=~\"${hostname}\", slurm_job_id=~\"${slurm_job_id}\", slurm_job_name=~\"${slurm_job_name}\", slurm_job_user=~\"${slurm_job_user}\", slurm_job_account=~\"${slurm_job_account}\", slurm_job_partition=~\"${slurm_job_partition}\", aws_sagemaker_hyperpod_cluster_name=~\"$cluster_name\", aws_sagemaker_hyperpod_cluster_id=~\"$cluster_id\"}[$__rate_interval])) by ($aggregated_by)",
+                "legendFormat": "__auto",
+                "range": true,
+                "refId": "A"
+              }
+            ],
+            "title": "Major Page Faults",
+            "type": "timeseries"
+          }
+        ],
+        "title": "More"
+      }
+    ],
+    "preload": false,
+    "refresh": "30s",
+    "schemaVersion": 39,
+    "tags": [
+      "aws",
+      "sagemaker",
+      "hyperpod-slurm",
+      "job",
+      "version-1.0.0"
+    ],
+    "templating": {
+      "list": [
+        {
+          "current": {},
+          "description": "Data source to query metrics from",
+          "hide": 0,
+          "includeAll": false,
+          "label": "Data Source",
+          "multi": false,
+          "name": "datasource",
+          "options": [],
+          "query": "prometheus",
+          "queryValue": "",
+          "refresh": 1,
+          "regex": "",
+          "skipUrlSync": false,
+          "type": "datasource"
+        },
+        {
+          "allValue": ".*",
+          "current": {},
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "definition": "label_values(slurm_job_memory_rss_bytes, aws_sagemaker_hyperpod_cluster_name)",
+          "hide": 0,
+          "includeAll": true,
+          "label": "Cluster Name",
+          "multi": false,
+          "name": "cluster_name",
+          "options": [],
+          "query": {
+            "qryType": 1,
+            "query": "label_values(slurm_job_memory_rss_bytes, aws_sagemaker_hyperpod_cluster_name)",
+            "refId": "PrometheusVariableQueryEditor-VariableQuery"
+          },
+          "refresh": 1,
+          "regex": "",
+          "skipUrlSync": false,
+          "sort": 1,
+          "type": "query"
+        },
+        {
+          "allValue": ".*",
+          "current": {},
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "definition": "label_values(slurm_job_memory_rss_bytes, aws_sagemaker_hyperpod_cluster_id)",
+          "hide": 0,
+          "includeAll": true,
+          "label": "Cluster ID",
+          "multi": false,
+          "name": "cluster_id",
+          "options": [],
+          "query": {
+            "qryType": 1,
+            "query": "label_values(slurm_job_memory_rss_bytes{aws_sagemaker_hyperpod_cluster_name=~\"$cluster_name\"}, aws_sagemaker_hyperpod_cluster_id)",
+            "refId": "PrometheusVariableQueryEditor-VariableQuery"
+          },
+          "refresh": 1,
+          "regex": "",
+          "skipUrlSync": false,
+          "sort": 1,
+          "type": "query"
+        },
+        {
+          "allValue": ".*",
+          "current": {},
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "definition": "label_values(slurm_job_memory_rss_bytes{aws_sagemaker_hyperpod_cluster_name=~\"$cluster_name\", aws_sagemaker_hyperpod_cluster_id=~\"$cluster_id\"}, slurm_job_id)",
+          "hide": 0,
+          "includeAll": true,
+          "label": "Job ID",
+          "multi": true,
+          "name": "slurm_job_id",
+          "options": [],
+          "query": {
+            "query": "label_values(slurm_job_memory_rss_bytes{aws_sagemaker_hyperpod_cluster_name=~\"$cluster_name\", aws_sagemaker_hyperpod_cluster_id=~\"$cluster_id\"}, slurm_job_id)",
+            "refId": "StandardVariableQuery"
+          },
+          "refresh": 2,
+          "regex": "",
+          "skipUrlSync": false,
+          "sort": 1,
+          "type": "query"
+        },
+        {
+          "allValue": ".*",
+          "current": {},
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "definition": "label_values(slurm_job_memory_rss_bytes{aws_sagemaker_hyperpod_cluster_name=~\"$cluster_name\", aws_sagemaker_hyperpod_cluster_id=~\"$cluster_id\", slurm_job_id=~\"$slurm_job_id\"}, slurm_job_name)",
+          "hide": 0,
+          "includeAll": true,
+          "label": "Job Name",
+          "multi": true,
+          "name": "slurm_job_name",
+          "options": [],
+          "query": {
+            "query": "label_values(slurm_job_memory_rss_bytes{aws_sagemaker_hyperpod_cluster_name=~\"$cluster_name\", aws_sagemaker_hyperpod_cluster_id=~\"$cluster_id\", slurm_job_id=~\"$slurm_job_id\"}, slurm_job_name)",
+            "refId": "StandardVariableQuery"
+          },
+          "refresh": 2,
+          "regex": "",
+          "skipUrlSync": false,
+          "sort": 1,
+          "type": "query"
+        },
+        {
+          "allValue": ".*",
+          "current": {},
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "definition": "label_values(slurm_job_memory_rss_bytes{aws_sagemaker_hyperpod_cluster_name=~\"$cluster_name\", aws_sagemaker_hyperpod_cluster_id=~\"$cluster_id\", slurm_job_id=~\"$slurm_job_id\", slurm_job_name=~\"$slurm_job_name\"}, slurm_job_partition)",
+          "hide": 0,
+          "includeAll": true,
+          "label": "Partition",
+          "multi": true,
+          "name": "slurm_job_partition",
+          "options": [],
+          "query": {
+            "query": "label_values(slurm_job_memory_rss_bytes{aws_sagemaker_hyperpod_cluster_name=~\"$cluster_name\", aws_sagemaker_hyperpod_cluster_id=~\"$cluster_id\", slurm_job_id=~\"$slurm_job_id\", slurm_job_name=~\"$slurm_job_name\"}, slurm_job_partition)",
+            "refId": "StandardVariableQuery"
+          },
+          "refresh": 2,
+          "regex": "",
+          "skipUrlSync": false,
+          "sort": 1,
+          "type": "query"
+        },
+        {
+          "allValue": ".*",
+          "current": {},
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "definition": "label_values(slurm_job_memory_rss_bytes{aws_sagemaker_hyperpod_cluster_name=~\"$cluster_name\", aws_sagemaker_hyperpod_cluster_id=~\"$cluster_id\", slurm_job_id=~\"$slurm_job_id\", slurm_job_name=~\"$slurm_job_name\", slurm_job_partition=~\"$slurm_job_partition\"}, slurm_job_user)",
+          "hide": 0,
+          "includeAll": true,
+          "label": "User",
+          "multi": true,
+          "name": "slurm_job_user",
+          "options": [],
+          "query": {
+            "query": "label_values(slurm_job_memory_rss_bytes{aws_sagemaker_hyperpod_cluster_name=~\"$cluster_name\", aws_sagemaker_hyperpod_cluster_id=~\"$cluster_id\", slurm_job_id=~\"$slurm_job_id\", slurm_job_name=~\"$slurm_job_name\", slurm_job_partition=~\"$slurm_job_partition\"}, slurm_job_user)",
+            "refId": "StandardVariableQuery"
+          },
+          "refresh": 2,
+          "regex": "",
+          "skipUrlSync": false,
+          "sort": 1,
+          "type": "query"
+        },
+        {
+          "allValue": ".*",
+          "current": {},
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "definition": "label_values(slurm_job_memory_rss_bytes{aws_sagemaker_hyperpod_cluster_name=~\"$cluster_name\", aws_sagemaker_hyperpod_cluster_id=~\"$cluster_id\", slurm_job_id=~\"$slurm_job_id\", slurm_job_name=~\"$slurm_job_name\", slurm_job_partition=~\"$slurm_job_partition\", slurm_job_user=~\"$slurm_job_user\"}, slurm_job_account)",
+          "hide": 0,
+          "includeAll": true,
+          "label": "Account",
+          "multi": true,
+          "name": "slurm_job_account",
+          "options": [],
+          "query": {
+            "query": "label_values(slurm_job_memory_rss_bytes{aws_sagemaker_hyperpod_cluster_name=~\"$cluster_name\", aws_sagemaker_hyperpod_cluster_id=~\"$cluster_id\", slurm_job_id=~\"$slurm_job_id\", slurm_job_name=~\"$slurm_job_name\", slurm_job_partition=~\"$slurm_job_partition\", slurm_job_user=~\"$slurm_job_user\"}, slurm_job_account)",
+            "refId": "StandardVariableQuery"
+          },
+          "refresh": 2,
+          "regex": "",
+          "skipUrlSync": false,
+          "sort": 1,
+          "type": "query"
+        },
+        {
+          "current": {},
+          "hide": 0,
+          "includeAll": false,
+          "label": "Aggregate by:",
+          "multi": false,
+          "name": "aggregated_by",
+          "options": [
+            {
+              "selected": true,
+              "text": "Job ID",
+              "value": "slurm_job_id"
+            },
+            {
+              "selected": false,
+              "text": "Job Name",
+              "value": "slurm_job_name"
+            },
+            {
+              "selected": false,
+              "text": "User",
+              "value": "slurm_job_user"
+            },
+            {
+              "selected": false,
+              "text": "Account",
+              "value": "slurm_job_account"
+            },
+            {
+              "selected": false,
+              "text": "Partition",
+              "value": "slurm_job_partition"
+            }
+          ],
+          "query": "Job ID : slurm_job_id, Job Name : slurm_job_name, User : slurm_job_user, Account : slurm_job_account, Partition : slurm_job_partition",
+          "queryValue": "",
+          "skipUrlSync": false,
+          "type": "custom"
+        },
+        {
+          "allValue": ".*",
+          "current": {},
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "definition": "label_values(slurm_job_memory_rss_bytes{aws_sagemaker_hyperpod_cluster_name=~\"$cluster_name\", aws_sagemaker_hyperpod_cluster_id=~\"$cluster_id\", slurm_job_id=~\"$slurm_job_id\", slurm_job_name=~\"$slurm_job_name\", slurm_job_partition=~\"$slurm_job_partition\", slurm_job_user=~\"$slurm_job_user\", slurm_job_account=~\"$slurm_job_account\"}, hostname)",
+          "hide": 0,
+          "includeAll": true,
+          "label": "Node Name",
+          "multi": true,
+          "name": "hostname",
+          "options": [],
+          "query": {
+            "query": "label_values(slurm_job_memory_rss_bytes{aws_sagemaker_hyperpod_cluster_name=~\"$cluster_name\", aws_sagemaker_hyperpod_cluster_id=~\"$cluster_id\", slurm_job_id=~\"$slurm_job_id\", slurm_job_name=~\"$slurm_job_name\", slurm_job_partition=~\"$slurm_job_partition\", slurm_job_user=~\"$slurm_job_user\", slurm_job_account=~\"$slurm_job_account\"}, hostname)",
+            "refId": "StandardVariableQuery"
+          },
+          "refresh": 2,
+          "regex": "",
+          "skipUrlSync": false,
+          "sort": 1,
+          "type": "query"
+        },
+        {
+          "current": {},
+          "datasource": {
+            "uid": "${datasource}"
+          },
+          "definition": "label_values(DCGM_FI_DEV_GPU_TEMP, instance)",
+          "hide": 2,
+          "includeAll": true,
+          "label": "DCGM Node",
+          "multi": true,
+          "name": "instance",
+          "options": [],
+          "query": "label_values(DCGM_FI_DEV_GPU_TEMP, instance)",
+          "refresh": 1,
+          "regex": "",
+          "skipUrlSync": false,
+          "sort": 0,
+          "type": "query",
+          "useTags": false
+        },
+        {
+          "current": {},
+          "datasource": {
+            "uid": "${datasource}"
+          },
+          "definition": "label_values(gpu)",
+          "hide": 2,
+          "includeAll": true,
+          "multi": true,
+          "name": "gpu",
+          "options": [],
+          "query": "label_values(gpu)",
+          "refresh": 1,
+          "regex": "",
+          "skipUrlSync": false,
+          "sort": 1,
+          "type": "query",
+          "useTags": false
+        },
+        {
+          "allValue": ".*",
+          "current": {},
+          "datasource": {
+            "uid": "${datasource}"
+          },
+          "definition": "label_values(hpc_job)",
+          "hide": 2,
+          "includeAll": true,
+          "label": "DCGM Job",
+          "multi": true,
+          "name": "hpc_job",
+          "options": [],
+          "query": "label_values(hpc_job)",
+          "refresh": 2,
+          "regex": "",
+          "skipUrlSync": false,
+          "sort": 1,
+          "type": "query",
+          "useTags": false
+        },
+        {
+          "allValue": ".*",
+          "current": {},
+          "datasource": {
+            "uid": "${datasource}"
+          },
+          "definition": "label_values(nccl_bus_bandwidth_gbs, slurm_job)",
+          "hide": 2,
+          "includeAll": true,
+          "label": "NCCL Job Name",
+          "multi": true,
+          "name": "slurm_job",
+          "options": [],
+          "query": "label_values(nccl_bus_bandwidth_gbs, slurm_job)",
+          "refresh": 2,
+          "regex": "",
+          "skipUrlSync": false,
+          "sort": 1,
+          "type": "query"
+        },
+        {
+          "allValue": ".*",
+          "current": {},
+          "datasource": {
+            "uid": "${datasource}"
+          },
+          "definition": "label_values(nccl_bus_bandwidth_gbs, gpu_device_id)",
+          "hide": 2,
+          "includeAll": true,
+          "label": "GPU Device",
+          "multi": true,
+          "name": "gpu_device_id",
+          "options": [],
+          "query": "label_values(nccl_bus_bandwidth_gbs, gpu_device_id)",
+          "refresh": 2,
+          "regex": "",
+          "skipUrlSync": false,
+          "sort": 1,
+          "type": "query"
+        },
+        {
+          "allValue": ".*",
+          "current": {},
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "definition": "label_values(slurm_job_memory_rss_bytes{aws_sagemaker_hyperpod_cluster_name=~\"$cluster_name\", aws_sagemaker_hyperpod_cluster_id=~\"$cluster_id\"}, slurm_cluster_name)",
+          "description": "Slurm Cluster Name",
+          "hide": 2,
+          "includeAll": true,
+          "label": "Slurm Cluster",
+          "multi": false,
+          "name": "slurm_cluster_name",
+          "options": [],
+          "query": {
+            "qryType": 1,
+            "query": "label_values(slurm_job_memory_rss_bytes{aws_sagemaker_hyperpod_cluster_name=~\"$cluster_name\", aws_sagemaker_hyperpod_cluster_id=~\"$cluster_id\"}, slurm_cluster_name)",
+            "refId": "PrometheusVariableQueryEditor-VariableQuery"
+          },
+          "refresh": 1,
+          "regex": "",
+          "skipUrlSync": false,
+          "sort": 1,
+          "type": "query"
+        }
+      ]
+    },
+    "time": {
+      "from": "now-1h",
+      "to": "now"
+    },
+    "timepicker": {},
+    "timezone": "browser",
+    "title": "Jobs",
+    "uid": "aws-sm-hp-obs-slurm-jobs-v1_0",
+    "version": 1,
+    "weekStart": ""
+  },
+  "message": "1.0.0: initial Slurm Jobs dashboard"
+}
