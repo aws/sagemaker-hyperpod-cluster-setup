@@ -15,7 +15,7 @@ def build_config():
         'spec': {
             'enabled': True,
             'ampWorkspace': {
-                'prometheusEndpoint': os.environ['PROMETHEUS_ENDPOINT'],
+                'prometheusEndpoint': os.environ['AMP_REMOTE_WRITE_URL'],
                 'arn': os.environ['AMP_WORKSPACE_ARN'],
             },
             'amgWorkspace': {
