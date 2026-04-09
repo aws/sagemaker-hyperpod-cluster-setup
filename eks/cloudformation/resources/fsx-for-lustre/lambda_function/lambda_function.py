@@ -595,7 +595,7 @@ def on_update(event):
         ]
         
         # STORAGE_CAPACITY is only required for dynamic provisioning
-        if 'FSX_FILE_SYSTEM_ID' in os.environ and os.environ['FSX_FILE_SYSTEM_ID'] == '' and 'STORAGE_CAPACITY' not in os.environ:
+        if os.environ['FSX_FILE_SYSTEM_ID'] == '' and 'STORAGE_CAPACITY' not in os.environ:
             raise ValueError("Missing required environment variable: STORAGE_CAPACITY for dynamic provisioning")
         
         for var in required_env_vars:
@@ -640,7 +640,7 @@ def on_update(event):
             print(f"Warning: Failed to verify FSx for Lustre CSI driver installation: {e}")
             
         # Choose between dynamic provisioning or existing FSx for updates
-        if 'FSX_FILE_SYSTEM_ID' in os.environ and os.environ['FSX_FILE_SYSTEM_ID'] == '':
+        if os.environ['FSX_FILE_SYSTEM_ID'] == '':
             # Update StorageClass for dynamic provisioning
             create_dynamic_fsx_resources(response_data)
         else:
@@ -694,7 +694,7 @@ def on_delete(event):
             print(f"Warning: Failed to delete PVC: {e}")
             
         # Only delete PV for existing FSx (dynamic provisioning handles PV automatically)
-        if 'FSX_FILE_SYSTEM_ID' in os.environ and os.environ['FSX_FILE_SYSTEM_ID'] != '':
+        if os.environ['FSX_FILE_SYSTEM_ID'] != '':
             try:
                 print(f"Deleting PersistentVolume {pv_name}...")
                 subprocess.run(['kubectl', 'delete', 'pv', pv_name, '--ignore-not-found=true'], check=True)

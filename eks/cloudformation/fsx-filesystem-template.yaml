@@ -1,52 +1,48 @@
-Description: FSx for Lustre File System Stack for SageMaker HyperPod with Slurm
+Description: Fsx Filesystem Stack
 Parameters:
   ResourceNamePrefix:
     Type: String
-    Default: sagemaker-hyperpod-slurm
+    Default: sagemaker-hyperpod-eks
     Description: Prefix to be used for all resources created by this template.
-  FsxFileSystemId:
+  PrivateSubnetIds:
     Type: String
-    Default: ''
-    Description: Existing FSx for Lustre file system
+    Description: Comma-separated list of private subnet IDs
   FsxSubnetId:
     Type: String
-    Default: ''
     Description: The subnet id that will be used to create FSx
   FsxAvailabilityZoneId:
     Type: String
-    Default: ''
-    Description: The availability zone id to get subnet id that will be used to create FSx
-  PrivateSubnetIds:
-    Type: String
-    Default: ''
-    Description: Comma-separated list of private subnet IDs
+    Description: The availability zone to get subnet id that will be used to create FSx
   SecurityGroupIds:
-    Type: CommaDelimitedList
-    Default: ''
-    Description: Comma-separated list of security group IDs for the FSx file system
-  DeploymentType:
     Type: String
-    Default: PERSISTENT_2
-    Description: Deployment type for the FSx file system
-  StorageCapacity:
-    Type: Number
-    Default: 1200
-    Description: Storage capacity for the FSx file system in GiB (1200 or increments of 2400)
+    Description: ID of the security group to use
   PerUnitStorageThroughput:
     Type: Number
     Default: 250
-    Description: Provisioned Read/Write throughput (MB/s/TiB)
+    Description: Per unit storage throughput for the FSx file system
   DataCompressionType:
     Type: String
-    Default: LZ4
+    Default: NONE
     AllowedValues:
-      - LZ4
       - NONE
-    Description: Data compression type for the FSx file system
+      - LZ4
+    Description: Data compression type for the FSx file system (NONE, LZ4)
   FileSystemTypeVersion:
     Type: Number
     Default: 2.15
     Description: File system type version for the FSx file system
+  StorageCapacity:
+    Type: Number
+    Default: 1200
+    Description: Storage capacity for the FSx file system in GiB
+  DeploymentType:
+    Type: String
+    Default: PERSISTENT_2
+    Description: Deployment type for the FSx file system
+  FsxFileSystemId:
+    Type: String
+    Default: ''
+    Description: Existing FSx for Lustre file system
 Conditions:
   UseFsxFileSystemIdCondition:
     Fn::Not:
@@ -90,7 +86,7 @@ Resources:
                 Resource: '*'
           PolicyName: FsxLambdaPolicy
     Metadata:
-      aws:cdk:path: SlurmFsxCfnTemplate/FsxLambdaExecutionRole
+      aws:cdk:path: FsxFilesystemCfnTemplate/FsxLambdaExecutionRole
   FsxHelperFunction:
     Type: AWS::Lambda::Function
     Properties:
@@ -199,7 +195,7 @@ Resources:
       Runtime: python3.10
       Timeout: 60
     Metadata:
-      aws:cdk:path: SlurmFsxCfnTemplate/FsxHelperFunction
+      aws:cdk:path: FsxFilesystemCfnTemplate/FsxHelperFunction
   FsxHelperResource:
     Type: AWS::CloudFormation::CustomResource
     Properties:
@@ -215,9 +211,9 @@ Resources:
         Ref: FsxAvailabilityZoneId
       PrivateSubnetIds:
         Ref: PrivateSubnetIds
-      Timestamp: '1775755857957'
+      Timestamp: '1775755856872'
     Metadata:
-      aws:cdk:path: SlurmFsxCfnTemplate/FsxHelperResource
+      aws:cdk:path: FsxFilesystemCfnTemplate/FsxHelperResource
   FSxLustreFileSystem:
     Type: AWS::FSx::FileSystem
     Properties:
@@ -237,7 +233,7 @@ Resources:
         PerUnitStorageThroughput:
           Ref: PerUnitStorageThroughput
       SecurityGroupIds:
-        Ref: SecurityGroupIds
+        - Ref: SecurityGroupIds
       StorageCapacity:
         Ref: StorageCapacity
       StorageType: SSD
@@ -256,48 +252,13 @@ Resources:
           Value:
             Fn::Sub: ${ResourceNamePrefix}-fsx-lustre
     Metadata:
-      aws:cdk:path: SlurmFsxCfnTemplate/FSxLustreFileSystem
+      aws:cdk:path: FsxFilesystemCfnTemplate/FSxLustreFileSystem
     Condition: CreateNewFsxCondition
 Outputs:
-  FSxLustreFileSystemId:
-    Description: The ID of the FSx for Lustre file system
+  FsxFileSystemId:
+    Description: The FSx file system ID (newly created or user-provided)
     Value:
       Fn::If:
         - UseFsxFileSystemIdCondition
         - Ref: FsxFileSystemId
         - Ref: FSxLustreFileSystem
-    Export:
-      Name:
-        Fn::Sub: ${AWS::StackName}-FSxLustreFileSystemId
-  FSxLustreFileSystemDNSName:
-    Description: The DNS name of the FSx for Lustre file system
-    Value:
-      Fn::If:
-        - UseFsxFileSystemIdCondition
-        - Fn::Sub:
-            - ${FsxFileSystemId}.fsx.${AWS::Region}.amazonaws.com
-            - FsxFileSystemId:
-                Ref: FsxFileSystemId
-        - Fn::GetAtt:
-            - FSxLustreFileSystem
-            - DNSName
-    Export:
-      Name:
-        Fn::Sub: ${AWS::StackName}-FSxLustreFileSystemDNSName
-  FSxLustreFileSystemMountName:
-    Description: The mount name of the FSx for Lustre file system
-    Value:
-      Fn::If:
-        - UseFsxFileSystemIdCondition
-        - Fn::GetAtt:
-            - FsxHelperResource
-            - FSxMountName
-        - Fn::GetAtt:
-            - FSxLustreFileSystem
-            - LustreMountName
-    Export:
-      Name:
-        Fn::Sub: ${AWS::StackName}-FSxLustreFileSystemMountName
-  FsxDeploymentComplete:
-    Description: Indicates FSx deployment is complete
-    Value: FsxDeploymentComplete

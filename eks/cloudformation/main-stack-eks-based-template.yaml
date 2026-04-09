@@ -1717,7 +1717,7 @@ Resources:
           Fn::If:
             - CreateFsxStackCondition
             - Fn::GetAtt:
-                - FsxStack
+                - FsxK8sIntegrationStack
                 - Outputs.FsxDeploymentComplete
             - FsxNotRequired
         HyperPodClusterName:
@@ -1972,37 +1972,18 @@ Resources:
     Metadata:
       aws:cdk:path: MainEksBasedCfnTemplate/TaskGovernanceClusterPolicyStack
     Condition: EnableTaskGovernanceClusterPolicyCondition
-  FsxStack:
+  FsxFilesystemStack:
     Type: AWS::CloudFormation::Stack
     Properties:
       TemplateURL:
         Fn::If:
           - CustomBucketCondition
-          - Fn::Sub: https://${CustomBucketName}.s3.${AWS::Region}.amazonaws.com/templates/fsx-template.yaml
+          - Fn::Sub: https://${CustomBucketName}.s3.${AWS::Region}.amazonaws.com/templates/fsx-filesystem-template.yaml
           - Fn::Sub: >-
-              https://aws-sagemaker-hyperpod-cluster-setup-${AWS::Region}-${Stage}.s3.${AWS::Region}.amazonaws.com/templates/fsx-template.yaml
+              https://aws-sagemaker-hyperpod-cluster-setup-${AWS::Region}-${Stage}.s3.${AWS::Region}.amazonaws.com/templates/fsx-filesystem-template.yaml
       Parameters:
         ResourceNamePrefix:
           Ref: ResourceNamePrefix
-        HelmChartStatus:
-          Fn::If:
-            - CreateHelmChartStackCondition
-            - Fn::GetAtt:
-                - HelmChartStack
-                - Outputs.HelmChartDeploymentComplete
-            - HelmChartNotRequired
-        EKSClusterName:
-          Fn::If:
-            - CreateEKSClusterStackCondition
-            - Fn::GetAtt:
-                - EKSClusterStack
-                - Outputs.EKSClusterName
-            - Ref: EKSClusterName
-        CustomResourceS3Bucket:
-          Fn::If:
-            - CustomBucketCondition
-            - Ref: CustomBucketName
-            - Fn::Sub: aws-sagemaker-hyperpod-cluster-setup-${AWS::Region}-${Stage}
         PrivateSubnetIds:
           Fn::If:
             - CreatePrivateSubnetStackCondition
@@ -2034,7 +2015,66 @@ Resources:
         FsxFileSystemId:
           Ref: FsxFileSystemId
     Metadata:
-      aws:cdk:path: MainEksBasedCfnTemplate/FsxStack
+      aws:cdk:path: MainEksBasedCfnTemplate/FsxFilesystemStack
+    Condition: CreateFsxStackCondition
+  FsxK8sIntegrationStack:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL:
+        Fn::If:
+          - CustomBucketCondition
+          - Fn::Sub: https://${CustomBucketName}.s3.${AWS::Region}.amazonaws.com/templates/fsx-k8s-integration-template.yaml
+          - Fn::Sub: >-
+              https://aws-sagemaker-hyperpod-cluster-setup-${AWS::Region}-${Stage}.s3.${AWS::Region}.amazonaws.com/templates/fsx-k8s-integration-template.yaml
+      Parameters:
+        ResourceNamePrefix:
+          Ref: ResourceNamePrefix
+        FsxFileSystemId:
+          Fn::GetAtt:
+            - FsxFilesystemStack
+            - Outputs.FsxFileSystemId
+        EKSClusterName:
+          Fn::If:
+            - CreateEKSClusterStackCondition
+            - Fn::GetAtt:
+                - EKSClusterStack
+                - Outputs.EKSClusterName
+            - Ref: EKSClusterName
+        CustomResourceS3Bucket:
+          Fn::If:
+            - CustomBucketCondition
+            - Ref: CustomBucketName
+            - Fn::Sub: aws-sagemaker-hyperpod-cluster-setup-${AWS::Region}-${Stage}
+        PrivateSubnetIds:
+          Fn::If:
+            - CreatePrivateSubnetStackCondition
+            - Fn::GetAtt:
+                - PrivateSubnetStack
+                - Outputs.PrivateSubnetIds
+            - Ref: PrivateSubnetIds
+        FsxSubnetId:
+          Ref: FsxSubnetId
+        FsxAvailabilityZoneId:
+          Ref: FsxAvailabilityZoneId
+        SecurityGroupIds:
+          Fn::If:
+            - CreateSecurityGroupStackCondition
+            - Fn::GetAtt:
+                - SecurityGroupStack
+                - Outputs.SecurityGroupId
+            - Ref: SecurityGroupIds
+        PerUnitStorageThroughput:
+          Ref: PerUnitStorageThroughput
+        DataCompressionType:
+          Ref: DataCompressionType
+        FileSystemTypeVersion:
+          Ref: FileSystemTypeVersion
+        StorageCapacity:
+          Ref: StorageCapacity
+        DeploymentType:
+          Ref: DeploymentType
+    Metadata:
+      aws:cdk:path: MainEksBasedCfnTemplate/FsxK8sIntegrationStack
     Condition: CreateFsxStackCondition
   PrivateSubnetTagsStack:
     Type: AWS::CloudFormation::Stack
