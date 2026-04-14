@@ -111,24 +111,41 @@ def enrich_instance_groups(instance_groups, isRig=False):
         if not isRig:
             s3_bucket_name = os.environ.get('S3_BUCKET_NAME')
             on_create_path = os.environ.get('ON_CREATE_PATH')
-            if s3_bucket_name and on_create_path and 'LifeCycleConfig' not in instance_group:
-                # Parse the on_create_path to separate path and filename
-                path_parts = on_create_path.rsplit('/', 1)
+            on_init_complete_path = os.environ.get('ON_INIT_COMPLETE_PATH')
+
+            # If IG has a LifeCycleConfig with all empty values, it means the user
+            # explicitly overrode this IG to "default only, no extensions".
+            # Remove it so it doesn't get sent to the API with empty strings,
+            # and skip inheriting the global LCS config.
+            existing_lcs = instance_group.get('LifeCycleConfig')
+            if existing_lcs is not None and not any(existing_lcs.values()):
+                del instance_group['LifeCycleConfig']
+
+            if s3_bucket_name and 'LifeCycleConfig' not in instance_group and existing_lcs is None:
+                lifecycle_config = {}
                 
-                # If there's a path component, add it to the SourceS3Uri
-                if len(path_parts) > 1:
-                    path, filename = path_parts
-                    instance_group['LifeCycleConfig'] = {
-                        'SourceS3Uri': f's3://{s3_bucket_name}/{path}',
-                        'OnCreate': f'{filename}'
-                    }
-                else:
-                    # No path component, just a filename
-                    filename = path_parts[0]
-                    instance_group['LifeCycleConfig'] = {
-                        'SourceS3Uri': f's3://{s3_bucket_name}',
-                        'OnCreate': f'{filename}'
-                    }
+                # Determine SourceS3Uri from whichever path is provided
+                path_source = on_create_path or on_init_complete_path
+                if path_source:
+                    path_parts = path_source.rsplit('/', 1)
+                    if len(path_parts) > 1:
+                        path = path_parts[0]
+                        lifecycle_config['SourceS3Uri'] = f's3://{s3_bucket_name}/{path}'
+                    else:
+                        lifecycle_config['SourceS3Uri'] = f's3://{s3_bucket_name}'
+                
+                # Add OnCreate if entrypoint script is provided
+                if on_create_path:
+                    path_parts = on_create_path.rsplit('/', 1)
+                    lifecycle_config['OnCreate'] = path_parts[-1]
+                
+                # Add OnInitComplete if extension script is provided
+                elif on_init_complete_path:
+                    path_parts = on_init_complete_path.rsplit('/', 1)
+                    lifecycle_config['OnInitComplete'] = path_parts[-1]
+                
+                if lifecycle_config.get('SourceS3Uri'):
+                    instance_group['LifeCycleConfig'] = lifecycle_config
         # Check if OverrideVpcConfig already exists
         if 'OverrideVpcConfig' in instance_group:
             # Only update the Subnets part, keep existing SecurityGroupIds if present
@@ -703,6 +720,9 @@ def upload_slurm_provisioning_parameters_json(instance_groups):
         return
     s3 = boto3.client('s3')
     s3_bucket_name = os.environ.get("S3_BUCKET_NAME", "")
+    if not s3_bucket_name:
+        print("No S3 bucket provided, skipping provisioning parameters upload")
+        return
     on_create_path = os.environ.get('ON_CREATE_PATH', '')
     
     # Get path prefix from ON_CREATE_PATH if available

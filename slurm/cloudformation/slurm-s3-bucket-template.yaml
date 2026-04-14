@@ -1,0 +1,26 @@
+Description: Slurm S3 Bucket Stack
+Parameters:
+  ResourceNamePrefix:
+    Type: String
+    Default: hyperpod-slurm
+    Description: Prefix to be used for all resources created by this template.
+Resources:
+  S3Bucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      BucketName:
+        Fn::Sub:
+          - ${ResourceNamePrefix}-bucket
+          - ResourceNamePrefix:
+              Ref: ResourceNamePrefix
+    Metadata:
+      aws:cdk:path: SlurmS3BucketCfnTemplate/S3Bucket
+Outputs:
+  SlurmS3BucketName:
+    Description: S3 bucket name
+    Value:
+      Ref: S3Bucket

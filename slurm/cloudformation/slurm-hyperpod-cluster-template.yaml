@@ -66,10 +66,14 @@ Parameters:
     Description: The name of the S3 bucket used to store the cluster lifecycle scripts.
   OnCreatePath:
     Type: String
-    Default: on_create.sh
+    Default: ''
     Description: >-
       The file name of lifecycle script for the general purpose instance group. This script runs during cluster
       creation.
+  OnInitCompletePath:
+    Type: String
+    Default: ''
+    Description: The file name of the extension lifecycle script. This script runs after cluster creation is complete.
   Tags:
     Type: String
     Default: ''
@@ -248,6 +252,8 @@ Resources:
             Ref: S3BucketName
           ON_CREATE_PATH:
             Ref: OnCreatePath
+          ON_INIT_COMPLETE_PATH:
+            Ref: OnInitCompletePath
           CLUSTER_TAGS:
             Ref: Tags
           ENABLED_FSX:

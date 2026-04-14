@@ -34,6 +34,7 @@ Metadata:
           - CreateS3BucketStack
           - S3BucketName
           - OnCreatePath
+          - OnInitCompletePath
       - Label:
           default: Permissions
         Parameters:
@@ -115,6 +116,8 @@ Metadata:
         default: S3 Bucket Name
       OnCreatePath:
         default: OnCreate Script Path
+      OnInitCompletePath:
+        default: OnInitComplete Script Path
       CreateSageMakerIAMRoleStack:
         default: Create New IAM Role
       SageMakerIAMRoleName:
@@ -210,10 +213,14 @@ Parameters:
     Description: The name of the S3 bucket used to store the cluster lifecycle scripts.
   OnCreatePath:
     Type: String
-    Default: on_create.sh
+    Default: ''
     Description: >-
       The file name of lifecycle script for the general purpose instance group. This script runs during cluster
       creation.
+  OnInitCompletePath:
+    Type: String
+    Default: ''
+    Description: The file name of the extension lifecycle script. This script runs after cluster creation is complete.
   PrivateSubnetIds:
     Type: String
     Default: ''
@@ -498,6 +505,14 @@ Conditions:
     Fn::Equals:
       - Ref: CreateS3BucketStack
       - 'true'
+  CreateS3BucketOnlyCondition:
+    Fn::And:
+      - Fn::Equals:
+          - Ref: CreateS3BucketStack
+          - 'true'
+      - Fn::Equals:
+          - Ref: CreateLifeCycleScriptStack
+          - 'false'
   CreateSecurityGroupStackCondition:
     Fn::Equals:
       - Ref: CreateSecurityGroupStack
@@ -597,6 +612,21 @@ Resources:
     Metadata:
       aws:cdk:path: MainSlurmBasedCfnTemplate/LifeCycleScriptStack
     Condition: CreateLifeCycleScriptStackCondition
+  S3BucketStack:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL:
+        Fn::If:
+          - CustomBucketCondition
+          - Fn::Sub: https://${CustomBucketName}.s3.${AWS::Region}.amazonaws.com/templates-slurm/slurm-s3-bucket-template.yaml
+          - Fn::Sub: >-
+              https://aws-sagemaker-hyperpod-cluster-setup-${AWS::Region}-${Stage}.s3.${AWS::Region}.amazonaws.com/templates-slurm/slurm-s3-bucket-template.yaml
+      Parameters:
+        ResourceNamePrefix:
+          Ref: ResourceNamePrefix
+    Metadata:
+      aws:cdk:path: MainSlurmBasedCfnTemplate/S3BucketStack
+    Condition: CreateS3BucketOnlyCondition
   IamRoleStack:
     Type: AWS::CloudFormation::Stack
     Properties:
@@ -615,7 +645,12 @@ Resources:
             - Fn::GetAtt:
                 - LifeCycleScriptStack
                 - Outputs.SlurmLifeCycleScriptSourceS3BucketName
-            - Ref: S3BucketName
+            - Fn::If:
+                - CreateS3BucketOnlyCondition
+                - Fn::GetAtt:
+                    - S3BucketStack
+                    - Outputs.SlurmS3BucketName
+                - Ref: S3BucketName
     Metadata:
       aws:cdk:path: MainSlurmBasedCfnTemplate/IamRoleStack
     Condition: CreateSageMakerIAMRoleStackCondition
@@ -714,16 +749,23 @@ Resources:
             - Ref: SageMakerIAMRoleName
         S3BucketName:
           Fn::If:
-            - CreateS3BucketStackCondition
+            - CreateLifeCycleScriptStackCondition
             - Fn::GetAtt:
                 - LifeCycleScriptStack
                 - Outputs.SlurmLifeCycleScriptSourceS3BucketName
-            - Ref: S3BucketName
+            - Fn::If:
+                - CreateS3BucketOnlyCondition
+                - Fn::GetAtt:
+                    - S3BucketStack
+                    - Outputs.SlurmS3BucketName
+                - Ref: S3BucketName
         OnCreatePath:
           Fn::If:
-            - CreateS3BucketStackCondition
+            - CreateLifeCycleScriptStackCondition
             - on_create.sh
             - Ref: OnCreatePath
+        OnInitCompletePath:
+          Ref: OnInitCompletePath
         InstanceGroupSettings1:
           Ref: InstanceGroupSettings1
         InstanceGroupSettings2:
@@ -843,11 +885,16 @@ Resources:
             - Ref: SageMakerIAMRoleName
         LCSBucketName:
           Fn::If:
-            - CreateS3BucketStackCondition
+            - CreateLifeCycleScriptStackCondition
             - Fn::GetAtt:
                 - LifeCycleScriptStack
                 - Outputs.SlurmLifeCycleScriptSourceS3BucketName
-            - Ref: S3BucketName
+            - Fn::If:
+                - CreateS3BucketOnlyCondition
+                - Fn::GetAtt:
+                    - S3BucketStack
+                    - Outputs.SlurmS3BucketName
+                - Ref: S3BucketName
         CustomResourceS3Bucket:
           Fn::If:
             - CustomBucketCondition
