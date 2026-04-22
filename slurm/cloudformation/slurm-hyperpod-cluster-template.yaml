@@ -74,15 +74,6 @@ Parameters:
     Type: String
     Default: ''
     Description: The file name of the extension lifecycle script. This script runs after cluster creation is complete.
-  EnableSourceS3UriOnly:
-    Type: String
-    Default: 'false'
-    AllowedValues:
-      - 'true'
-      - 'false'
-    Description: >-
-      When true, sends LifeCycleConfig with only SourceS3Uri (no OnCreate/OnInitComplete hooks). For allowlisted Slurm
-      customers only.
   Tags:
     Type: String
     Default: ''
@@ -273,8 +264,6 @@ Resources:
             Ref: FsxMountName
           SLURM_CONFIG_STRATEGY:
             Ref: SlurmConfigStrategy
-          ENABLE_SOURCE_S3_URI_ONLY:
-            Ref: EnableSourceS3UriOnly
           INSTANCE_GROUP_SETTINGS1:
             Ref: InstanceGroupSettings1
           INSTANCE_GROUP_SETTINGS2:
