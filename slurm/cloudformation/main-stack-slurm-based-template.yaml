@@ -35,6 +35,7 @@ Metadata:
           - S3BucketName
           - OnCreatePath
           - OnInitCompletePath
+          - EnableSourceS3UriOnly
       - Label:
           default: Permissions
         Parameters:
@@ -118,6 +119,8 @@ Metadata:
         default: OnCreate Script Path
       OnInitCompletePath:
         default: OnInitComplete Script Path
+      EnableSourceS3UriOnly:
+        default: Enable Source S3 URI Only
       CreateSageMakerIAMRoleStack:
         default: Create New IAM Role
       SageMakerIAMRoleName:
@@ -221,6 +224,15 @@ Parameters:
     Type: String
     Default: ''
     Description: The file name of the extension lifecycle script. This script runs after cluster creation is complete.
+  EnableSourceS3UriOnly:
+    Type: String
+    Default: 'false'
+    AllowedValues:
+      - 'true'
+      - 'false'
+    Description: >-
+      When true, sends LifeCycleConfig with only SourceS3Uri (no OnCreate/OnInitComplete hooks). For allowlisted Slurm
+      customers only.
   PrivateSubnetIds:
     Type: String
     Default: ''
@@ -766,6 +778,8 @@ Resources:
             - Ref: OnCreatePath
         OnInitCompletePath:
           Ref: OnInitCompletePath
+        EnableSourceS3UriOnly:
+          Ref: EnableSourceS3UriOnly
         InstanceGroupSettings1:
           Ref: InstanceGroupSettings1
         InstanceGroupSettings2:
