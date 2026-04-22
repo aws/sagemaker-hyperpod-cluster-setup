@@ -123,37 +123,29 @@ def enrich_instance_groups(instance_groups, isRig=False):
 
             if s3_bucket_name and 'LifeCycleConfig' not in instance_group and existing_lcs is None:
                 lifecycle_config = {}
+                
+                # Determine SourceS3Uri from whichever path is provided
                 path_source = on_create_path or on_init_complete_path
-
                 if path_source:
-                    # Split path into directory and filename in one pass
-                    directory, filename = (path_source.rsplit('/', 1) if '/' in path_source
-                                           else ('', path_source))
-
-                    lifecycle_config['SourceS3Uri'] = (f's3://{s3_bucket_name}/{directory}'
-                                                       if directory else f's3://{s3_bucket_name}')
-
-                    if on_create_path:
-                        lifecycle_config['OnCreate'] = filename
-                    elif on_init_complete_path:
-                        lifecycle_config['OnInitComplete'] = filename
-
-                    instance_group['LifeCycleConfig'] = lifecycle_config
-
-                else:
-                    # Allowlisted Slurm customers can create clusters with only SourceS3Uri
-                    # in their LifeCycleConfig, without specifying OnCreate or OnInitComplete
-                    # hooks. This lets the SageMaker platform apply its own default lifecycle
-                    # management for the cluster. The SageMaker API enforces an allowlist on
-                    # the backend, so non-allowlisted customers will get a validation error
-                    # if this flag is set. This flag is controlled by Console via a feature
-                    # flag and should never be set to true by default.
-                    is_source_s3_uri_only_enabled = os.environ.get('ENABLE_SOURCE_S3_URI_ONLY', 'false').lower() == 'true'
-                    is_slurm_orchestrator = os.environ.get('ORCHESTRATOR_TYPE', 'EKS') == 'SLURM'
-
-                    if is_source_s3_uri_only_enabled and is_slurm_orchestrator:
+                    path_parts = path_source.rsplit('/', 1)
+                    if len(path_parts) > 1:
+                        path = path_parts[0]
+                        lifecycle_config['SourceS3Uri'] = f's3://{s3_bucket_name}/{path}'
+                    else:
                         lifecycle_config['SourceS3Uri'] = f's3://{s3_bucket_name}'
-                        instance_group['LifeCycleConfig'] = lifecycle_config
+                
+                # Add OnCreate if entrypoint script is provided
+                if on_create_path:
+                    path_parts = on_create_path.rsplit('/', 1)
+                    lifecycle_config['OnCreate'] = path_parts[-1]
+                
+                # Add OnInitComplete if extension script is provided
+                elif on_init_complete_path:
+                    path_parts = on_init_complete_path.rsplit('/', 1)
+                    lifecycle_config['OnInitComplete'] = path_parts[-1]
+                
+                if lifecycle_config.get('SourceS3Uri'):
+                    instance_group['LifeCycleConfig'] = lifecycle_config
         # Check if OverrideVpcConfig already exists
         if 'OverrideVpcConfig' in instance_group:
             # Only update the Subnets part, keep existing SecurityGroupIds if present
