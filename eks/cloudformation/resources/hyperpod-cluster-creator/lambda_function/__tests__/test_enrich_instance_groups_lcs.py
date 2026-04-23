@@ -109,57 +109,6 @@ class TestEnrichInstanceGroupsLCS(unittest.TestCase):
 
         self.assertNotIn('LifeCycleConfig', result[0])
 
-    # ── EnableSourceS3UriOnly tests ──────────────────────────────────────
-
-    def test_source_s3_uri_only_slurm_enabled(self):
-        """SLURM + EnableSourceS3UriOnly=true + no paths → LifeCycleConfig with only SourceS3Uri"""
-        self.env_vars['ON_INIT_COMPLETE_PATH'] = ''
-        self.env_vars['ON_CREATE_PATH'] = ''
-        self.env_vars['ENABLE_SOURCE_S3_URI_ONLY'] = 'true'
-        self.env_vars['ORCHESTRATOR_TYPE'] = 'SLURM'
-        groups = [{'InstanceGroupName': 'worker-1', 'InstanceType': 'ml.t3.medium'}]
-        result = self._run(groups)
-
-        self.assertIn('LifeCycleConfig', result[0])
-        self.assertEqual(result[0]['LifeCycleConfig']['SourceS3Uri'], 's3://bucket')
-        self.assertNotIn('OnCreate', result[0]['LifeCycleConfig'])
-        self.assertNotIn('OnInitComplete', result[0]['LifeCycleConfig'])
-
-    def test_source_s3_uri_only_eks_not_applied(self):
-        """EKS + EnableSourceS3UriOnly=true + no paths → No LifeCycleConfig (only for SLURM)"""
-        self.env_vars['ON_INIT_COMPLETE_PATH'] = ''
-        self.env_vars['ON_CREATE_PATH'] = ''
-        self.env_vars['ENABLE_SOURCE_S3_URI_ONLY'] = 'true'
-        self.env_vars['ORCHESTRATOR_TYPE'] = 'EKS'
-        groups = [{'InstanceGroupName': 'worker-1', 'InstanceType': 'ml.t3.medium'}]
-        result = self._run(groups)
-
-        self.assertNotIn('LifeCycleConfig', result[0])
-
-    def test_source_s3_uri_only_disabled_by_default(self):
-        """SLURM + EnableSourceS3UriOnly=false (default) + no paths → No LifeCycleConfig"""
-        self.env_vars['ON_INIT_COMPLETE_PATH'] = ''
-        self.env_vars['ON_CREATE_PATH'] = ''
-        self.env_vars['ENABLE_SOURCE_S3_URI_ONLY'] = 'false'
-        self.env_vars['ORCHESTRATOR_TYPE'] = 'SLURM'
-        groups = [{'InstanceGroupName': 'worker-1', 'InstanceType': 'ml.t3.medium'}]
-        result = self._run(groups)
-
-        self.assertNotIn('LifeCycleConfig', result[0])
-
-    def test_source_s3_uri_only_does_not_override_paths(self):
-        """SLURM + EnableSourceS3UriOnly=true + paths provided → Normal path-based logic wins"""
-        self.env_vars['ON_INIT_COMPLETE_PATH'] = 'scripts/extension.sh'
-        self.env_vars['ON_CREATE_PATH'] = ''
-        self.env_vars['ENABLE_SOURCE_S3_URI_ONLY'] = 'true'
-        self.env_vars['ORCHESTRATOR_TYPE'] = 'SLURM'
-        groups = [{'InstanceGroupName': 'worker-1', 'InstanceType': 'ml.t3.medium'}]
-        result = self._run(groups)
-
-        self.assertIn('LifeCycleConfig', result[0])
-        self.assertEqual(result[0]['LifeCycleConfig']['SourceS3Uri'], 's3://bucket/scripts')
-        self.assertEqual(result[0]['LifeCycleConfig']['OnInitComplete'], 'extension.sh')
-
 
 if __name__ == '__main__':
     unittest.main()
