@@ -40,6 +40,7 @@ Resources:
                 Effect: Allow
                 Action:
                   - s3:PutObject
+                  - s3:PutObjectTagging
                   - s3:DeleteObject
                   - s3:ListBucket
                   - s3:GetObject
@@ -180,6 +181,18 @@ Resources:
                   StringEquals:
                     aws:RequestedRegion:
                       Fn::Sub: ${AWS::Region}
+              - Sid: DataCaptureKmsAccess
+                Effect: Allow
+                Action:
+                  - kms:Decrypt
+                  - kms:GenerateDataKey
+                  - kms:DescribeKey
+                Resource:
+                  Fn::Sub: arn:aws:kms:${AWS::Region}:${AWS::AccountId}:key/*
+                Condition:
+                  StringEquals:
+                    kms:ViaService:
+                      Fn::Sub: s3.${AWS::Region}.amazonaws.com
               - Sid: SageMakerListAccess
                 Effect: Allow
                 Action:
@@ -588,6 +601,29 @@ Resources:
             Resource:
               - arn:aws:s3:::*
               - arn:aws:s3:::*/*
+          - Sid: DataCaptureWriteAccess
+            Effect: Allow
+            Action:
+              - s3:PutObject
+              - s3:AbortMultipartUpload
+            Resource:
+              - Fn::Sub: arn:aws:s3:::${TLSCertificatesBucketName}/*
+            Condition:
+              StringEquals:
+                s3:ResourceAccount:
+                  Fn::Sub: ${AWS::AccountId}
+          - Sid: DataCaptureKmsAccess
+            Effect: Allow
+            Action:
+              - kms:GenerateDataKey
+              - kms:Decrypt
+              - kms:DescribeKey
+            Resource:
+              Fn::Sub: arn:aws:kms:${AWS::Region}:${AWS::AccountId}:key/*
+            Condition:
+              StringEquals:
+                kms:ViaService:
+                  Fn::Sub: s3.${AWS::Region}.amazonaws.com
     Metadata:
       aws:cdk:path: InfOperatorIamRoleCfnTemplate/S3MountpointPolicy
 Outputs:
