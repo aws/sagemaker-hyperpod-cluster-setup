@@ -1898,8 +1898,6 @@ Resources:
             - CustomBucketCondition
             - Ref: CustomBucketName
             - Fn::Sub: aws-sagemaker-hyperpod-cluster-setup-${AWS::Region}-${Stage}
-    DependsOn:
-      - HyperPodClusterStack
     Metadata:
       aws:cdk:path: MainEksBasedCfnTemplate/CertManagerStack
     Condition: InstallCertManagerCondition

@@ -145,21 +145,6 @@ Resources:
             Condition:
               Bool:
                 aws:SecureTransport: 'false'
-          - Sid: AllowALBAccessLogDelivery
-            Effect: Allow
-            Principal:
-              Service: logdelivery.elasticloadbalancing.amazonaws.com
-            Action: s3:PutObject
-            Resource:
-              Fn::Join:
-                - ''
-                - - 'arn:aws:s3:::'
-                  - Ref: TLSCertificatesBucket
-                  - /data-capture/*
-            Condition:
-              StringEquals:
-                aws:SourceAccount:
-                  Ref: AWS::AccountId
     Metadata:
       aws:cdk:path: TLSCertificatesS3BucketCfnTemplate/TLSBucketPolicy
 Outputs:

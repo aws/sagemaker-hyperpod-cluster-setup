@@ -173,18 +173,6 @@ Resources:
               - s3:DeleteObject
             Resource:
               - arn:aws:s3:::*/*
-          - Sid: DataCaptureKmsAccess
-            Effect: Allow
-            Action:
-              - kms:GenerateDataKey
-              - kms:Decrypt
-              - kms:DescribeKey
-            Resource:
-              Fn::Sub: arn:aws:kms:${AWS::Region}:${AWS::AccountId}:key/*
-            Condition:
-              StringEquals:
-                kms:ViaService:
-                  Fn::Sub: s3.${AWS::Region}.amazonaws.com
     Metadata:
       aws:cdk:path: InferenceAddonIamRolesCfnTemplate/S3MountpointPolicy
     Condition: ShouldCreateS3Role
