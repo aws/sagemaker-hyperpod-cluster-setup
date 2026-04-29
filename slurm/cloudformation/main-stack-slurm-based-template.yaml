@@ -255,7 +255,7 @@ Parameters:
     Description: Per unit storage throughput for the FSx file system
   DataCompressionType:
     Type: String
-    Default: NONE
+    Default: LZ4
     AllowedValues:
       - NONE
       - LZ4
