@@ -236,12 +236,14 @@ def create_addon(cluster_name, addon_name, addon_version, configuration_values):
         create_params = {
             'clusterName': cluster_name,
             'addonName': addon_name,
-            'addonVersion': addon_version,
             'resolveConflicts': 'OVERWRITE',
             'tags': {
                 CREATED_BY_TAG_KEY: CREATED_BY_HYPERPOD_INFERENCE_TAG_VALUE
             },
         }
+        
+        if addon_version and addon_version.strip():
+            create_params['addonVersion'] = addon_version
         
         if configuration_values:
             create_params['configurationValues'] = json.dumps(configuration_values)
@@ -270,9 +272,11 @@ def update_addon(cluster_name, addon_name, addon_version, configuration_values):
         update_params = {
             'clusterName': cluster_name,
             'addonName': addon_name,
-            'addonVersion': addon_version,
             'resolveConflicts': 'OVERWRITE'
         }
+        
+        if addon_version and addon_version.strip():
+            update_params['addonVersion'] = addon_version
         
         if configuration_values:
             update_params['configurationValues'] = json.dumps(configuration_values)
@@ -319,7 +323,7 @@ def on_create():
 
         cluster_name = os.environ[EKS_CLUSTER_NAME]
         addon_name = os.environ.get(ADDON_NAME, 'amazon-sagemaker-hyperpod-inference')
-        addon_version = os.environ.get(ADDON_VERSION, 'v1.0.1-eksbuild.1')
+        addon_version = os.environ.get(ADDON_VERSION, '')
         
         # Build configuration
         configuration_values = build_inference_operator_configuration()
@@ -377,7 +381,7 @@ def on_update():
 
     cluster_name = os.environ[EKS_CLUSTER_NAME]
     addon_name = os.environ.get(ADDON_NAME, 'amazon-sagemaker-hyperpod-inference')
-    addon_version = os.environ.get(ADDON_VERSION, 'v1.0.1-eksbuild.1')
+    addon_version = os.environ.get(ADDON_VERSION, '')
     
     # Build configuration
     configuration_values = build_inference_operator_configuration()

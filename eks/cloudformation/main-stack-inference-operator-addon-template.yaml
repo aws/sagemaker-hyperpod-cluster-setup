@@ -1160,7 +1160,6 @@ Resources:
           Ref: ResourceNameShortPrefix
         EKSClusterName:
           Ref: EKSClusterName
-        AddonVersion: v1.0.1-eksbuild.1
         ExecutionRoleArn:
           Fn::If:
             - InferenceOperatorExecutionRoleProvidedCondition

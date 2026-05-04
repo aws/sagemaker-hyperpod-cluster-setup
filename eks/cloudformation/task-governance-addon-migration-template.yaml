@@ -1,0 +1,435 @@
+Description: 'Task Governance Addon Migration () - Single Stack: Backup, Update Addon, Restore, Cleanup'
+Parameters:
+  ResourceNamePrefix:
+    Type: String
+    Default: sagemaker-hyperpod-eks
+    Description: Prefix for all resources created by this template.
+  EKSClusterName:
+    Type: String
+    Description: The name of the EKS cluster.
+  BackupS3Bucket:
+    Type: String
+    Description: S3 bucket for backing up CRs before migration.
+  CustomResourceS3Bucket:
+    Type: String
+    Description: S3 bucket containing Lambda code and templates.
+  FunctionS3Key:
+    Type: String
+    Default: resources/artifacts/task-governance-addon-migration-lambda-function.zip
+    Description: S3 key for the Lambda function zip.
+  LayerS3Key:
+    Type: String
+    Default: resources/artifacts/tiered-cache-lambda-layer.zip
+    Description: S3 key for the Lambda layer zip (kubectl + aws-iam-authenticator).
+  TaskGovernanceAddonName:
+    Type: String
+    Default: amazon-sagemaker-hyperpod-taskgovernance
+    Description: Name of the Task Governance EKS addon.
+  TaskGovernanceAddonVersion:
+    Type: String
+    Description: Target version for the Task Governance addon upgrade.
+  CurrentTaskGovernanceAddonVersion:
+    Type: String
+    Description: >-
+      Current installed version of the Task Governance addon. Used with the target version to look up the CRD migration
+      spec. If current and target have the same major.minor, no CRD schema migration runs.
+Resources:
+  MigrationRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Statement:
+          - Action: sts:AssumeRole
+            Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+        Version: 2012-10-17
+      ManagedPolicyArns:
+        - Fn::Sub: arn:${AWS::Partition}:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        - PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action:
+                  - eks:DescribeCluster
+                Resource:
+                  Fn::Sub: arn:${AWS::Partition}:eks:${AWS::Region}:${AWS::AccountId}:cluster/${EKSClusterName}
+              - Effect: Allow
+                Action:
+                  - eks:UpdateAddon
+                  - eks:DescribeAddon
+                Resource:
+                  Fn::Sub: >-
+                    arn:${AWS::Partition}:eks:${AWS::Region}:${AWS::AccountId}:addon/${EKSClusterName}/${TaskGovernanceAddonName}/*
+              - Effect: Allow
+                Action:
+                  - s3:PutObject
+                  - s3:GetObject
+                  - s3:DeleteObject
+                Resource:
+                  Fn::Sub: arn:${AWS::Partition}:s3:::${BackupS3Bucket}/task-governance-addon-migration/*
+              - Effect: Allow
+                Action:
+                  - s3:ListBucket
+                Resource:
+                  Fn::Sub: arn:${AWS::Partition}:s3:::${BackupS3Bucket}
+                Condition:
+                  StringLike:
+                    s3:prefix:
+                      - task-governance-addon-migration/*
+          PolicyName:
+            Fn::Sub: ${ResourceNamePrefix}-TGMigration-Access
+    Metadata:
+      aws:cdk:path: TaskGovernanceAddonMigrationCfnTemplate/MigrationRole
+  AccessEntry:
+    Type: AWS::EKS::AccessEntry
+    Properties:
+      AccessPolicies:
+        - AccessScope:
+            Type: cluster
+          PolicyArn:
+            Fn::Sub: arn:${AWS::Partition}:eks::aws:cluster-access-policy/AmazonEKSClusterAdminPolicy
+      ClusterName:
+        Ref: EKSClusterName
+      KubernetesGroups:
+        - tg-migration-automation
+      PrincipalArn:
+        Fn::GetAtt:
+          - MigrationRole
+          - Arn
+    Metadata:
+      aws:cdk:path: TaskGovernanceAddonMigrationCfnTemplate/AccessEntry
+  Layer:
+    Type: AWS::Lambda::LayerVersion
+    Properties:
+      CompatibleArchitectures:
+        - x86_64
+      CompatibleRuntimes:
+        - python3.9
+        - python3.10
+        - python3.11
+        - python3.12
+      Content:
+        S3Bucket:
+          Ref: CustomResourceS3Bucket
+        S3Key:
+          Ref: LayerS3Key
+      Description: Lambda Layer for kubectl and aws-iam-authenticator
+      LayerName:
+        Fn::Sub: ${ResourceNamePrefix}-tg-migration-layer
+    Metadata:
+      aws:cdk:path: TaskGovernanceAddonMigrationCfnTemplate/Layer
+  FunctionBackup:
+    Type: AWS::Lambda::Function
+    Properties:
+      Code:
+        S3Bucket:
+          Ref: CustomResourceS3Bucket
+        S3Key:
+          Ref: FunctionS3Key
+      Environment:
+        Variables:
+          EKS_CLUSTER_NAME:
+            Ref: EKSClusterName
+          BACKUP_S3_BUCKET:
+            Ref: BackupS3Bucket
+          CURRENT_TASK_GOVERNANCE_ADDON_VERSION:
+            Ref: CurrentTaskGovernanceAddonVersion
+          TASK_GOVERNANCE_ADDON_VERSION:
+            Ref: TaskGovernanceAddonVersion
+          MIGRATION_MODE: backup
+          PATH: /opt/python/bin:/var/lang/bin:/usr/local/bin:/usr/bin/:/bin
+          KUBECONFIG: /tmp/.kube/config
+          LD_LIBRARY_PATH: /opt/python/lib
+      Handler: lambda_function.lambda_handler
+      Layers:
+        - Ref: Layer
+      MemorySize: 1024
+      ReservedConcurrentExecutions: 1
+      Role:
+        Fn::GetAtt:
+          - MigrationRole
+          - Arn
+      Runtime: python3.12
+      Timeout: 900
+    DependsOn:
+      - AccessEntry
+    Metadata:
+      aws:cdk:path: TaskGovernanceAddonMigrationCfnTemplate/FunctionBackup
+  LogGroupBackup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName:
+        Fn::Join:
+          - ''
+          - - /aws/lambda/
+            - Ref: FunctionBackup
+      RetentionInDays: 14
+    DependsOn:
+      - FunctionBackup
+    Metadata:
+      aws:cdk:path: TaskGovernanceAddonMigrationCfnTemplate/LogGroupBackup
+  InvokeConfigBackup:
+    Type: AWS::Lambda::EventInvokeConfig
+    Properties:
+      FunctionName:
+        Ref: FunctionBackup
+      MaximumRetryAttempts: 0
+      Qualifier: $LATEST
+    DependsOn:
+      - FunctionBackup
+    Metadata:
+      aws:cdk:path: TaskGovernanceAddonMigrationCfnTemplate/InvokeConfigBackup
+  BackupResource:
+    Type: AWS::CloudFormation::CustomResource
+    Properties:
+      ServiceTimeout: 930
+      ServiceToken:
+        Fn::GetAtt:
+          - FunctionBackup
+          - Arn
+    DependsOn:
+      - FunctionBackup
+      - InvokeConfigBackup
+      - LogGroupBackup
+    Metadata:
+      aws:cdk:path: TaskGovernanceAddonMigrationCfnTemplate/BackupResource
+  FunctionUpdate:
+    Type: AWS::Lambda::Function
+    Properties:
+      Code:
+        S3Bucket:
+          Ref: CustomResourceS3Bucket
+        S3Key:
+          Ref: FunctionS3Key
+      Environment:
+        Variables:
+          EKS_CLUSTER_NAME:
+            Ref: EKSClusterName
+          TASK_GOVERNANCE_ADDON_NAME:
+            Ref: TaskGovernanceAddonName
+          TASK_GOVERNANCE_ADDON_VERSION:
+            Ref: TaskGovernanceAddonVersion
+          MIGRATION_MODE: update
+          PATH: /opt/python/bin:/var/lang/bin:/usr/local/bin:/usr/bin/:/bin
+          KUBECONFIG: /tmp/.kube/config
+          LD_LIBRARY_PATH: /opt/python/lib
+      Handler: lambda_function.lambda_handler
+      Layers:
+        - Ref: Layer
+      MemorySize: 1024
+      ReservedConcurrentExecutions: 1
+      Role:
+        Fn::GetAtt:
+          - MigrationRole
+          - Arn
+      Runtime: python3.12
+      Timeout: 900
+    DependsOn:
+      - AccessEntry
+    Metadata:
+      aws:cdk:path: TaskGovernanceAddonMigrationCfnTemplate/FunctionUpdate
+  LogGroupUpdate:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName:
+        Fn::Join:
+          - ''
+          - - /aws/lambda/
+            - Ref: FunctionUpdate
+      RetentionInDays: 14
+    DependsOn:
+      - FunctionUpdate
+    Metadata:
+      aws:cdk:path: TaskGovernanceAddonMigrationCfnTemplate/LogGroupUpdate
+  InvokeConfigUpdate:
+    Type: AWS::Lambda::EventInvokeConfig
+    Properties:
+      FunctionName:
+        Ref: FunctionUpdate
+      MaximumRetryAttempts: 0
+      Qualifier: $LATEST
+    DependsOn:
+      - FunctionUpdate
+    Metadata:
+      aws:cdk:path: TaskGovernanceAddonMigrationCfnTemplate/InvokeConfigUpdate
+  UpdateAddonResource:
+    Type: AWS::CloudFormation::CustomResource
+    Properties:
+      ServiceTimeout: 930
+      ServiceToken:
+        Fn::GetAtt:
+          - FunctionUpdate
+          - Arn
+    DependsOn:
+      - BackupResource
+      - FunctionUpdate
+      - InvokeConfigUpdate
+      - LogGroupUpdate
+    Metadata:
+      aws:cdk:path: TaskGovernanceAddonMigrationCfnTemplate/UpdateAddonResource
+  FunctionRestore:
+    Type: AWS::Lambda::Function
+    Properties:
+      Code:
+        S3Bucket:
+          Ref: CustomResourceS3Bucket
+        S3Key:
+          Ref: FunctionS3Key
+      Environment:
+        Variables:
+          EKS_CLUSTER_NAME:
+            Ref: EKSClusterName
+          BACKUP_S3_BUCKET:
+            Ref: BackupS3Bucket
+          CURRENT_TASK_GOVERNANCE_ADDON_VERSION:
+            Ref: CurrentTaskGovernanceAddonVersion
+          TASK_GOVERNANCE_ADDON_VERSION:
+            Ref: TaskGovernanceAddonVersion
+          MIGRATION_MODE: restore
+          PATH: /opt/python/bin:/var/lang/bin:/usr/local/bin:/usr/bin/:/bin
+          KUBECONFIG: /tmp/.kube/config
+          LD_LIBRARY_PATH: /opt/python/lib
+      Handler: lambda_function.lambda_handler
+      Layers:
+        - Ref: Layer
+      MemorySize: 1024
+      ReservedConcurrentExecutions: 1
+      Role:
+        Fn::GetAtt:
+          - MigrationRole
+          - Arn
+      Runtime: python3.12
+      Timeout: 900
+    DependsOn:
+      - AccessEntry
+    Metadata:
+      aws:cdk:path: TaskGovernanceAddonMigrationCfnTemplate/FunctionRestore
+  LogGroupRestore:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName:
+        Fn::Join:
+          - ''
+          - - /aws/lambda/
+            - Ref: FunctionRestore
+      RetentionInDays: 14
+    DependsOn:
+      - FunctionRestore
+    Metadata:
+      aws:cdk:path: TaskGovernanceAddonMigrationCfnTemplate/LogGroupRestore
+  InvokeConfigRestore:
+    Type: AWS::Lambda::EventInvokeConfig
+    Properties:
+      FunctionName:
+        Ref: FunctionRestore
+      MaximumRetryAttempts: 0
+      Qualifier: $LATEST
+    DependsOn:
+      - FunctionRestore
+    Metadata:
+      aws:cdk:path: TaskGovernanceAddonMigrationCfnTemplate/InvokeConfigRestore
+  RestoreResource:
+    Type: AWS::CloudFormation::CustomResource
+    Properties:
+      ServiceTimeout: 930
+      ServiceToken:
+        Fn::GetAtt:
+          - FunctionRestore
+          - Arn
+    DependsOn:
+      - FunctionRestore
+      - InvokeConfigRestore
+      - LogGroupRestore
+      - UpdateAddonResource
+    Metadata:
+      aws:cdk:path: TaskGovernanceAddonMigrationCfnTemplate/RestoreResource
+  FunctionCleanup:
+    Type: AWS::Lambda::Function
+    Properties:
+      Code:
+        S3Bucket:
+          Ref: CustomResourceS3Bucket
+        S3Key:
+          Ref: FunctionS3Key
+      Environment:
+        Variables:
+          EKS_CLUSTER_NAME:
+            Ref: EKSClusterName
+          BACKUP_S3_BUCKET:
+            Ref: BackupS3Bucket
+          MIGRATION_MODE: cleanup
+          PATH: /opt/python/bin:/var/lang/bin:/usr/local/bin:/usr/bin/:/bin
+          KUBECONFIG: /tmp/.kube/config
+          LD_LIBRARY_PATH: /opt/python/lib
+      Handler: lambda_function.lambda_handler
+      Layers:
+        - Ref: Layer
+      MemorySize: 1024
+      ReservedConcurrentExecutions: 1
+      Role:
+        Fn::GetAtt:
+          - MigrationRole
+          - Arn
+      Runtime: python3.12
+      Timeout: 900
+    DependsOn:
+      - AccessEntry
+    Metadata:
+      aws:cdk:path: TaskGovernanceAddonMigrationCfnTemplate/FunctionCleanup
+  LogGroupCleanup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName:
+        Fn::Join:
+          - ''
+          - - /aws/lambda/
+            - Ref: FunctionCleanup
+      RetentionInDays: 14
+    DependsOn:
+      - FunctionCleanup
+    Metadata:
+      aws:cdk:path: TaskGovernanceAddonMigrationCfnTemplate/LogGroupCleanup
+  InvokeConfigCleanup:
+    Type: AWS::Lambda::EventInvokeConfig
+    Properties:
+      FunctionName:
+        Ref: FunctionCleanup
+      MaximumRetryAttempts: 0
+      Qualifier: $LATEST
+    DependsOn:
+      - FunctionCleanup
+    Metadata:
+      aws:cdk:path: TaskGovernanceAddonMigrationCfnTemplate/InvokeConfigCleanup
+  CleanupResource:
+    Type: AWS::CloudFormation::CustomResource
+    Properties:
+      ServiceTimeout: 930
+      ServiceToken:
+        Fn::GetAtt:
+          - FunctionCleanup
+          - Arn
+    DependsOn:
+      - FunctionCleanup
+      - InvokeConfigCleanup
+      - LogGroupCleanup
+      - RestoreResource
+    Metadata:
+      aws:cdk:path: TaskGovernanceAddonMigrationCfnTemplate/CleanupResource
+Outputs:
+  BackupStatus:
+    Value:
+      Fn::GetAtt:
+        - BackupResource
+        - Status
+  AddonStatus:
+    Value:
+      Fn::GetAtt:
+        - UpdateAddonResource
+        - AddonStatus
+  RestoredCRs:
+    Value:
+      Fn::GetAtt:
+        - RestoreResource
+        - RestoredCRs
