@@ -728,7 +728,7 @@ Resources:
           PARTITION:
             Fn::Sub: ${AWS::Partition}
       FunctionName:
-        Fn::Sub: ${ResourceNamePrefix}-grafana-creation-func
+        Fn::Sub: ${ResourceNamePrefix}-amg-crfn
       Handler: lambda_function.lambda_handler
       MemorySize: 2048
       Role:
@@ -882,7 +882,7 @@ Resources:
           SERVICE_ACCOUNT_NAME:
             Fn::Sub: ${ResourceNamePrefix}-SA
       FunctionName:
-        Fn::Sub: ${ResourceNamePrefix}-SAfunction
+        Fn::Sub: ${ResourceNamePrefix}-SAfunc
       Handler: lambda_function.lambda_handler
       MemorySize: 2048
       Role:
