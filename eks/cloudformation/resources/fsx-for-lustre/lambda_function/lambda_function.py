@@ -5,6 +5,33 @@ import cfnresponse
 from botocore.exceptions import ClientError
 import yaml
 
+
+def get_fsx_iam_role_name(cluster_name: str, region: str = None) -> str:
+    """Construct FSx IAM role name, truncating to 64 chars if needed.
+    Preserves the unique 8-char hex suffix in the cluster name and only
+    truncates the user-provided portion."""
+    IAM_ROLE_NAME_MAX_LENGTH = 64
+    prefix = "FSXLCSI-"
+    if region:
+        full_name = f"{prefix}{cluster_name}-{region}"
+    else:
+        full_name = f"{prefix}{cluster_name}"
+    if len(full_name) <= IAM_ROLE_NAME_MAX_LENGTH:
+        return full_name
+    # Cluster name format: <base>-<8hex>-eks. Preserve the unique suffix.
+    parts = cluster_name.rsplit("-", 2)
+    if len(parts) == 3 and len(parts[1]) == 8:
+        unique_suffix = f"-{parts[1]}-{parts[2]}"
+        base = parts[0]
+        if region:
+            available = IAM_ROLE_NAME_MAX_LENGTH - len(prefix) - len(unique_suffix) - 1 - len(region)
+            return f"{prefix}{base[:available]}{unique_suffix}-{region}"
+        else:
+            available = IAM_ROLE_NAME_MAX_LENGTH - len(prefix) - len(unique_suffix)
+            return f"{prefix}{base[:available]}{unique_suffix}"
+    # Fallback for unexpected formats
+    return full_name[:IAM_ROLE_NAME_MAX_LENGTH]
+
 def lambda_handler(event, context):
     """
     Handle CloudFormation custom resource requests for managing FSx for Lustre file systems
@@ -537,7 +564,7 @@ def on_create(event):
                             '--cluster', os.environ['CLUSTER_NAME'],
                             '--attach-policy-arn', 'arn:aws:iam::aws:policy/AmazonFSxFullAccess',
                             '--approve',
-                            '--role-name', f"FSXLCSI-{os.environ['CLUSTER_NAME']}",
+                            '--role-name', get_fsx_iam_role_name(os.environ['CLUSTER_NAME']),
                             '--region', os.environ['AWS_REGION']], check=True)
 
             # Verify proper annotation of the service account with the IAM role ARN
@@ -620,7 +647,7 @@ def on_update(event):
                         '--cluster', os.environ['CLUSTER_NAME'],
                         '--attach-policy-arn', 'arn:aws:iam::aws:policy/AmazonFSxFullAccess',
                         '--approve',
-                        '--role-name', f"FSXLCSI-{os.environ['CLUSTER_NAME']}-{os.environ['AWS_REGION']}",
+                        '--role-name', get_fsx_iam_role_name(os.environ['CLUSTER_NAME'], os.environ['AWS_REGION']),
                         '--region', os.environ['AWS_REGION']], check=True)
 
         # Verify proper annotation of the service account with the IAM role ARN

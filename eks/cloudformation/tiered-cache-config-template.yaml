@@ -164,7 +164,7 @@ Resources:
           IS_INF_OPERATOR_ADDON_ENABLED:
             Ref: IsInfOperatorAddOnEnabled
       FunctionName:
-        Fn::Sub: ${ResourceNamePrefix}-TieredCacheConfig
+        Fn::Sub: ${ResourceNamePrefix}-TieCache
       Handler: lambda_function.lambda_handler
       Layers:
         - Ref: TieredCacheConfigCustomResourceLayer

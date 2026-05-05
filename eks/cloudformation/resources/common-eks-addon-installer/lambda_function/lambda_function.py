@@ -202,12 +202,14 @@ def create_addon(cluster_name, addon_name, addon_version, configuration_values=N
         create_params = {
             'clusterName': cluster_name,
             'addonName': addon_name,
-            'addonVersion': addon_version,
             'resolveConflicts': 'OVERWRITE',
             'tags': {
                 CREATED_BY_TAG_KEY: CREATED_BY_HYPERPOD_INFERENCE_TAG_VALUE
             },
         }
+        
+        if addon_version and addon_version.strip():
+            create_params['addonVersion'] = addon_version
         
         if configuration_values:
             create_params['configurationValues'] = json.dumps(configuration_values)
@@ -239,9 +241,11 @@ def update_addon(cluster_name, addon_name, addon_version, configuration_values=N
         update_params = {
             'clusterName': cluster_name,
             'addonName': addon_name,
-            'addonVersion': addon_version,
             'resolveConflicts': 'OVERWRITE'
         }
+        
+        if addon_version and addon_version.strip():
+            update_params['addonVersion'] = addon_version
         
         if configuration_values:
             update_params['configurationValues'] = json.dumps(configuration_values)
@@ -275,8 +279,9 @@ def update_addon_version(cluster_name, addon_name, addon_version, current_versio
             # Same or lower version - skip update
             print(f"Addon {addon_name} already exists with version {current_version} (requested: {addon_version}), skipping update")
     else:
-        # No version specified - keep existing version
-        print(f"Addon {addon_name} already exists with version {current_version}, no version specified, keeping current version")
+        # No version specified - update to latest default version
+        print(f"Addon {addon_name} already exists with version {current_version}, no version specified, updating to latest default...")
+        update_addon(cluster_name, addon_name, addon_version, configuration_values, service_account_role_arn)
 
 
 def on_create():

@@ -21,7 +21,7 @@ Parameters:
     Description: Shortened name for the add-on to use in resource names (Lambda, IAM roles, etc.)
   AddonVersion:
     Type: String
-    Default: v1.14.1-eksbuild.1
+    Default: ''
     Description: Version of the aws-mountpoint-s3-csi-driver EKS add-on to install
   AddonConfiguration:
     Type: String

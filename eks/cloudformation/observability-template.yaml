@@ -786,7 +786,7 @@ Resources:
                           - Arn
           PolicyName: EKSAddOnUpdatePolicy
       RoleName:
-        Fn::Sub: ${ResourceNamePrefix}-AddOnUpdate
+        Fn::Sub: ${ResourceNamePrefix}-AddonUpd
     Metadata:
       aws:cdk:path: ObservabilityCfnTemplate/AddOnUpdateLambdaRole
     Condition: IsAmgAllowed
@@ -817,7 +817,7 @@ Resources:
                   - Arn
               - Ref: GrafanaWorkspaceArn
       FunctionName:
-        Fn::Sub: ${ResourceNamePrefix}-AddOnUpdate
+        Fn::Sub: ${ResourceNamePrefix}-AddonUpd
       Handler: lambda_function.lambda_handler
       MemorySize: 2048
       Role:

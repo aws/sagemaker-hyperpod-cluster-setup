@@ -306,11 +306,11 @@ Resources:
           PolicyName:
             Fn::Sub: ${ResourceNamePrefix}-Karpenter-Policy
       RoleName:
-        Fn::Sub: ${ResourceNamePrefix}-ClusterRole
+        Fn::Sub: ${ResourceNamePrefix}-ClsRole
       Tags:
         - Key: aws-sagemaker-hyperpod-prerequisite
           Value:
-            Fn::Sub: ${ResourceNamePrefix}-ClusterRole
+            Fn::Sub: ${ResourceNamePrefix}-ClsRole
     Metadata:
       aws:cdk:path: HyperPodClusterCfnTemplate/ClusterRole
     Condition: CreateClusterRoleCondition

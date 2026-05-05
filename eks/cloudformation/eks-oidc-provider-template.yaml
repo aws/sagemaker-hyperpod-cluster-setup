@@ -88,7 +88,7 @@ Resources:
             Ref: EKSClusterName
           PATH: /opt/python/bin:/var/lang/bin:/usr/local/bin:/usr/bin/:/bin
       FunctionName:
-        Fn::Sub: ${ResourceNamePrefix}-oidc-provider-func
+        Fn::Sub: ${ResourceNamePrefix}-oidcfunc
       Handler: lambda_function.lambda_handler
       Layers:
         - Ref: OidcProviderCustomResourceLayer
