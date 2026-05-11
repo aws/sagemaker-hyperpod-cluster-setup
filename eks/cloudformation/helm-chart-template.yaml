@@ -138,7 +138,7 @@ Resources:
             Fn::If:
               - CreateRIGCondition
               - 5b703ed8b2f1f60176013ead2519541381f0e177
-              - dd41610e9976f1fdfdb6cd8a804dcbbad074ada4
+              - 3c8a7fbf209da1bf1a780e17a8d0a9508b40aaee
           CHART_PATH:
             Ref: HelmRepoPath
           OPERATORS:

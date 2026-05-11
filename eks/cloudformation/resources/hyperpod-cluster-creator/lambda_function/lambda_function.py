@@ -87,9 +87,9 @@ def enrich_instance_groups(instance_groups, isRig=False):
     private_subnet_ids_str = os.environ.get('PRIVATE_SUBNET_IDS', '')
     private_subnet_ids = private_subnet_ids_str.split(',') if private_subnet_ids_str and ',' in private_subnet_ids_str else [private_subnet_ids_str] if private_subnet_ids_str else []
     
-    # Check if any instance group has TargetAvailabilityZoneId
-    has_target_az = any('TargetAvailabilityZoneId' in group for group in instance_groups)
-    
+    # Check if any instance group has TargetAvailabilityZoneId or TargetAvailabilityZoneIds
+    has_target_az = any('TargetAvailabilityZoneId' in group or 'TargetAvailabilityZoneIds' in group for group in instance_groups)
+
     # Get subnet to AZ mapping from AWS if needed and if we have subnets
     subnet_to_az_mapping = {}
     if has_target_az and private_subnet_ids:
@@ -160,9 +160,44 @@ def enrich_instance_groups(instance_groups, isRig=False):
             if 'SecurityGroupIds' not in instance_group['OverrideVpcConfig']:
                 instance_group['OverrideVpcConfig']['SecurityGroupIds'] = security_group_ids
         
-        # Check if instance group has TargetAvailabilityZoneId
-        if 'TargetAvailabilityZoneId' in instance_group:
-            # Check if both subnet_to_az_mapping and security_group_ids exist
+        # Check if instance group has TargetAvailabilityZoneIds (plural)
+        if 'TargetAvailabilityZoneIds' in instance_group:
+            if not subnet_to_az_mapping or not security_group_ids:
+                raise ValueError("When using TargetAvailabilityZoneIds, both subnet mappings and security group IDs must be provided")
+
+            target_azs = instance_group['TargetAvailabilityZoneIds']
+            print(f"Instance group has TargetAvailabilityZoneIds: {target_azs}")
+
+            # Find the first subnet in each target AZ
+            target_subnets = []
+            for target_az in target_azs:
+                for subnet_id, az in subnet_to_az_mapping.items():
+                    if az == target_az:
+                        target_subnets.append(subnet_id)
+                        break
+                else:
+                    print(f"Warning: No subnet found in AZ {target_az}")
+
+            if target_subnets:
+                print(f"Found subnets {target_subnets} for AZs {target_azs}")
+
+                if 'OverrideVpcConfig' in instance_group:
+                    if 'SecurityGroupIds' not in instance_group['OverrideVpcConfig']:
+                        instance_group['OverrideVpcConfig']['SecurityGroupIds'] = security_group_ids
+                    instance_group['OverrideVpcConfig']['Subnets'] = target_subnets
+                    print(f"Updated Subnets in existing OverrideVpcConfig: {instance_group['OverrideVpcConfig']}")
+                else:
+                    instance_group['OverrideVpcConfig'] = {
+                        'SecurityGroupIds': security_group_ids,
+                        'Subnets': target_subnets
+                    }
+                    print(f"Created new OverrideVpcConfig: {instance_group['OverrideVpcConfig']}")
+
+            del instance_group['TargetAvailabilityZoneIds']
+            print(f"Removed TargetAvailabilityZoneIds from instance group after processing")
+
+        # Check if instance group has TargetAvailabilityZoneId (singular)
+        elif 'TargetAvailabilityZoneId' in instance_group:
             if not subnet_to_az_mapping or not security_group_ids:
                 raise ValueError("When using TargetAvailabilityZoneId, both subnet mappings and security group IDs must be provided")
             
