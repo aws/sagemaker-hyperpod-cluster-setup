@@ -1,5 +1,12 @@
 Description: 'Task Governance Addon Migration () - Single Stack: Backup, Update Addon, Restore, Cleanup'
 Parameters:
+  Stage:
+    Type: String
+    Default: prod
+    AllowedValues:
+      - gamma
+      - prod
+    Description: Deployment stage (gamma, prod)
   ResourceNamePrefix:
     Type: String
     Default: sagemaker-hyperpod-eks
@@ -9,10 +16,14 @@ Parameters:
     Description: The name of the EKS cluster.
   BackupS3Bucket:
     Type: String
-    Description: S3 bucket for backing up CRs before migration.
+    Default: ''
+    Description: >-
+      S3 bucket for backing up CRs before migration. Defaults to sagemaker-hyperpod-{EKSClusterName}-tg-bucket.
+      Auto-created if it does not exist.
   CustomResourceS3Bucket:
     Type: String
-    Description: S3 bucket containing Lambda code and templates.
+    Default: ''
+    Description: S3 bucket containing Lambda code and templates. Defaults to aws-sagemaker-hyperpod-cluster-setup-{region}-{stage}.
   FunctionS3Key:
     Type: String
     Default: resources/artifacts/task-governance-addon-migration-lambda-function.zip
@@ -33,6 +44,17 @@ Parameters:
     Description: >-
       Current installed version of the Task Governance addon. Used with the target version to look up the CRD migration
       spec. If current and target have the same major.minor, no CRD schema migration runs.
+Conditions:
+  BackupS3BucketProvided:
+    Fn::Not:
+      - Fn::Equals:
+          - Ref: BackupS3Bucket
+          - ''
+  CustomResourceS3BucketProvided:
+    Fn::Not:
+      - Fn::Equals:
+          - Ref: CustomResourceS3Bucket
+          - ''
 Resources:
   MigrationRole:
     Type: AWS::IAM::Role
@@ -68,16 +90,50 @@ Resources:
                   - s3:GetObject
                   - s3:DeleteObject
                 Resource:
-                  Fn::Sub: arn:${AWS::Partition}:s3:::${BackupS3Bucket}/task-governance-addon-migration/*
+                  Fn::Join:
+                    - ''
+                    - - 'arn:'
+                      - Ref: AWS::Partition
+                      - ':s3:::'
+                      - Fn::If:
+                          - BackupS3BucketProvided
+                          - Ref: BackupS3Bucket
+                          - Fn::Sub: sagemaker-hyperpod-${EKSClusterName}-tg-bucket
+                      - /task-governance-addon-migration/*
               - Effect: Allow
                 Action:
                   - s3:ListBucket
                 Resource:
-                  Fn::Sub: arn:${AWS::Partition}:s3:::${BackupS3Bucket}
+                  Fn::Join:
+                    - ''
+                    - - 'arn:'
+                      - Ref: AWS::Partition
+                      - ':s3:::'
+                      - Fn::If:
+                          - BackupS3BucketProvided
+                          - Ref: BackupS3Bucket
+                          - Fn::Sub: sagemaker-hyperpod-${EKSClusterName}-tg-bucket
                 Condition:
                   StringLike:
                     s3:prefix:
                       - task-governance-addon-migration/*
+              - Effect: Allow
+                Action:
+                  - s3:CreateBucket
+                  - s3:DeleteBucket
+                  - s3:PutEncryptionConfiguration
+                  - s3:PutBucketPolicy
+                  - s3:PutBucketPublicAccessBlock
+                Resource:
+                  Fn::Join:
+                    - ''
+                    - - 'arn:'
+                      - Ref: AWS::Partition
+                      - ':s3:::'
+                      - Fn::If:
+                          - BackupS3BucketProvided
+                          - Ref: BackupS3Bucket
+                          - Fn::Sub: sagemaker-hyperpod-${EKSClusterName}-tg-bucket
           PolicyName:
             Fn::Sub: ${ResourceNamePrefix}-TGMigration-Access
     Metadata:
@@ -112,7 +168,10 @@ Resources:
         - python3.12
       Content:
         S3Bucket:
-          Ref: CustomResourceS3Bucket
+          Fn::If:
+            - CustomResourceS3BucketProvided
+            - Ref: CustomResourceS3Bucket
+            - Fn::Sub: aws-sagemaker-hyperpod-cluster-setup-${AWS::Region}-${Stage}
         S3Key:
           Ref: LayerS3Key
       Description: Lambda Layer for kubectl and aws-iam-authenticator
@@ -125,7 +184,10 @@ Resources:
     Properties:
       Code:
         S3Bucket:
-          Ref: CustomResourceS3Bucket
+          Fn::If:
+            - CustomResourceS3BucketProvided
+            - Ref: CustomResourceS3Bucket
+            - Fn::Sub: aws-sagemaker-hyperpod-cluster-setup-${AWS::Region}-${Stage}
         S3Key:
           Ref: FunctionS3Key
       Environment:
@@ -133,7 +195,10 @@ Resources:
           EKS_CLUSTER_NAME:
             Ref: EKSClusterName
           BACKUP_S3_BUCKET:
-            Ref: BackupS3Bucket
+            Fn::If:
+              - BackupS3BucketProvided
+              - Ref: BackupS3Bucket
+              - Fn::Sub: sagemaker-hyperpod-${EKSClusterName}-tg-bucket
           CURRENT_TASK_GOVERNANCE_ADDON_VERSION:
             Ref: CurrentTaskGovernanceAddonVersion
           TASK_GOVERNANCE_ADDON_VERSION:
@@ -200,7 +265,10 @@ Resources:
     Properties:
       Code:
         S3Bucket:
-          Ref: CustomResourceS3Bucket
+          Fn::If:
+            - CustomResourceS3BucketProvided
+            - Ref: CustomResourceS3Bucket
+            - Fn::Sub: aws-sagemaker-hyperpod-cluster-setup-${AWS::Region}-${Stage}
         S3Key:
           Ref: FunctionS3Key
       Environment:
@@ -274,7 +342,10 @@ Resources:
     Properties:
       Code:
         S3Bucket:
-          Ref: CustomResourceS3Bucket
+          Fn::If:
+            - CustomResourceS3BucketProvided
+            - Ref: CustomResourceS3Bucket
+            - Fn::Sub: aws-sagemaker-hyperpod-cluster-setup-${AWS::Region}-${Stage}
         S3Key:
           Ref: FunctionS3Key
       Environment:
@@ -282,7 +353,10 @@ Resources:
           EKS_CLUSTER_NAME:
             Ref: EKSClusterName
           BACKUP_S3_BUCKET:
-            Ref: BackupS3Bucket
+            Fn::If:
+              - BackupS3BucketProvided
+              - Ref: BackupS3Bucket
+              - Fn::Sub: sagemaker-hyperpod-${EKSClusterName}-tg-bucket
           CURRENT_TASK_GOVERNANCE_ADDON_VERSION:
             Ref: CurrentTaskGovernanceAddonVersion
           TASK_GOVERNANCE_ADDON_VERSION:
@@ -350,7 +424,10 @@ Resources:
     Properties:
       Code:
         S3Bucket:
-          Ref: CustomResourceS3Bucket
+          Fn::If:
+            - CustomResourceS3BucketProvided
+            - Ref: CustomResourceS3Bucket
+            - Fn::Sub: aws-sagemaker-hyperpod-cluster-setup-${AWS::Region}-${Stage}
         S3Key:
           Ref: FunctionS3Key
       Environment:
@@ -358,7 +435,15 @@ Resources:
           EKS_CLUSTER_NAME:
             Ref: EKSClusterName
           BACKUP_S3_BUCKET:
-            Ref: BackupS3Bucket
+            Fn::If:
+              - BackupS3BucketProvided
+              - Ref: BackupS3Bucket
+              - Fn::Sub: sagemaker-hyperpod-${EKSClusterName}-tg-bucket
+          BUCKET_AUTO_CREATED:
+            Fn::If:
+              - BackupS3BucketProvided
+              - 'false'
+              - 'true'
           MIGRATION_MODE: cleanup
           PATH: /opt/python/bin:/var/lang/bin:/usr/local/bin:/usr/bin/:/bin
           KUBECONFIG: /tmp/.kube/config

@@ -127,6 +127,7 @@ Resources:
               - Effect: Allow
                 Action:
                   - ec2:DescribeSubnets
+                  - ec2:DescribeNetworkInterfaces
                 Resource: '*'
           PolicyName:
             Fn::Sub: ${ResourceNamePrefix}-EC2Access

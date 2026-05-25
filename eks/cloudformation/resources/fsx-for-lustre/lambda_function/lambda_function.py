@@ -178,11 +178,11 @@ def find_subnet_in_az(az_id, subnet_ids):
 def get_fsx_network_config(fsx_file_system_id, aws_region):
     """
     Get subnet ID and security group IDs from an existing FSx file system
-    
+
     Args:
         fsx_file_system_id: The FSx file system ID
         aws_region: AWS region
-        
+
     Returns:
         Tuple of (subnet_id, security_group_ids)
     """
@@ -190,18 +190,35 @@ def get_fsx_network_config(fsx_file_system_id, aws_region):
         # Get FSx file system details using boto3
         fsx_client = boto3.client('fsx', region_name=aws_region)
         fsx_response = fsx_client.describe_file_systems(FileSystemIds=[fsx_file_system_id])
-        
+
         if not fsx_response['FileSystems']:
             raise Exception(f"FSx file system {fsx_file_system_id} not found")
-            
+
         fsx_details = fsx_response['FileSystems'][0]
-        
+
         # Get network information
         subnet_id = fsx_details['SubnetIds'][0]  # Use first subnet if multiple
-        security_group_ids = ','.join(fsx_details['NetworkInterfaceIds'])
-        
+
+        # Look up security groups from the network interfaces attached to the FSx file system
+        eni_ids = fsx_details.get('NetworkInterfaceIds', [])
+        if not eni_ids:
+            raise Exception(f"No network interfaces found for FSx file system {fsx_file_system_id}")
+
+        ec2_client = boto3.client('ec2', region_name=aws_region)
+        eni_response = ec2_client.describe_network_interfaces(NetworkInterfaceIds=eni_ids)
+
+        sg_ids = set()
+        for eni in eni_response['NetworkInterfaces']:
+            for group in eni['Groups']:
+                sg_ids.add(group['GroupId'])
+
+        if not sg_ids:
+            raise Exception(f"No security groups found on network interfaces for FSx file system {fsx_file_system_id}")
+
+        security_group_ids = ','.join(sorted(sg_ids))
+
         return subnet_id, security_group_ids
-        
+
     except Exception as e:
         print(f"Error getting FSx network configuration: {str(e)}")
         raise

@@ -383,6 +383,64 @@ def verify_s3_backup(bucket, key, expected_count):
     print(f"S3 verification passed: {key} contains {actual_count} resources")
 
 
+def ensure_backup_bucket_exists(bucket):
+    """Ensure the backup S3 bucket exists, creating it with secure defaults if not.
+
+    Uses create_bucket directly and handles BucketAlreadyOwnedByYou as the
+    "already exists" case. BucketAlreadyExists (different account) raises to
+    prevent bucket namespace squatting.
+    """
+    s3 = boto3.client('s3')
+    region = os.environ.get('AWS_REGION', os.environ.get('AWS_DEFAULT_REGION', 'us-east-1'))
+
+    create_args = {'Bucket': bucket}
+    if region != 'us-east-1':
+        create_args['CreateBucketConfiguration'] = {'LocationConstraint': region}
+
+    try:
+        s3.create_bucket(**create_args)
+        print(f"Created bucket s3://{bucket}")
+    except ClientError as e:
+        error_code = e.response['Error']['Code']
+        if error_code == 'BucketAlreadyOwnedByYou':
+            print(f"Backup bucket s3://{bucket} already exists")
+        elif error_code == 'BucketAlreadyExists':
+            raise RuntimeError(
+                f"Bucket s3://{bucket} already exists but is owned by a different AWS account. "
+                f"Please specify a unique BackupS3Bucket name."
+            ) from e
+        else:
+            raise
+
+    # Always apply security configuration idempotently (handles retry after partial failure)
+    s3.put_bucket_encryption(
+        Bucket=bucket,
+        ServerSideEncryptionConfiguration={
+            'Rules': [{'ApplyServerSideEncryptionByDefault': {'SSEAlgorithm': 'AES256'}}]
+        },
+    )
+    s3.put_public_access_block(
+        Bucket=bucket,
+        PublicAccessBlockConfiguration={
+            'BlockPublicAcls': True, 'IgnorePublicAcls': True,
+            'BlockPublicPolicy': True, 'RestrictPublicBuckets': True,
+        },
+    )
+    policy = {
+        'Version': '2012-10-17',
+        'Statement': [{
+            'Sid': 'DenyUnsecuredTransport',
+            'Effect': 'Deny',
+            'Principal': '*',
+            'Action': 's3:*',
+            'Resource': [f'arn:aws:s3:::{bucket}', f'arn:aws:s3:::{bucket}/*'],
+            'Condition': {'Bool': {'aws:SecureTransport': 'false'}},
+        }],
+    }
+    s3.put_bucket_policy(Bucket=bucket, Policy=json.dumps(policy))
+    print(f"Configured encryption, public access block, and TLS-only policy on s3://{bucket}")
+
+
 def delete_crd(crd_name):
     """Delete a CRD from the cluster."""
     if not crd_exists(crd_name):
@@ -581,6 +639,9 @@ def on_backup(context):
     cluster_name = os.environ[EKS_CLUSTER_NAME]
     region = os.environ.get('AWS_REGION', os.environ.get('AWS_DEFAULT_REGION', 'us-east-1'))
     bucket = os.environ[BACKUP_S3_BUCKET]
+
+    # Ensure backup bucket exists before writing any data
+    ensure_backup_bucket_exists(bucket)
 
     write_kubeconfig(cluster_name, region)
 
@@ -874,10 +935,35 @@ def on_cleanup(context):
         print(f"CLEANUP_PARTIAL_FAILURE: {failed_count} objects failed to delete")
 
     print(f"Cleanup complete. Deleted {deleted} objects from s3://{bucket}/{prefix}")
+
+    # Only delete the bucket if it was auto-created for this migration
+    bucket_deleted = False
+    if os.environ.get('BUCKET_AUTO_CREATED', 'false') == 'true':
+        try:
+            s3.delete_bucket(Bucket=bucket)
+            print(f"Deleted bucket s3://{bucket}")
+            bucket_deleted = True
+        except ClientError as e:
+            error_code = e.response['Error']['Code']
+            if error_code == 'BucketNotEmpty':
+                print(f"WARNING: Could not delete bucket s3://{bucket} — not empty")
+            elif error_code == 'NoSuchBucket':
+                print(f"Bucket s3://{bucket} does not exist")
+                bucket_deleted = True
+            else:
+                print(f"WARNING: Failed to delete bucket s3://{bucket}: {error_code}")
+        except Exception as e:
+            print(f"WARNING: Failed to delete bucket s3://{bucket}: {e}")
+    else:
+        print(f"Skipping bucket deletion — bucket s3://{bucket} was user-provided")
+
     # Always return SUCCESS — cleanup failure must not block migration
+    reason = f'Cleanup complete. Deleted {deleted} backup objects.'
+    if bucket_deleted:
+        reason += ' Bucket deleted.'
     return {
         'Status': 'SUCCESS',
-        'Reason': f'Cleanup complete. Deleted {deleted} backup objects.',
+        'Reason': reason,
         'DeletedObjects': str(deleted),
     }
 
