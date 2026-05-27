@@ -155,6 +155,13 @@ Parameters:
       - BASIC
       - ADVANCED
     Description: The level of accelerated compute metric for EKS AddOn.
+  RayMetricLevel:
+    Type: String
+    Default: ADVANCED
+    AllowedValues:
+      - DISABLED
+      - ADVANCED
+    Description: The level of ray metric for EKS AddOn.
   Logging:
     Type: String
     Default: 'false'
@@ -555,6 +562,8 @@ Resources:
             - Ref: AcceleratedComputeMetricLevel
             - '","scrapeInterval":30},"networkMetrics":{"level":"'
             - Ref: NetworkMetricLevel
+            - '","scrapeInterval":30},"rayMetrics":{"level":"'
+            - Ref: RayMetricLevel
             - '","scrapeInterval":30}},"logging":{"enabled":true}}'
       PodIdentityAssociations:
         - RoleArn:
@@ -612,6 +621,8 @@ Resources:
             - Ref: AcceleratedComputeMetricLevel
             - '","scrapeInterval":30},"networkMetrics":{"level":"'
             - Ref: NetworkMetricLevel
+            - '","scrapeInterval":30},"rayMetrics":{"level":"'
+            - Ref: RayMetricLevel
             - '","scrapeInterval":30}},"logging":{"enabled":false}}'
       PodIdentityAssociations:
         - RoleArn:

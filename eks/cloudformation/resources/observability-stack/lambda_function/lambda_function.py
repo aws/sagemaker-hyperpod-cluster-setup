@@ -107,6 +107,10 @@ def on_create(event):
                 'ParameterValue': props.get('NetworkMetricLevel')
                 },
                 {
+                'ParameterKey': 'RayMetricLevel',
+                'ParameterValue': props.get('RayMetricLevel')
+                },
+                {
                 'ParameterKey': 'Logging',
                 'ParameterValue': props.get('Logging')
                 },
@@ -248,6 +252,10 @@ def on_update(event):
                 {
                 'ParameterKey': 'NetworkMetricLevel',
                 'ParameterValue': props.get('NetworkMetricLevel')
+                },
+                {
+                'ParameterKey': 'RayMetricLevel',
+                'ParameterValue': props.get('RayMetricLevel')
                 },
                 {
                 'ParameterKey': 'Logging',

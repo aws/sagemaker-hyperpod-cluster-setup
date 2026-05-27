@@ -132,6 +132,7 @@ Metadata:
           - ClusterMetricLevel
           - NodeMetricLevel
           - AcceleratedComputeMetricLevel
+          - RayMetricLevel
           - Logging
           - HyperPodObservabilityRole
           - GrafanaRole
@@ -382,6 +383,8 @@ Metadata:
         default: Scaling Metric Level
       NetworkMetricLevel:
         default: Network Metric Level
+      RayMetricLevel:
+        default: Ray Metric Level
       Logging:
         default: Logging
       HyperPodObservabilityRole:
@@ -1017,6 +1020,13 @@ Parameters:
       - DISABLED
       - ADVANCED
     Description: The level of network metric for EKS AddOn.
+  RayMetricLevel:
+    Type: String
+    Default: ADVANCED
+    AllowedValues:
+      - DISABLED
+      - ADVANCED
+    Description: The level of ray metric for EKS AddOn.
   GrafanaWorkspaceName:
     Type: String
     Default: ''
@@ -2465,6 +2475,8 @@ Resources:
         Ref: NodeMetricLevel
       AcceleratedComputeMetricLevel:
         Ref: AcceleratedComputeMetricLevel
+      RayMetricLevel:
+        Ref: RayMetricLevel
       Logging:
         Ref: Logging
       GrafanaWorkspaceName:
