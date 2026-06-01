@@ -86,14 +86,22 @@ done
 
 # Copy shared libraries
 echo "Copying shared libraries..."
-echo "Finding and copying required libraries (excluding libc.so.6)..."
+# Exclude libc.so.6 (always provided by the runtime) AND the OpenSSL libraries
+# (libssl/libcrypto). The Lambda Python runtime's _ssl C extension is built
+# against the runtime's own OpenSSL; bundling our (older) libssl/libcrypto here
+# and putting python/lib first on LD_LIBRARY_PATH makes _ssl load OUR libs, which
+# breaks `import ssl` when the runtime is upgraded to a newer OpenSSL
+# (e.g. "version `OPENSSL_3.3.0' not found"). That kills HTTPS for the
+# cfnresponse callback and hangs the custom resource. Let helm/kubectl/git/curl
+# resolve OpenSSL from the runtime's system libraries instead.
+echo "Finding and copying required libraries (excluding libc.so.6, libssl, libcrypto)..."
 for binary in helm-lambda-layer/python/bin/* helm-lambda-layer/python/libexec/git-core/*; do
     if [ -f "$binary" ] && [ -x "$binary" ]; then
         echo "Analyzing dependencies for $binary..."
         ldd "$binary" 2>/dev/null | \
             grep "=> /" | \
             awk '{print $3}' | \
-            grep -v 'libc.so.6' | \
+            grep -vE 'libc\.so\.6|libssl\.so|libcrypto\.so' | \
             while read -r lib; do
                 if [ -f "$lib" ]; then
                     echo "Copying $lib..."
