@@ -14,11 +14,18 @@ Parameters:
   EKSClusterName:
     Type: String
     Description: The name of the EKS cluster.
+  HyperpodClusterId:
+    Type: String
+    AllowedPattern: '[a-z0-9]{12}'
+    ConstraintDescription: HyperpodClusterId must be exactly 12 lowercase alphanumeric characters (the bare cluster ID, not an ARN).
+    Description: >-
+      The SageMaker HyperPod cluster ID, used to name the backup S3 bucket. Must be the bare cluster ID (12 lowercase
+      alphanumeric characters), not a cluster ARN, so the resulting bucket name is S3-compliant.
   BackupS3Bucket:
     Type: String
     Default: ''
     Description: >-
-      S3 bucket for backing up CRs before migration. Defaults to sagemaker-hyperpod-{EKSClusterName}-tg-bucket.
+      S3 bucket for backing up CRs before migration. Defaults to sagemaker-hyperpod-{HyperpodClusterId}-tg-bucket.
       Auto-created if it does not exist.
   CustomResourceS3Bucket:
     Type: String
@@ -98,7 +105,7 @@ Resources:
                       - Fn::If:
                           - BackupS3BucketProvided
                           - Ref: BackupS3Bucket
-                          - Fn::Sub: sagemaker-hyperpod-${EKSClusterName}-tg-bucket
+                          - Fn::Sub: sagemaker-hyperpod-${HyperpodClusterId}-tg-bucket
                       - /task-governance-addon-migration/*
               - Effect: Allow
                 Action:
@@ -112,7 +119,7 @@ Resources:
                       - Fn::If:
                           - BackupS3BucketProvided
                           - Ref: BackupS3Bucket
-                          - Fn::Sub: sagemaker-hyperpod-${EKSClusterName}-tg-bucket
+                          - Fn::Sub: sagemaker-hyperpod-${HyperpodClusterId}-tg-bucket
                 Condition:
                   StringLike:
                     s3:prefix:
@@ -133,7 +140,7 @@ Resources:
                       - Fn::If:
                           - BackupS3BucketProvided
                           - Ref: BackupS3Bucket
-                          - Fn::Sub: sagemaker-hyperpod-${EKSClusterName}-tg-bucket
+                          - Fn::Sub: sagemaker-hyperpod-${HyperpodClusterId}-tg-bucket
           PolicyName:
             Fn::Sub: ${ResourceNamePrefix}-TGMigration-Access
     Metadata:
@@ -198,7 +205,7 @@ Resources:
             Fn::If:
               - BackupS3BucketProvided
               - Ref: BackupS3Bucket
-              - Fn::Sub: sagemaker-hyperpod-${EKSClusterName}-tg-bucket
+              - Fn::Sub: sagemaker-hyperpod-${HyperpodClusterId}-tg-bucket
           CURRENT_TASK_GOVERNANCE_ADDON_VERSION:
             Ref: CurrentTaskGovernanceAddonVersion
           TASK_GOVERNANCE_ADDON_VERSION:
@@ -356,7 +363,7 @@ Resources:
             Fn::If:
               - BackupS3BucketProvided
               - Ref: BackupS3Bucket
-              - Fn::Sub: sagemaker-hyperpod-${EKSClusterName}-tg-bucket
+              - Fn::Sub: sagemaker-hyperpod-${HyperpodClusterId}-tg-bucket
           CURRENT_TASK_GOVERNANCE_ADDON_VERSION:
             Ref: CurrentTaskGovernanceAddonVersion
           TASK_GOVERNANCE_ADDON_VERSION:
@@ -438,7 +445,7 @@ Resources:
             Fn::If:
               - BackupS3BucketProvided
               - Ref: BackupS3Bucket
-              - Fn::Sub: sagemaker-hyperpod-${EKSClusterName}-tg-bucket
+              - Fn::Sub: sagemaker-hyperpod-${HyperpodClusterId}-tg-bucket
           BUCKET_AUTO_CREATED:
             Fn::If:
               - BackupS3BucketProvided
