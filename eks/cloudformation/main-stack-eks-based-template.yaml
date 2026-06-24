@@ -30,6 +30,7 @@ Metadata:
           - IdleResourceSharing
           - TieredStorageConfig
           - TieredKVCacheConfig
+          - RestrictedInstanceGroupsConfig
       - Label:
           default: Networking
         Parameters:
@@ -357,6 +358,8 @@ Metadata:
         default: Tiered Storage Configuration
       TieredKVCacheConfig:
         default: Tiered KV Cache Configuration
+      RestrictedInstanceGroupsConfig:
+        default: Restricted Instance Groups Configuration
       PrometheusWorkspaceId:
         default: Prometheus Workspace Id
       PrometheusWorkspaceArn:
@@ -776,6 +779,13 @@ Parameters:
     Description: >-
       JSON string containing tiered KV cache configuration. Format: {"KVCacheMode": "Enable", "InstanceGroup": ["ig-1",
       "ig-2"], "NVMeMode": "Enable"}. Only applicable for EKS-based clusters with P-series instances.
+  RestrictedInstanceGroupsConfig:
+    Type: String
+    Default: ''
+    Description: >-
+      JSON string containing restricted instance groups configuration. Format: {"SharedEnvironmentConfig":
+      {"FSxLustreDeletionPolicy": "Keep"|"DeleteIfNotUsed", "FSxLustreConfig": {"SizeInGiB": Integer,
+      "PerUnitStorageThroughput": Integer}}}.
   PriorityClasses:
     Type: String
     Default: ''
@@ -1871,6 +1881,8 @@ Resources:
           Ref: Tags
         TieredStorageConfig:
           Ref: TieredStorageConfig
+        RestrictedInstanceGroupsConfig:
+          Ref: RestrictedInstanceGroupsConfig
     Metadata:
       aws:cdk:path: MainEksBasedCfnTemplate/HyperPodParamClusterStack
     Condition: CreateHyperPodClusterStackCondition

@@ -467,6 +467,16 @@ def create_hyperpod_cluster(instance_groups):
         if os.environ.get('TIERED_STORAGE_CONFIG', ''):
             print("Warning: TieredStorageConfig is only supported for EKS-based HyperPod clusters and will be ignored for SLURM clusters")
 
+    # Get restricted instance groups config if available
+    rig_config_str = os.environ.get('RESTRICTED_INSTANCE_GROUPS_CONFIG', '')
+    if rig_config_str:
+        try:
+            rig_config = json.loads(rig_config_str)
+            create_params['RestrictedInstanceGroupsConfig'] = rig_config
+            print(f"Adding RestrictedInstanceGroupsConfig: {rig_config}")
+        except json.JSONDecodeError as e:
+            print(f"Error parsing RESTRICTED_INSTANCE_GROUPS_CONFIG: {e}")
+
     # Add NodeProvisioningMode if provided (for both EKS and SLURM)
     node_provisioning_mode = os.environ.get('NODE_PROVISIONING_MODE', '')
     if node_provisioning_mode and node_provisioning_mode == 'Continuous':

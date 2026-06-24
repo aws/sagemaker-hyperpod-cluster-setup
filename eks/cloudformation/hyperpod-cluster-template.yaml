@@ -86,6 +86,13 @@ Parameters:
       JSON string containing tiered storage configuration for the SageMaker HyperPod cluster. Format:
       {"InstanceMemoryAllocationPercentage": Integer (0-100), "Mode": String ("Enable" or "Disable")}. Only applicable
       for EKS-based clusters.
+  RestrictedInstanceGroupsConfig:
+    Type: String
+    Default: ''
+    Description: >-
+      JSON string containing restricted instance groups configuration. Format: {"SharedEnvironmentConfig":
+      {"FSxLustreDeletionPolicy": "Keep"|"DeleteIfNotUsed", "FSxLustreConfig": {"SizeInGiB": Integer,
+      "PerUnitStorageThroughput": Integer}}}.
   InstanceGroupSettings1:
     Type: String
     Default: '[]'
@@ -447,6 +454,8 @@ Resources:
             Ref: EnableHPTrainingOperatorFeature
           TIERED_STORAGE_CONFIG:
             Ref: TieredStorageConfig
+          RESTRICTED_INSTANCE_GROUPS_CONFIG:
+            Ref: RestrictedInstanceGroupsConfig
           INSTANCE_GROUP_SETTINGS1:
             Ref: InstanceGroupSettings1
           RIG_SETTINGS1:
