@@ -1377,6 +1377,8 @@ Mappings:
       isAllowed: 'true'
     eu-south-2:
       isAllowed: 'true'
+    ap-south-2:
+      isAllowed: 'true'
 Resources:
   VPCStack:
     Type: AWS::CloudFormation::Stack
