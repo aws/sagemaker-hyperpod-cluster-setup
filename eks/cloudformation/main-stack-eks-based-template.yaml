@@ -564,11 +564,15 @@ Parameters:
     Description: Specifies whether to enable or disable the automatic node recovery feature (Automatic or None).
   NodeProvisioningMode:
     Type: String
-    Default: ''
+    Default: Continuous
     AllowedValues:
       - Continuous
       - ''
-    Description: Enable or disable the continuous provisioning mode
+    Description: >-
+      Node provisioning mode for the HyperPod cluster. Defaults to Continuous
+      (partial fulfillment with asynchronous retries; the cluster becomes
+      InService while nodes stream in). Set to '' (empty) for the legacy
+      all-or-nothing synchronous provisioning behavior.
   SageMakerIAMRoleName:
     Type: String
     Default: iam-role
