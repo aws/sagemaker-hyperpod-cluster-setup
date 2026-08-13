@@ -1895,9 +1895,34 @@ Resources:
         Fn::GetAtt:
           - HyperPodParamClusterStack
           - Outputs.HyperPodClusterTemplateUrlOutput
+    DependsOn:
+      - LifeCycleScriptWaitCondition
     Metadata:
       aws:cdk:path: MainEksBasedCfnTemplate/HyperPodClusterStack
     Condition: CreateHyperPodClusterStackCondition
+  LifeCycleScriptFallbackWaitHandle:
+    Type: AWS::CloudFormation::WaitConditionHandle
+    Metadata:
+      aws:cdk:path: MainEksBasedCfnTemplate/LifeCycleScriptFallbackWaitHandle
+  LifeCycleScriptWaitHandle:
+    Type: AWS::CloudFormation::WaitConditionHandle
+    DependsOn:
+      - LifeCycleScriptStack
+    Metadata:
+      aws:cdk:path: MainEksBasedCfnTemplate/LifeCycleScriptWaitHandle
+    Condition: CreateLifeCycleScriptStackCondition
+  LifeCycleScriptWaitCondition:
+    Type: AWS::CloudFormation::WaitCondition
+    Properties:
+      Handle:
+        Fn::If:
+          - CreateLifeCycleScriptStackCondition
+          - Ref: LifeCycleScriptWaitHandle
+          - Ref: LifeCycleScriptFallbackWaitHandle
+      Timeout: '1'
+      Count: 0
+    Metadata:
+      aws:cdk:path: MainEksBasedCfnTemplate/LifeCycleScriptWaitCondition
   CertManagerStack:
     Type: AWS::CloudFormation::Stack
     Properties:
