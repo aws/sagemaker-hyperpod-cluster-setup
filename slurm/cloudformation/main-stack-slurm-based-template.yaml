@@ -324,7 +324,7 @@ Parameters:
   InstanceGroupSettings1:
     Type: String
     Default: >-
-      [[{"InstanceGroupName":"controller-machine","InstanceType":"ml.c5.xlarge","InstanceGroupType":"Controller","InstanceCount":1,"ThreadsPerCore":1,"TargetAvailabilityZoneId":"use2-az1"}],[{"InstanceGroupName":"compute-nodes","InstanceGroupType":"Compute","InstanceType":"ml.t3.medium","InstanceCount":4,"ThreadsPerCore":1,"TargetAvailabilityZoneId":"use2-az1"}]]
+      [[{"InstanceGroupName":"controller-machine","InstanceType":"ml.c5.xlarge","InstanceGroupType":"Controller","InstanceCount":1,"ThreadsPerCore":1,"TargetAvailabilityZoneId":"use2-az1","SlurmConfig":{"NodeType":"Controller"}}],[{"InstanceGroupName":"compute-nodes","InstanceGroupType":"Compute","InstanceType":"ml.t3.medium","InstanceCount":4,"ThreadsPerCore":1,"TargetAvailabilityZoneId":"use2-az1","SlurmConfig":{"NodeType":"Compute"}}]]
     Description: JSON array string containing instance group configurations.
   InstanceGroupSettings2:
     Type: String
