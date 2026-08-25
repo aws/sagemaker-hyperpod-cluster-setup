@@ -12,6 +12,12 @@ Parameters:
     Type: CommaDelimitedList
     Default: use2-az2,,,,
     Description: List of AZs to deploy subnets in (up to 5)
+  SubnetCIDRs:
+    Type: CommaDelimitedList
+    Default: ',,,,'
+    Description: >-
+      Optional comma-separated list of secondary VPC CIDR blocks (one per AZ, up to 5) to use for the HyperPod private
+      subnets. Leave any entry blank to fall back to the auto-computed default CIDR (backward compatible).
 Conditions:
   IsVpcCidr101:
     Fn::Equals:
@@ -51,6 +57,41 @@ Conditions:
           - Fn::Select:
               - 4
               - Ref: AvailabilityZoneIds
+          - ''
+  HasSubnetCIDR1:
+    Fn::Not:
+      - Fn::Equals:
+          - Fn::Select:
+              - 0
+              - Ref: SubnetCIDRs
+          - ''
+  HasSubnetCIDR2:
+    Fn::Not:
+      - Fn::Equals:
+          - Fn::Select:
+              - 1
+              - Ref: SubnetCIDRs
+          - ''
+  HasSubnetCIDR3:
+    Fn::Not:
+      - Fn::Equals:
+          - Fn::Select:
+              - 2
+              - Ref: SubnetCIDRs
+          - ''
+  HasSubnetCIDR4:
+    Fn::Not:
+      - Fn::Equals:
+          - Fn::Select:
+              - 3
+              - Ref: SubnetCIDRs
+          - ''
+  HasSubnetCIDR5:
+    Fn::Not:
+      - Fn::Equals:
+          - Fn::Select:
+              - 4
+              - Ref: SubnetCIDRs
           - ''
 Resources:
   VPC:
@@ -470,9 +511,14 @@ Resources:
       AmazonProvidedIpv6CidrBlock: false
       CidrBlock:
         Fn::If:
-          - IsVpcCidr101
-          - 10.192.0.0/16
-          - 10.1.0.0/16
+          - HasSubnetCIDR1
+          - Fn::Select:
+              - 0
+              - Ref: SubnetCIDRs
+          - Fn::If:
+              - IsVpcCidr101
+              - 10.192.0.0/16
+              - 10.1.0.0/16
       VpcId:
         Ref: VPC
     Metadata:
@@ -487,9 +533,14 @@ Resources:
           - Ref: AvailabilityZoneIds
       CidrBlock:
         Fn::If:
-          - IsVpcCidr101
-          - 10.192.0.0/16
-          - 10.1.0.0/16
+          - HasSubnetCIDR1
+          - Fn::Select:
+              - 0
+              - Ref: SubnetCIDRs
+          - Fn::If:
+              - IsVpcCidr101
+              - 10.192.0.0/16
+              - 10.1.0.0/16
       MapPublicIpOnLaunch: false
       Tags:
         - Key: aws-sagemaker-hyperpod-prerequiste
@@ -547,9 +598,14 @@ Resources:
       AmazonProvidedIpv6CidrBlock: false
       CidrBlock:
         Fn::If:
-          - IsVpcCidr101
-          - 10.193.0.0/16
-          - 10.2.0.0/16
+          - HasSubnetCIDR2
+          - Fn::Select:
+              - 1
+              - Ref: SubnetCIDRs
+          - Fn::If:
+              - IsVpcCidr101
+              - 10.193.0.0/16
+              - 10.2.0.0/16
       VpcId:
         Ref: VPC
     Metadata:
@@ -564,9 +620,14 @@ Resources:
           - Ref: AvailabilityZoneIds
       CidrBlock:
         Fn::If:
-          - IsVpcCidr101
-          - 10.193.0.0/16
-          - 10.2.0.0/16
+          - HasSubnetCIDR2
+          - Fn::Select:
+              - 1
+              - Ref: SubnetCIDRs
+          - Fn::If:
+              - IsVpcCidr101
+              - 10.193.0.0/16
+              - 10.2.0.0/16
       MapPublicIpOnLaunch: false
       Tags:
         - Key: aws-sagemaker-hyperpod-prerequiste
@@ -624,9 +685,14 @@ Resources:
       AmazonProvidedIpv6CidrBlock: false
       CidrBlock:
         Fn::If:
-          - IsVpcCidr101
-          - 10.194.0.0/16
-          - 10.3.0.0/16
+          - HasSubnetCIDR3
+          - Fn::Select:
+              - 2
+              - Ref: SubnetCIDRs
+          - Fn::If:
+              - IsVpcCidr101
+              - 10.194.0.0/16
+              - 10.3.0.0/16
       VpcId:
         Ref: VPC
     Metadata:
@@ -641,9 +707,14 @@ Resources:
           - Ref: AvailabilityZoneIds
       CidrBlock:
         Fn::If:
-          - IsVpcCidr101
-          - 10.194.0.0/16
-          - 10.3.0.0/16
+          - HasSubnetCIDR3
+          - Fn::Select:
+              - 2
+              - Ref: SubnetCIDRs
+          - Fn::If:
+              - IsVpcCidr101
+              - 10.194.0.0/16
+              - 10.3.0.0/16
       MapPublicIpOnLaunch: false
       Tags:
         - Key: aws-sagemaker-hyperpod-prerequiste
@@ -701,9 +772,14 @@ Resources:
       AmazonProvidedIpv6CidrBlock: false
       CidrBlock:
         Fn::If:
-          - IsVpcCidr101
-          - 10.195.0.0/16
-          - 10.4.0.0/16
+          - HasSubnetCIDR4
+          - Fn::Select:
+              - 3
+              - Ref: SubnetCIDRs
+          - Fn::If:
+              - IsVpcCidr101
+              - 10.195.0.0/16
+              - 10.4.0.0/16
       VpcId:
         Ref: VPC
     Metadata:
@@ -718,9 +794,14 @@ Resources:
           - Ref: AvailabilityZoneIds
       CidrBlock:
         Fn::If:
-          - IsVpcCidr101
-          - 10.195.0.0/16
-          - 10.4.0.0/16
+          - HasSubnetCIDR4
+          - Fn::Select:
+              - 3
+              - Ref: SubnetCIDRs
+          - Fn::If:
+              - IsVpcCidr101
+              - 10.195.0.0/16
+              - 10.4.0.0/16
       MapPublicIpOnLaunch: false
       Tags:
         - Key: aws-sagemaker-hyperpod-prerequiste
@@ -778,9 +859,14 @@ Resources:
       AmazonProvidedIpv6CidrBlock: false
       CidrBlock:
         Fn::If:
-          - IsVpcCidr101
-          - 10.196.0.0/16
-          - 10.5.0.0/16
+          - HasSubnetCIDR5
+          - Fn::Select:
+              - 4
+              - Ref: SubnetCIDRs
+          - Fn::If:
+              - IsVpcCidr101
+              - 10.196.0.0/16
+              - 10.5.0.0/16
       VpcId:
         Ref: VPC
     Metadata:
@@ -795,9 +881,14 @@ Resources:
           - Ref: AvailabilityZoneIds
       CidrBlock:
         Fn::If:
-          - IsVpcCidr101
-          - 10.196.0.0/16
-          - 10.5.0.0/16
+          - HasSubnetCIDR5
+          - Fn::Select:
+              - 4
+              - Ref: SubnetCIDRs
+          - Fn::If:
+              - IsVpcCidr101
+              - 10.196.0.0/16
+              - 10.5.0.0/16
       MapPublicIpOnLaunch: false
       Tags:
         - Key: aws-sagemaker-hyperpod-prerequiste

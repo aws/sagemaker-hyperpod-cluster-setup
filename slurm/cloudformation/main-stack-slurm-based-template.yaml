@@ -24,6 +24,7 @@ Metadata:
           - VpcId
           - VpcCIDR
           - AvailabilityZoneIds
+          - SubnetCIDRs
           - CreateSecurityGroupStack
           - SecurityGroupId
           - PrivateSubnetIds
@@ -103,6 +104,8 @@ Metadata:
         default: VPC CIDR Range
       AvailabilityZoneIds:
         default: Availability Zone IDs
+      SubnetCIDRs:
+        default: Subnet CIDR Blocks
       CreateSecurityGroupStack:
         default: Create New Security Group
       SecurityGroupId:
@@ -179,6 +182,12 @@ Parameters:
     Type: String
     Default: use2-az1,use2-az2
     Description: List of AZs to deploy subnets in (up to 5, comma separated)
+  SubnetCIDRs:
+    Type: CommaDelimitedList
+    Default: ',,,,'
+    Description: >-
+      Optional comma-separated list of secondary VPC CIDR blocks (one per AZ, up to 5) to use for the HyperPod private
+      subnets. Leave any entry blank to fall back to auto-computed defaults (backward compatible).
   SecurityGroupId:
     Type: String
     Default: ''
@@ -575,6 +584,13 @@ Resources:
             - ','
             - - Ref: AvailabilityZoneIds
               - ',,,'
+        SubnetCIDRs:
+          Fn::Join:
+            - ','
+            - - Fn::Join:
+                  - ','
+                  - Ref: SubnetCIDRs
+              - ',,,,'
     Metadata:
       aws:cdk:path: MainSlurmBasedCfnTemplate/VPCStack
     Condition: CreateVPCStackCondition

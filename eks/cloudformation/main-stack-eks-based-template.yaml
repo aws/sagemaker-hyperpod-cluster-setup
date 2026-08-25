@@ -44,6 +44,7 @@ Metadata:
           - CreatePrivateSubnetStack
           - PrivateSubnetIds
           - EksPrivateSubnetIds
+          - SubnetCIDRs
           - NatGatewayIds
           - PrivateRouteTableIds
           - EksPrivateRouteTableIds
@@ -242,6 +243,8 @@ Metadata:
         default: Private Subnet IDs
       EksPrivateSubnetIds:
         default: EKS Private Subnet IDs
+      SubnetCIDRs:
+        default: Subnet CIDR Blocks
       NatGatewayIds:
         default: NAT Gateway IDs
       PrivateRouteTableIds:
@@ -485,6 +488,12 @@ Parameters:
     Type: String
     Default: use2-az1,use2-az2
     Description: List of AZs to deploy subnets in (up to 5, comma separated)
+  SubnetCIDRs:
+    Type: CommaDelimitedList
+    Default: ',,,,'
+    Description: >-
+      Optional comma-separated list of secondary VPC CIDR blocks (one per AZ, up to 5) to use for the HyperPod private
+      subnets. Leave any entry blank to fall back to auto-computed defaults (backward compatible).
   VpcId:
     Type: String
     Default: vpc-1234567890abcdef0
@@ -1428,6 +1437,13 @@ Resources:
             - ','
             - - Ref: AvailabilityZoneIds
               - ',,,'
+        SubnetCIDRs:
+          Fn::Join:
+            - ','
+            - - Fn::Join:
+                  - ','
+                  - Ref: SubnetCIDRs
+              - ',,,,'
         NatGatewayIds:
           Fn::If:
             - CreateVPCStackCondition
