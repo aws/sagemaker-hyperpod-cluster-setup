@@ -8,6 +8,16 @@ Parameters:
     Type: String
     Default: sagemaker-lifecycle
     Description: The name of the S3 bucket used to store the cluster lifecycle scripts.
+  AccountingDatabaseSecretArn:
+    Type: String
+    Default: ''
+    Description: ARN of the Secrets Manager secret holding the external accounting database credentials.
+Conditions:
+  HasAccountingDatabase:
+    Fn::Not:
+      - Fn::Equals:
+          - Ref: AccountingDatabaseSecretArn
+          - ''
 Resources:
   AmazonSagemakerClusterExecutionRole:
     Type: AWS::IAM::Role
@@ -73,6 +83,34 @@ Resources:
           Value: SageMaker HyperPod Cluster Execution
     Metadata:
       aws:cdk:path: SlurmIamRoleCfnTemplate/AmazonSagemakerClusterExecutionRole
+  AccountingDatabaseSecretAccessPolicy:
+    Type: AWS::IAM::Policy
+    Properties:
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Sid: AccountingDatabaseSecretRead
+            Effect: Allow
+            Action:
+              - secretsmanager:GetSecretValue
+            Resource:
+              - Ref: AccountingDatabaseSecretArn
+          - Sid: AccountingDatabaseSecretKmsDecrypt
+            Effect: Allow
+            Action:
+              - kms:Decrypt
+            Resource: '*'
+            Condition:
+              StringEquals:
+                kms:ViaService:
+                  Fn::Sub: secretsmanager.${AWS::Region}.amazonaws.com
+      PolicyName:
+        Fn::Sub: ${ResourceNamePrefix}-AccountingDatabaseSecretAccessPolicy
+      Roles:
+        - Ref: AmazonSagemakerClusterExecutionRole
+    Metadata:
+      aws:cdk:path: SlurmIamRoleCfnTemplate/AccountingDatabaseSecretAccessPolicy
+    Condition: HasAccountingDatabase
 Outputs:
   AmazonSagemakerClusterExecutionRoleArn:
     Description: The Role ARN used for cluster creation

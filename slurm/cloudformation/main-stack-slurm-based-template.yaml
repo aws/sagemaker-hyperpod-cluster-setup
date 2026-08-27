@@ -215,6 +215,14 @@ Parameters:
       - Merge
       - ''
     Description: Strategy for managing Slurm configuration files (Overwrite, Managed, or Merge).
+  AccountingDatabaseConfig:
+    Type: String
+    Default: ''
+    Description: JSON config for the external Slurm accounting database ({Endpoint,Port,Name,SecretArn}).
+  AccountingDatabaseSecretArn:
+    Type: String
+    Default: ''
+    Description: ARN of the Secrets Manager secret holding the external accounting database credentials.
   SageMakerIAMRoleName:
     Type: String
     Default: role
@@ -679,6 +687,8 @@ Resources:
                     - S3BucketStack
                     - Outputs.SlurmS3BucketName
                 - Ref: S3BucketName
+        AccountingDatabaseSecretArn:
+          Ref: AccountingDatabaseSecretArn
     Metadata:
       aws:cdk:path: MainSlurmBasedCfnTemplate/IamRoleStack
     Condition: CreateSageMakerIAMRoleStackCondition
@@ -845,6 +855,8 @@ Resources:
             - Ref: AWS::NoValue
         NodeProvisioningMode:
           Ref: NodeProvisioningMode
+        AccountingDatabaseConfig:
+          Ref: AccountingDatabaseConfig
         FsxDnsName:
           Fn::If:
             - CreateFsxStackCondition

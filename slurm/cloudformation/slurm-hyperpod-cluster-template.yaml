@@ -87,6 +87,12 @@ Parameters:
     Type: String
     Default: ''
     Description: Custom tags for managing the SageMaker HyperPod cluster as an AWS resource.
+  AccountingDatabaseConfig:
+    Type: String
+    Default: ''
+    Description: >-
+      JSON object for an external Slurm accounting database (Endpoint, SecretArn, optional Port/Name). Empty when using
+      the local head-node database. Slurm V2 / continuous provisioning only.
   InstanceGroupSettings1:
     Type: String
     Default: '[]'
@@ -275,6 +281,8 @@ Resources:
             Ref: SlurmConfigStrategy
           ENABLE_SOURCE_S3_URI_ONLY:
             Ref: EnableSourceS3UriOnly
+          ACCOUNTING_DATABASE_CONFIG:
+            Ref: AccountingDatabaseConfig
           INSTANCE_GROUP_SETTINGS1:
             Ref: InstanceGroupSettings1
           INSTANCE_GROUP_SETTINGS2:

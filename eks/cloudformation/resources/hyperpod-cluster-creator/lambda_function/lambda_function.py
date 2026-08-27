@@ -351,10 +351,49 @@ def get_tags_from_env():
     
     return tags
 
+def get_accounting_database_config_from_env():
+    """
+    Parse the external Slurm accounting database config from the ACCOUNTING_DATABASE_CONFIG env var
+    (a JSON object set by the console). Returns a dict shaped for the CreateCluster
+    Orchestrator.Slurm.AccountingDatabase property, or None when not configured.
+
+    Endpoint and SecretArn are required; Port and Name are optional (the service defaults them to
+    3306 / slurm_acct_db). Credentials are never handled here -- only the Secrets Manager ARN.
+    """
+    config_str = os.environ.get('ACCOUNTING_DATABASE_CONFIG', '')
+    if not config_str:
+        return None
+    try:
+        config = json.loads(config_str)
+    except json.JSONDecodeError as e:
+        print(f"Error parsing ACCOUNTING_DATABASE_CONFIG: {e}")
+        return None
+
+    endpoint = config.get('Endpoint')
+    secret_arn = config.get('SecretArn')
+    if not endpoint or not secret_arn:
+        print("ACCOUNTING_DATABASE_CONFIG missing required Endpoint/SecretArn; skipping accounting database")
+        return None
+
+    accounting_database = {
+        'Endpoint': endpoint,
+        'SecretArn': secret_arn,
+    }
+    port = config.get('Port')
+    if port is not None:
+        try:
+            accounting_database['Port'] = int(port)
+        except (TypeError, ValueError):
+            print(f"ACCOUNTING_DATABASE_CONFIG has invalid Port: {port!r}; skipping accounting database")
+            return None
+    if config.get('Name'):
+        accounting_database['Name'] = config['Name']
+    return accounting_database
+
 def create_hyperpod_cluster(instance_groups):
     """
     Create a SageMaker HyperPod cluster
-    """    
+    """
     # Get cluster parameters from environment variables
     cluster_name = os.environ.get('HYPER_POD_CLUSTER_NAME')
     if not cluster_name:
@@ -427,18 +466,23 @@ def create_hyperpod_cluster(instance_groups):
         }
         create_params['Orchestrator'] = orchestrator
     else:
-        # For SLURM orchestrator, only add if SlurmConfigStrategy is provided
+        # For SLURM orchestrator, assemble the Slurm config from whichever pieces are present.
+        # (SlurmConfigStrategy is omitted on the V2/continuous path, but an external accounting
+        # database may still be configured there, so build the block from both inputs.)
+        slurm_config = {}
+
         slurm_config_strategy = os.environ.get('SLURM_CONFIG_STRATEGY', '')
-        
         if slurm_config_strategy:
-            # Add Slurm orchestrator configuration with strategy
-            orchestrator = {
-                'Slurm': {
-                    'SlurmConfigStrategy': slurm_config_strategy
-                }
-            }
-            create_params['Orchestrator'] = orchestrator
+            slurm_config['SlurmConfigStrategy'] = slurm_config_strategy
             print(f"Adding Slurm orchestrator with config strategy: {slurm_config_strategy}")
+
+        accounting_database = get_accounting_database_config_from_env()
+        if accounting_database:
+            slurm_config['AccountingDatabase'] = accounting_database
+            print(f"Adding external accounting database to Slurm orchestrator: endpoint={accounting_database.get('Endpoint')}")
+
+        if slurm_config:
+            create_params['Orchestrator'] = {'Slurm': slurm_config}
     
     # Only add instance groups if they exist
     if instance_groups:
