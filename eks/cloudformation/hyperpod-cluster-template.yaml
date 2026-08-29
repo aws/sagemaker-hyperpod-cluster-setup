@@ -25,11 +25,15 @@ Parameters:
     Description: Enable or disable the automatic node recovery feature
   NodeProvisioningMode:
     Type: String
-    Default: ''
+    Default: Continuous
     AllowedValues:
       - Continuous
       - ''
-    Description: Enable or disable the continuous provisioning mode
+    Description: >-
+      Node provisioning mode for the HyperPod cluster. Defaults to Continuous
+      (partial fulfillment with asynchronous retries; the cluster becomes
+      InService while nodes stream in). Set to '' (empty) for the legacy
+      all-or-nothing synchronous provisioning behavior.
   HyperPodClusterRole:
     Type: String
     Default: ''
