@@ -18,6 +18,9 @@ Parameters:
   S3CsiPolicyArn:
     Type: String
     Description: IAM Role ARN for HyperPod inference operator.
+  S3CsiRoleName:
+    Type: String
+    Description: Name of the S3 CSI IAM role (must match across stacks).
   OIDCProviderURLWithoutProtocol:
     Type: String
     Description: The URL of the OIDC Provider without https:// prefix.
@@ -155,7 +158,7 @@ Resources:
           S3_CSI_IAM_POLICY_ARN:
             Ref: S3CsiPolicyArn
           S3_CSI_IAM_ROLE_NAME:
-            Fn::Sub: inf-${ResourceNameShortPrefix}-s3csi-role
+            Ref: S3CsiRoleName
           PATH: /opt/python/bin:/var/lang/bin:/usr/local/bin:/usr/bin/:/bin
           GIT_EXEC_PATH: /opt/python/libexec/git-core
           KUBECONFIG: /tmp/.kube/config
