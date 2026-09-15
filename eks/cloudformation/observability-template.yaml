@@ -554,7 +554,7 @@ Resources:
             - Ref: TaskGovernanceMetricLevel
             - '","scrapeInterval":30},"scalingMetrics":{"level":"'
             - Ref: ScalingMetricLevel
-            - '","scrapeInterval":30},"customMetrics":{"level":"'
+            - '","scrapeInterval":30},"clusterMetrics":{"level":"'
             - Ref: ClusterMetricLevel
             - '","scrapeInterval":30},"nodeMetrics":{"level":"'
             - Ref: NodeMetricLevel
@@ -564,7 +564,7 @@ Resources:
             - Ref: NetworkMetricLevel
             - '","scrapeInterval":30},"rayMetrics":{"level":"'
             - Ref: RayMetricLevel
-            - '","scrapeInterval":30}},"logging":{"enabled":true}}'
+            - '","scrapeInterval":30},"logging":{"enabled":true}}}'
       PodIdentityAssociations:
         - RoleArn:
             Fn::If:
@@ -613,7 +613,7 @@ Resources:
             - Ref: TaskGovernanceMetricLevel
             - '","scrapeInterval":30},"scalingMetrics":{"level":"'
             - Ref: ScalingMetricLevel
-            - '","scrapeInterval":30},"customMetrics":{"level":"'
+            - '","scrapeInterval":30},"clusterMetrics":{"level":"'
             - Ref: ClusterMetricLevel
             - '","scrapeInterval":30},"nodeMetrics":{"level":"'
             - Ref: NodeMetricLevel
@@ -623,7 +623,7 @@ Resources:
             - Ref: NetworkMetricLevel
             - '","scrapeInterval":30},"rayMetrics":{"level":"'
             - Ref: RayMetricLevel
-            - '","scrapeInterval":30}},"logging":{"enabled":false}}'
+            - '","scrapeInterval":30},"logging":{"enabled":false}}}'
       PodIdentityAssociations:
         - RoleArn:
             Fn::If:
