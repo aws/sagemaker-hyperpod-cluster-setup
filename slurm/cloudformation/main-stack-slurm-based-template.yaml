@@ -55,6 +55,18 @@ Metadata:
           - DataCompressionType
           - FileSystemTypeVersion
       - Label:
+          default: Accounting Database
+        Parameters:
+          - AccountingDatabaseConfig
+          - AccountingDatabaseSecretArn
+          - CreateAccountingDatabase
+          - AccountingDatabaseInstanceClass
+          - AccountingDatabaseAllocatedStorage
+          - AccountingDatabaseInstanceIdentifier
+          - AccountingDatabasePrimaryUsername
+          - AccountingDatabasePort
+          - AccountingDatabaseName
+      - Label:
           default: Instance Groups
         Parameters:
           - InstanceGroupSettings1
@@ -146,6 +158,24 @@ Metadata:
         default: Compression Type
       FileSystemTypeVersion:
         default: Lustre Version
+      AccountingDatabaseConfig:
+        default: Accounting Database Config
+      AccountingDatabaseSecretArn:
+        default: Accounting Database Secret ARN
+      CreateAccountingDatabase:
+        default: Create New Accounting Database
+      AccountingDatabaseInstanceClass:
+        default: Accounting DB Instance Class
+      AccountingDatabaseAllocatedStorage:
+        default: Accounting DB Allocated Storage (GiB)
+      AccountingDatabaseInstanceIdentifier:
+        default: Accounting DB Instance Identifier
+      AccountingDatabasePrimaryUsername:
+        default: Accounting DB Primary Username
+      AccountingDatabasePort:
+        default: Accounting DB Port
+      AccountingDatabaseName:
+        default: Accounting DB Name
 Parameters:
   Stage:
     Type: String
@@ -223,6 +253,39 @@ Parameters:
     Type: String
     Default: ''
     Description: ARN of the Secrets Manager secret holding the external accounting database credentials.
+  CreateAccountingDatabase:
+    Type: String
+    Default: 'false'
+    AllowedValues:
+      - 'true'
+      - 'false'
+    Description: Set to "true" to provision a new Amazon RDS for MariaDB accounting database, "false" otherwise.
+  AccountingDatabaseInstanceClass:
+    Type: String
+    Default: db.m5.large
+    Description: The instance class for the newly provisioned accounting database.
+  AccountingDatabaseAllocatedStorage:
+    Type: Number
+    Default: 20
+    Description: The allocated storage (GiB) for the newly provisioned accounting database.
+  AccountingDatabaseInstanceIdentifier:
+    Type: String
+    Default: ''
+    Description: Optional identifier for the newly provisioned accounting database. Blank lets CloudFormation generate one.
+  AccountingDatabasePrimaryUsername:
+    Type: String
+    Default: admin
+    Description: The primary (master) username for the newly provisioned accounting database.
+  AccountingDatabasePort:
+    Type: Number
+    Default: 3306
+    Description: The port the newly provisioned accounting database listens on.
+  AccountingDatabaseName:
+    Type: String
+    Default: ''
+    Description: >-
+      Optional accounting database name forwarded to the HyperPod API. Blank uses the HyperPod service default
+      (slurm_acct_db_<clusterhash>); slurmdbd creates the database.
   SageMakerIAMRoleName:
     Type: String
     Default: role
@@ -568,6 +631,10 @@ Conditions:
       - Fn::Equals:
           - Ref: SlurmConfigStrategy
           - ''
+  CreateAccountingDatabaseCondition:
+    Fn::Equals:
+      - Ref: CreateAccountingDatabase
+      - 'true'
   EnableObservabilityCondition:
     Fn::Equals:
       - Ref: EnableObservabilityFeature
@@ -625,6 +692,55 @@ Resources:
     Metadata:
       aws:cdk:path: MainSlurmBasedCfnTemplate/SecurityGroupStack
     Condition: CreateSecurityGroupStackCondition
+  AccountingDatabaseStack:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL:
+        Fn::If:
+          - CustomBucketCondition
+          - Fn::Sub: >-
+              https://${CustomBucketName}.s3.${AWS::Region}.amazonaws.com/templates-slurm/slurm-accounting-db-template.yaml
+          - Fn::Sub: >-
+              https://aws-sagemaker-hyperpod-cluster-setup-${AWS::Region}-${Stage}.s3.${AWS::Region}.amazonaws.com/templates-slurm/slurm-accounting-db-template.yaml
+      Parameters:
+        ResourceNamePrefix:
+          Ref: ResourceNamePrefix
+        VpcId:
+          Fn::If:
+            - CreateVPCStackCondition
+            - Fn::GetAtt:
+                - VPCStack
+                - Outputs.VpcId
+            - Ref: VpcId
+        PrivateSubnetIds:
+          Fn::If:
+            - CreateVPCStackCondition
+            - Fn::GetAtt:
+                - VPCStack
+                - Outputs.PrivateSubnetIds
+            - Ref: PrivateSubnetIds
+        ClusterSecurityGroupId:
+          Fn::If:
+            - CreateSecurityGroupStackCondition
+            - Fn::GetAtt:
+                - SecurityGroupStack
+                - Outputs.SlurmSecurityGroupId
+            - Ref: SecurityGroupId
+        AccountingDatabaseInstanceClass:
+          Ref: AccountingDatabaseInstanceClass
+        AccountingDatabaseAllocatedStorage:
+          Ref: AccountingDatabaseAllocatedStorage
+        AccountingDatabaseInstanceIdentifier:
+          Ref: AccountingDatabaseInstanceIdentifier
+        AccountingDatabasePrimaryUsername:
+          Ref: AccountingDatabasePrimaryUsername
+        AccountingDatabasePort:
+          Ref: AccountingDatabasePort
+        AccountingDatabaseName:
+          Ref: AccountingDatabaseName
+    Metadata:
+      aws:cdk:path: MainSlurmBasedCfnTemplate/AccountingDatabaseStack
+    Condition: CreateAccountingDatabaseCondition
   LifeCycleScriptStack:
     Type: AWS::CloudFormation::Stack
     Properties:
@@ -688,7 +804,12 @@ Resources:
                     - Outputs.SlurmS3BucketName
                 - Ref: S3BucketName
         AccountingDatabaseSecretArn:
-          Ref: AccountingDatabaseSecretArn
+          Fn::If:
+            - CreateAccountingDatabaseCondition
+            - Fn::GetAtt:
+                - AccountingDatabaseStack
+                - Outputs.AccountingDatabaseSecretArn
+            - Ref: AccountingDatabaseSecretArn
     Metadata:
       aws:cdk:path: MainSlurmBasedCfnTemplate/IamRoleStack
     Condition: CreateSageMakerIAMRoleStackCondition
@@ -856,7 +977,12 @@ Resources:
         NodeProvisioningMode:
           Ref: NodeProvisioningMode
         AccountingDatabaseConfig:
-          Ref: AccountingDatabaseConfig
+          Fn::If:
+            - CreateAccountingDatabaseCondition
+            - Fn::GetAtt:
+                - AccountingDatabaseStack
+                - Outputs.AccountingDatabaseConfig
+            - Ref: AccountingDatabaseConfig
         FsxDnsName:
           Fn::If:
             - CreateFsxStackCondition

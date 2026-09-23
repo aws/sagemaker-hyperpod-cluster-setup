@@ -1,0 +1,198 @@
+Description: Accounting database (Amazon RDS for MariaDB) stack for SageMaker HyperPod with Slurm
+Parameters:
+  ResourceNamePrefix:
+    Type: String
+    Default: sagemaker-hyperpod-slurm
+    Description: Prefix to be used for all resources created by this template.
+  VpcId:
+    Type: String
+    Default: ''
+    Description: The ID of the VPC the accounting database is provisioned into.
+  PrivateSubnetIds:
+    Type: CommaDelimitedList
+    Default: ''
+    Description: Comma-separated list of private subnet IDs (must span at least 2 Availability Zones) for the DB subnet group.
+  ClusterSecurityGroupId:
+    Type: String
+    Default: ''
+    Description: Security group of the cluster nodes that must be allowed to reach the accounting database.
+  AccountingDatabaseInstanceClass:
+    Type: String
+    Default: db.m5.large
+    Description: The compute and memory capacity class of the accounting database instance.
+  AccountingDatabaseAllocatedStorage:
+    Type: Number
+    Default: 20
+    Description: The allocated storage of the accounting database instance, in GiB.
+  AccountingDatabaseInstanceIdentifier:
+    Type: String
+    Default: ''
+    Description: Optional identifier for the accounting database instance. Leave blank to let CloudFormation generate one.
+  AccountingDatabasePrimaryUsername:
+    Type: String
+    Default: admin
+    Description: The primary (master) username for the accounting database.
+  AccountingDatabasePort:
+    Type: Number
+    Default: 3306
+    Description: The port the accounting database listens on.
+  AccountingDatabaseName:
+    Type: String
+    Default: ''
+    Description: >-
+      Optional accounting database name forwarded to the HyperPod API (slurmdbd creates the DB). Leave blank to use the
+      HyperPod service default (slurm_acct_db_<clusterhash>).
+  AccountingDatabaseEngineVersion:
+    Type: String
+    Default: ''
+    Description: Optional MariaDB engine version. Leave blank to use the RDS default for MariaDB.
+Conditions:
+  HasInstanceIdentifierCondition:
+    Fn::Not:
+      - Fn::Equals:
+          - Ref: AccountingDatabaseInstanceIdentifier
+          - ''
+  HasEngineVersionCondition:
+    Fn::Not:
+      - Fn::Equals:
+          - Ref: AccountingDatabaseEngineVersion
+          - ''
+  HasDatabaseNameCondition:
+    Fn::Not:
+      - Fn::Equals:
+          - Ref: AccountingDatabaseName
+          - ''
+Resources:
+  AccountingDbSubnetGroup:
+    Type: AWS::RDS::DBSubnetGroup
+    Properties:
+      DBSubnetGroupDescription: Subnet group for the Slurm accounting database
+      SubnetIds:
+        Ref: PrivateSubnetIds
+      Tags:
+        - Key: Name
+          Value:
+            Fn::Sub: ${ResourceNamePrefix}-accounting-db-subnet-group
+    Metadata:
+      aws:cdk:path: SlurmAccountingDbCfnTemplate/AccountingDbSubnetGroup
+  AccountingDbSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Security group for the Slurm accounting database (Amazon RDS for MariaDB)
+      Tags:
+        - Key: Name
+          Value:
+            Fn::Sub: ${ResourceNamePrefix}-accounting-db-sg
+      VpcId:
+        Ref: VpcId
+    Metadata:
+      aws:cdk:path: SlurmAccountingDbCfnTemplate/AccountingDbSecurityGroup
+  AccountingDbIngressFromCluster:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      Description: Allow the HyperPod cluster nodes to reach the accounting database
+      FromPort:
+        Ref: AccountingDatabasePort
+      GroupId:
+        Ref: AccountingDbSecurityGroup
+      IpProtocol: tcp
+      SourceSecurityGroupId:
+        Ref: ClusterSecurityGroupId
+      ToPort:
+        Ref: AccountingDatabasePort
+    Metadata:
+      aws:cdk:path: SlurmAccountingDbCfnTemplate/AccountingDbIngressFromCluster
+  AccountingDbInstance:
+    Type: AWS::RDS::DBInstance
+    Properties:
+      AllocatedStorage:
+        Ref: AccountingDatabaseAllocatedStorage
+      DBInstanceClass:
+        Ref: AccountingDatabaseInstanceClass
+      DBInstanceIdentifier:
+        Fn::If:
+          - HasInstanceIdentifierCondition
+          - Ref: AccountingDatabaseInstanceIdentifier
+          - Ref: AWS::NoValue
+      DBSubnetGroupName:
+        Ref: AccountingDbSubnetGroup
+      Engine: mariadb
+      EngineVersion:
+        Fn::If:
+          - HasEngineVersionCondition
+          - Ref: AccountingDatabaseEngineVersion
+          - Ref: AWS::NoValue
+      ManageMasterUserPassword: true
+      MasterUsername:
+        Ref: AccountingDatabasePrimaryUsername
+      Port:
+        Ref: AccountingDatabasePort
+      PubliclyAccessible: false
+      StorageEncrypted: true
+      Tags:
+        - Key: aws-sagemaker-hyperpod-prerequiste
+          Value:
+            Fn::Sub: ${ResourceNamePrefix}-accounting-db
+        - Key: Name
+          Value:
+            Fn::Sub: ${ResourceNamePrefix}-accounting-db
+      VPCSecurityGroups:
+        - Ref: AccountingDbSecurityGroup
+    UpdateReplacePolicy: Snapshot
+    DeletionPolicy: Snapshot
+    Metadata:
+      aws:cdk:path: SlurmAccountingDbCfnTemplate/AccountingDbInstance
+Outputs:
+  AccountingDatabaseSecretArn:
+    Description: ARN of the RDS-managed Secrets Manager secret holding the accounting database credentials.
+    Value:
+      Fn::GetAtt:
+        - AccountingDbInstance
+        - MasterUserSecret.SecretArn
+  AccountingDatabaseEndpoint:
+    Description: The connection endpoint address of the accounting database.
+    Value:
+      Fn::GetAtt:
+        - AccountingDbInstance
+        - Endpoint.Address
+  AccountingDatabasePortOutput:
+    Description: The port the accounting database listens on.
+    Value:
+      Fn::GetAtt:
+        - AccountingDbInstance
+        - Endpoint.Port
+  AccountingDatabaseConfig:
+    Description: JSON config for the Slurm accounting database ({Endpoint,Port[,Name],SecretArn}).
+    Value:
+      Fn::If:
+        - HasDatabaseNameCondition
+        - Fn::Sub:
+            - '{"Endpoint":"${Endpoint}","Port":${Port},"Name":"${Name}","SecretArn":"${SecretArn}"}'
+            - Endpoint:
+                Fn::GetAtt:
+                  - AccountingDbInstance
+                  - Endpoint.Address
+              Port:
+                Fn::GetAtt:
+                  - AccountingDbInstance
+                  - Endpoint.Port
+              Name:
+                Ref: AccountingDatabaseName
+              SecretArn:
+                Fn::GetAtt:
+                  - AccountingDbInstance
+                  - MasterUserSecret.SecretArn
+        - Fn::Sub:
+            - '{"Endpoint":"${Endpoint}","Port":${Port},"SecretArn":"${SecretArn}"}'
+            - Endpoint:
+                Fn::GetAtt:
+                  - AccountingDbInstance
+                  - Endpoint.Address
+              Port:
+                Fn::GetAtt:
+                  - AccountingDbInstance
+                  - Endpoint.Port
+              SecretArn:
+                Fn::GetAtt:
+                  - AccountingDbInstance
+                  - MasterUserSecret.SecretArn
