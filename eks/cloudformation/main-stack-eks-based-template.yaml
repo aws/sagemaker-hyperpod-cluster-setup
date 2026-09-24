@@ -118,6 +118,8 @@ Metadata:
           - KedaRoleArn
           - AlbControllerRoleArn
           - JumpstartGatedModelDownloadRoleArn
+          - InferenceGatewayControllerRoleArn
+          - EnableInferenceGateway
       - Label:
           default: Observability
         Parameters:
@@ -223,6 +225,10 @@ Metadata:
         default: LBC IAM Role
       KedaRoleArn:
         default: KEDA IAM Role
+      InferenceGatewayControllerRoleArn:
+        default: Inference Gateway Controller IAM Role
+      EnableInferenceGateway:
+        default: Enable Inference Gateway
       CreateVPCStack:
         default: Create New VPC
       VpcId:
@@ -472,6 +478,17 @@ Parameters:
     Type: String
     Default: ''
     Description: IAM role ARN for SageMaker JumpStart gated model download (optional - will be created if not provided)
+  InferenceGatewayControllerRoleArn:
+    Type: String
+    Default: ''
+    Description: IAM role ARN for the Inference Gateway controller (optional - will be created if not provided)
+  EnableInferenceGateway:
+    Type: String
+    Default: 'false'
+    AllowedValues:
+      - 'true'
+      - 'false'
+    Description: Set to "true" to enable the Inference Gateway, "false" to disable it.
   ResourceNamePrefix:
     Type: String
     Default: sagemaker-hyperpod-eks
@@ -2313,6 +2330,10 @@ Resources:
           Ref: AlbControllerRoleArn
         JumpstartGatedModelDownloadRoleArn:
           Ref: JumpstartGatedModelDownloadRoleArn
+        InferenceGatewayControllerRoleArn:
+          Ref: InferenceGatewayControllerRoleArn
+        EnableInferenceGateway:
+          Ref: EnableInferenceGateway
     DependsOn:
       - CertManagerStack
       - HyperPodClusterStack

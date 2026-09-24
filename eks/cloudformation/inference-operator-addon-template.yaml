@@ -30,6 +30,16 @@ Parameters:
   JumpstartGatedModelRoleArn:
     Type: String
     Description: IAM role ARN for SageMaker Jumpstart gated model download
+  InferenceGatewayControllerRoleArn:
+    Type: String
+    Description: IAM role ARN for the Inference Gateway controller
+  EnableInferenceGateway:
+    Type: String
+    Default: 'false'
+    AllowedValues:
+      - 'true'
+      - 'false'
+    Description: Whether the Inference Gateway is enabled ("true"/"false").
   CustomResourceS3Bucket:
     Type: String
     Default: aws-sagemaker-hyperpod-cluster-setup-us-east-2-prod
@@ -137,6 +147,10 @@ Resources:
             Ref: AlbControllerRoleArn
           JUMPSTART_GATED_MODEL_ROLE_ARN:
             Ref: JumpstartGatedModelRoleArn
+          INFERENCE_GATEWAY_ROLE_ARN:
+            Ref: InferenceGatewayControllerRoleArn
+          INFERENCE_GATEWAY_ENABLED:
+            Ref: EnableInferenceGateway
       FunctionName:
         Fn::Sub:
           - inf-${ResourceNameShortPrefix}-addon-${UniqueSuffix}

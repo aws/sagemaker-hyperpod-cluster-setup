@@ -71,6 +71,13 @@ Parameters:
       - 'true'
       - 'false'
     Description: Whether to create IAM role for Inference Operator execution
+  CreateInferenceGatewayControllerRole:
+    Type: String
+    Default: 'false'
+    AllowedValues:
+      - 'true'
+      - 'false'
+    Description: Whether to create IAM role for the Inference Gateway controller
   RetainFsxCsiDriverStack:
     Type: String
     Default: 'false'
@@ -123,6 +130,10 @@ Conditions:
   ShouldCreateInferenceOperatorExecutionRole:
     Fn::Equals:
       - Ref: CreateInferenceOperatorExecutionRole
+      - 'true'
+  ShouldCreateInferenceGatewayControllerRole:
+    Fn::Equals:
+      - Ref: CreateInferenceGatewayControllerRole
       - 'true'
   RetainFsxRoleCondition:
     Fn::And:
@@ -600,6 +611,33 @@ Resources:
     Metadata:
       aws:cdk:path: InferenceAddonIamRolesCfnTemplate/InferenceOperatorExecutionRole
     Condition: ShouldCreateInferenceOperatorExecutionRole
+  InferenceGatewayControllerRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Fn::Sub: >-
+          {"Version":"2012-10-17","Statement":[{"Effect":"Allow","Principal":{"Federated":"arn:aws:iam::${AWS::AccountId}:oidc-provider/${OIDCProviderURLWithoutProtocol}"},"Action":["sts:AssumeRoleWithWebIdentity"],"Condition":{"StringEquals":{"${OIDCProviderURLWithoutProtocol}:aud":"sts.amazonaws.com","${OIDCProviderURLWithoutProtocol}:sub":"system:serviceaccount:hyperpod-inference-system:inference-gateway-controller"}}}]}
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AmazonSageMakerHyperPodInferenceGatewayAccess
+      Path: /
+      RoleName:
+        Fn::Sub:
+          - inf-${ResourceNameShortPrefix}-gwc-${UniqueSuffix}
+          - ResourceNameShortPrefix:
+              Ref: ResourceNameShortPrefix
+            UniqueSuffix:
+              Fn::Select:
+                - 0
+                - Fn::Split:
+                    - '-'
+                    - Fn::Select:
+                        - 2
+                        - Fn::Split:
+                            - /
+                            - Ref: AWS::StackId
+    Metadata:
+      aws:cdk:path: InferenceAddonIamRolesCfnTemplate/InferenceGatewayControllerRole
+    Condition: ShouldCreateInferenceGatewayControllerRole
 Outputs:
   S3CsiDriverRoleArn:
     Description: ARN of the IAM role for S3 CSI Driver
@@ -680,3 +718,13 @@ Outputs:
       Name:
         Fn::Sub: ${AWS::StackName}-InferenceOperatorExecutionRoleName
     Condition: ShouldCreateInferenceOperatorExecutionRole
+  CreatedInferenceGatewayControllerRoleArn:
+    Description: ARN of the IAM role for the Inference Gateway controller
+    Value:
+      Fn::GetAtt:
+        - InferenceGatewayControllerRole
+        - Arn
+    Export:
+      Name:
+        Fn::Sub: ${AWS::StackName}-InferenceGatewayControllerRoleArn
+    Condition: ShouldCreateInferenceGatewayControllerRole

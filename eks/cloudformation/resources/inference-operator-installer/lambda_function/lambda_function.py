@@ -16,6 +16,7 @@ TLS_CERTIFICATE_S3_BUCKET = 'TLS_CERTIFICATE_S3_BUCKET'
 KEDA_ROLE_ARN = 'KEDA_ROLE_ARN'
 ALB_CONTROLLER_ROLE_ARN = 'ALB_CONTROLLER_ROLE_ARN'
 JUMPSTART_GATED_MODEL_ROLE_ARN = 'JUMPSTART_GATED_MODEL_ROLE_ARN'
+INFERENCE_GATEWAY_ROLE_ARN = 'INFERENCE_GATEWAY_ROLE_ARN'
 ADDON_INSTALLATION_TIMEOUT = 'ADDON_INSTALLATION_TIMEOUT'
 
 REQUIRED_ENV_VARS = [
@@ -150,6 +151,8 @@ def build_inference_operator_configuration():
     keda_role_arn = os.environ.get('KEDA_ROLE_ARN', '')
     alb_controller_role_arn = os.environ.get('ALB_CONTROLLER_ROLE_ARN', '')
     jumpstart_gated_model_role_arn = os.environ.get('JUMPSTART_GATED_MODEL_ROLE_ARN', '')
+    inference_gateway_role_arn = os.environ.get('INFERENCE_GATEWAY_ROLE_ARN', '')
+    inference_gateway_enabled = os.environ.get('INFERENCE_GATEWAY_ENABLED', 'false').lower() == 'true'
     
     config = {
         "executionRoleArn": execution_role_arn,
@@ -174,6 +177,18 @@ def build_inference_operator_configuration():
         },
         "jumpstartGatedModelDownloadRoleArn": jumpstart_gated_model_role_arn
     }
+
+    if inference_gateway_enabled:
+        config["inferenceGateway"] = {
+            "enabled": True,
+            "serviceAccount": {
+                "roleArn": inference_gateway_role_arn
+            }
+        }
+    else:
+        config["inferenceGateway"] = {
+            "enabled": False
+        }
     
     return config
 

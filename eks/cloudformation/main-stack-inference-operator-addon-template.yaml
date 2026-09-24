@@ -325,6 +325,17 @@ Parameters:
     Type: String
     Default: ''
     Description: IAM role ARN for SageMaker Jumpstart gated model download
+  InferenceGatewayControllerRoleArn:
+    Type: String
+    Default: ''
+    Description: IAM role ARN for the Inference Gateway controller (optional - will be created if not provided)
+  EnableInferenceGateway:
+    Type: String
+    Default: 'false'
+    AllowedValues:
+      - 'true'
+      - 'false'
+    Description: Set to "true" to enable the Inference Gateway, "false" to disable it.
   HyperPodClusterArn:
     Type: String
     Default: ''
@@ -600,6 +611,19 @@ Conditions:
     Fn::Equals:
       - Ref: AlbControllerRoleArn
       - ''
+  InferenceGatewayControllerRoleProvidedCondition:
+    Fn::Not:
+      - Fn::Equals:
+          - Ref: InferenceGatewayControllerRoleArn
+          - ''
+  CreateInferenceGatewayControllerRoleCondition:
+    Fn::And:
+      - Fn::Equals:
+          - Ref: InferenceGatewayControllerRoleArn
+          - ''
+      - Fn::Equals:
+          - Ref: EnableInferenceGateway
+          - 'true'
   JumpstartGatedModelDownloadRoleProvidedCondition:
     Fn::Not:
       - Fn::Equals:
@@ -722,6 +746,11 @@ Resources:
         CreateAlbControllerRole:
           Fn::If:
             - CreateAlbControllerRoleCondition
+            - 'true'
+            - 'false'
+        CreateInferenceGatewayControllerRole:
+          Fn::If:
+            - CreateInferenceGatewayControllerRoleCondition
             - 'true'
             - 'false'
         CreateJumpstartGatedModelRole:
@@ -1195,6 +1224,18 @@ Resources:
             - Fn::GetAtt:
                 - InferenceAddonIamRolesStack
                 - Outputs.JumpstartGatedModelRoleArn
+        InferenceGatewayControllerRoleArn:
+          Fn::If:
+            - InferenceGatewayControllerRoleProvidedCondition
+            - Ref: InferenceGatewayControllerRoleArn
+            - Fn::If:
+                - CreateInferenceGatewayControllerRoleCondition
+                - Fn::GetAtt:
+                    - InferenceAddonIamRolesStack
+                    - Outputs.CreatedInferenceGatewayControllerRoleArn
+                - ''
+        EnableInferenceGateway:
+          Ref: EnableInferenceGateway
         CustomResourceS3Bucket:
           Fn::If:
             - CustomBucketCondition
