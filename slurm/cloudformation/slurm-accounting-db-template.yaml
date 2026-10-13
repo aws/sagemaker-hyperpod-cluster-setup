@@ -46,6 +46,12 @@ Parameters:
     Type: String
     Default: ''
     Description: Optional MariaDB engine version. Leave blank to use the RDS default for MariaDB.
+  ExistingExecutionRoleName:
+    Type: String
+    Default: ''
+    Description: >-
+      Name (including any path) of a customer-provided cluster execution role. When set, the secret gets a resource
+      policy granting that role read access. Leave blank when the execution role is created by this solution.
 Conditions:
   HasInstanceIdentifierCondition:
     Fn::Not:
@@ -61,6 +67,11 @@ Conditions:
     Fn::Not:
       - Fn::Equals:
           - Ref: AccountingDatabaseName
+          - ''
+  HasExistingExecutionRoleCondition:
+    Fn::Not:
+      - Fn::Equals:
+          - Ref: ExistingExecutionRoleName
           - ''
 Resources:
   AccountingDbSubnetGroup:
@@ -142,6 +153,27 @@ Resources:
     DeletionPolicy: Snapshot
     Metadata:
       aws:cdk:path: SlurmAccountingDbCfnTemplate/AccountingDbInstance
+  AccountingDbSecretResourcePolicy:
+    Type: AWS::SecretsManager::ResourcePolicy
+    Properties:
+      BlockPublicPolicy: true
+      ResourcePolicy:
+        Version: 2012-10-17
+        Statement:
+          - Sid: HyperPodExecutionRoleRead
+            Effect: Allow
+            Principal:
+              AWS:
+                Fn::Sub: arn:${AWS::Partition}:iam::${AWS::AccountId}:role/${ExistingExecutionRoleName}
+            Action: secretsmanager:GetSecretValue
+            Resource: '*'
+      SecretId:
+        Fn::GetAtt:
+          - AccountingDbInstance
+          - MasterUserSecret.SecretArn
+    Metadata:
+      aws:cdk:path: SlurmAccountingDbCfnTemplate/AccountingDbSecretResourcePolicy
+    Condition: HasExistingExecutionRoleCondition
 Outputs:
   AccountingDatabaseSecretArn:
     Description: ARN of the RDS-managed Secrets Manager secret holding the accounting database credentials.

@@ -738,6 +738,11 @@ Resources:
           Ref: AccountingDatabasePort
         AccountingDatabaseName:
           Ref: AccountingDatabaseName
+        ExistingExecutionRoleName:
+          Fn::If:
+            - CreateSageMakerIAMRoleStackCondition
+            - ''
+            - Ref: SageMakerIAMRoleName
     Metadata:
       aws:cdk:path: MainSlurmBasedCfnTemplate/AccountingDatabaseStack
     Condition: CreateAccountingDatabaseCondition

@@ -66,8 +66,13 @@ def download_and_extract_assets():
         logger.error(f"Error downloading/extracting assets: {str(e)}")
         raise
 
+def get_rules_datasource_uid():
+    """Alert rules query AMP when there is a Prometheus workspace; otherwise metrics go to CloudWatch"""
+    return 'prometheus' if os.environ.get(PROMETHEUS_WORKSPACE_ID) else 'cloudwatch-opentelemetry'
+
 def convert_rules_to_json():
     try:
+        datasource_uid = get_rules_datasource_uid()
         extract_dir = download_and_extract_assets()
         rules_path = os.path.join(extract_dir, 'alerts', 'alert-rules.yaml')
         
@@ -79,6 +84,8 @@ def convert_rules_to_json():
             rule_json = {
                 "title": rule['alert'],
                 "folderUID": "aws-sm-hp-observability-rules",
+                # Grafana 13 rejects a rule without a group ("interval (0s) should be non-zero")
+                "ruleGroup": data['groups'][0]['name'],
                 "provenance": "",
                 "noDataState": "OK",
                 "execErrState": "Error",
@@ -94,7 +101,7 @@ def convert_rules_to_json():
                             "from": 600,
                             "to": 0
                         },
-                        "datasourceUid": "prometheus",
+                        "datasourceUid": datasource_uid,
                         "model": {
                             "refId": "A",
                             "expr": rule['expr'],
