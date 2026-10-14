@@ -416,6 +416,7 @@ def create_hyperpod_cluster(instance_groups):
             upload_slurm_provisioning_parameters_json(instance_groups)
         else:
             __override_fsx_config_in_instance_groups(instance_groups)
+            __override_openzfs_config_in_instance_groups(instance_groups)
         
         
         # Remove InstanceGroupType from instance groups for SLURM
@@ -763,6 +764,52 @@ def __override_fsx_config_in_instance_groups(instance_groups):
             else:
                 instance_group['InstanceStorageConfigs'] = [{'FsxLustreConfig': fsx_lustre_config}]
             print(f"Added FsxLustreConfig to instance group {instance_group.get('InstanceGroupName')} with FSx stack outputs: DnsName={fsx_dns_name}, MountName={fsx_mount_name}")
+
+def __override_openzfs_config_in_instance_groups(instance_groups):
+    """
+    Add FSx for OpenZFS configuration in InstanceStorageConfigs when OpenZFS environment variables are provided.
+    This handles the case where CreateOpenZfsStack=true and the OpenZFS stack output (new or existing
+    file system) needs to be used for FsxOpenZfsConfig.
+
+    Parameters:
+    instance_groups (list): List of instance group configurations
+    """
+    if not instance_groups:
+        return
+
+    # Get OpenZFS configuration from environment variables (from OpenZFS stack outputs)
+    enabled_openzfs = os.environ.get('ENABLED_OPENZFS', 'false').lower() == 'true'
+    openzfs_dns_name = os.environ.get('OPENZFS_DNS_NAME', '')
+    openzfs_mount_path = os.environ.get('OPENZFS_MOUNT_PATH', '') or '/home'
+
+    # Only process if OpenZFS is enabled and we have a value from the OpenZFS stack
+    if not enabled_openzfs or not openzfs_dns_name:
+        return
+
+    for instance_group in instance_groups:
+        instance_storage_configs = instance_group.get('InstanceStorageConfigs', [])
+
+        # Find if FsxOpenZfsConfig already exists
+        openzfs_config_found = False
+        for storage_config in instance_storage_configs:
+            if 'FsxOpenZfsConfig' in storage_config:
+                # Override with values from OpenZFS stack outputs
+                storage_config['FsxOpenZfsConfig']['DnsName'] = openzfs_dns_name
+                storage_config['FsxOpenZfsConfig']['MountPath'] = openzfs_mount_path
+                openzfs_config_found = True
+
+        # If FsxOpenZfsConfig doesn't exist, add it
+        if not openzfs_config_found:
+            openzfs_config = {
+                'DnsName': openzfs_dns_name,
+                'MountPath': openzfs_mount_path
+            }
+            # Add to existing InstanceStorageConfigs or create new one
+            if instance_storage_configs:
+                instance_storage_configs.append({'FsxOpenZfsConfig': openzfs_config})
+            else:
+                instance_group['InstanceStorageConfigs'] = [{'FsxOpenZfsConfig': openzfs_config}]
+            print(f"Added FsxOpenZfsConfig to instance group {instance_group.get('InstanceGroupName')} with OpenZFS stack outputs: DnsName={openzfs_dns_name}, MountPath={openzfs_mount_path}")
 
 def __get_provisioning_parameters_file(instance_groups):
     config_data = {

@@ -54,6 +54,13 @@ Metadata:
           - PerUnitStorageThroughput
           - DataCompressionType
           - FileSystemTypeVersion
+          - CreateOpenZfsStack
+          - OpenZfsFileSystemId
+          - OpenZfsAvailabilityZoneId
+          - OpenZfsDeploymentType
+          - OpenZfsStorageCapacity
+          - OpenZfsThroughputCapacity
+          - OpenZfsMountPath
       - Label:
           default: Accounting Database
         Parameters:
@@ -66,6 +73,7 @@ Metadata:
           - AccountingDatabasePrimaryUsername
           - AccountingDatabasePort
           - AccountingDatabaseName
+          - AccountingDatabaseEngineVersion
       - Label:
           default: Instance Groups
         Parameters:
@@ -158,6 +166,20 @@ Metadata:
         default: Compression Type
       FileSystemTypeVersion:
         default: Lustre Version
+      CreateOpenZfsStack:
+        default: Create New FSx for OpenZFS File System
+      OpenZfsFileSystemId:
+        default: Existing FSx for OpenZFS File System ID
+      OpenZfsAvailabilityZoneId:
+        default: FSx for OpenZFS Preferred Availability Zone
+      OpenZfsDeploymentType:
+        default: FSx for OpenZFS Deployment Type
+      OpenZfsStorageCapacity:
+        default: FSx for OpenZFS Storage Capacity (GiB)
+      OpenZfsThroughputCapacity:
+        default: FSx for OpenZFS Throughput Capacity (MB/s)
+      OpenZfsMountPath:
+        default: FSx for OpenZFS Mount Path
       AccountingDatabaseConfig:
         default: Accounting Database Config
       AccountingDatabaseSecretArn:
@@ -176,6 +198,8 @@ Metadata:
         default: Accounting DB Port
       AccountingDatabaseName:
         default: Accounting DB Name
+      AccountingDatabaseEngineVersion:
+        default: Accounting DB Engine Version
 Parameters:
   Stage:
     Type: String
@@ -286,6 +310,14 @@ Parameters:
     Description: >-
       Optional accounting database name forwarded to the HyperPod API. Blank uses the HyperPod service default
       (slurm_acct_db_<clusterhash>); slurmdbd creates the database.
+  AccountingDatabaseEngineVersion:
+    Type: String
+    Default: '11.8'
+    AllowedPattern: ^\d+\.\d+(\.\d+)?$
+    ConstraintDescription: Must be a MariaDB version such as 11.8 or 11.8.8.
+    Description: >-
+      MariaDB engine version for the newly provisioned accounting database, as <major>.<minor> or a full version. Also
+      selects the DB parameter group family.
   SageMakerIAMRoleName:
     Type: String
     Default: role
@@ -352,6 +384,30 @@ Parameters:
     Type: String
     Default: ''
     Description: Existing FSx for Lustre file system
+  OpenZfsFileSystemId:
+    Type: String
+    Default: ''
+    Description: Existing FSx for OpenZFS file system
+  OpenZfsAvailabilityZoneId:
+    Type: String
+    Default: ''
+    Description: The availability zone id of the preferred FSx for OpenZFS file server subnet
+  OpenZfsDeploymentType:
+    Type: String
+    Default: MULTI_AZ_1
+    Description: Deployment type for the FSx for OpenZFS file system
+  OpenZfsStorageCapacity:
+    Type: Number
+    Default: 200
+    Description: Storage capacity for the FSx for OpenZFS file system in GiB
+  OpenZfsThroughputCapacity:
+    Type: Number
+    Default: 160
+    Description: Throughput capacity for the FSx for OpenZFS file system in MB/s
+  OpenZfsMountPath:
+    Type: String
+    Default: /home
+    Description: Local path on cluster instances where the FSx for OpenZFS file system is mounted
   CreateVPCStack:
     Type: String
     Default: 'true'
@@ -394,6 +450,13 @@ Parameters:
       - 'true'
       - 'false'
     Description: Boolean to Create FSx for Lustre File System Stack
+  CreateOpenZfsStack:
+    Type: String
+    Default: 'false'
+    AllowedValues:
+      - 'true'
+      - 'false'
+    Description: Boolean to Create FSx for OpenZFS File System Stack (new or existing file system)
   CreateHyperPodClusterStack:
     Type: String
     Default: 'true'
@@ -617,6 +680,10 @@ Conditions:
     Fn::Equals:
       - Ref: CreateFsxStack
       - 'true'
+  CreateOpenZfsStackCondition:
+    Fn::Equals:
+      - Ref: CreateOpenZfsStack
+      - 'true'
   CustomBucketCondition:
     Fn::Not:
       - Fn::Equals:
@@ -738,6 +805,8 @@ Resources:
           Ref: AccountingDatabasePort
         AccountingDatabaseName:
           Ref: AccountingDatabaseName
+        AccountingDatabaseEngineVersion:
+          Ref: AccountingDatabaseEngineVersion
         ExistingExecutionRoleName:
           Fn::If:
             - CreateSageMakerIAMRoleStackCondition
@@ -863,6 +932,45 @@ Resources:
     Metadata:
       aws:cdk:path: MainSlurmBasedCfnTemplate/FsxStack
     Condition: CreateFsxStackCondition
+  OpenZfsStack:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL:
+        Fn::If:
+          - CustomBucketCondition
+          - Fn::Sub: https://${CustomBucketName}.s3.${AWS::Region}.amazonaws.com/templates-slurm/slurm-openzfs-template.yaml
+          - Fn::Sub: >-
+              https://aws-sagemaker-hyperpod-cluster-setup-${AWS::Region}-${Stage}.s3.${AWS::Region}.amazonaws.com/templates-slurm/slurm-openzfs-template.yaml
+      Parameters:
+        ResourceNamePrefix:
+          Ref: ResourceNamePrefix
+        PrivateSubnetIds:
+          Fn::If:
+            - CreateVPCStackCondition
+            - Fn::GetAtt:
+                - VPCStack
+                - Outputs.PrivateSubnetIds
+            - Ref: PrivateSubnetIds
+        SecurityGroupIds:
+          Fn::If:
+            - CreateSecurityGroupStackCondition
+            - Fn::GetAtt:
+                - SecurityGroupStack
+                - Outputs.SlurmSecurityGroupId
+            - Ref: SecurityGroupId
+        OpenZfsFileSystemId:
+          Ref: OpenZfsFileSystemId
+        OpenZfsAvailabilityZoneId:
+          Ref: OpenZfsAvailabilityZoneId
+        OpenZfsDeploymentType:
+          Ref: OpenZfsDeploymentType
+        OpenZfsStorageCapacity:
+          Ref: OpenZfsStorageCapacity
+        OpenZfsThroughputCapacity:
+          Ref: OpenZfsThroughputCapacity
+    Metadata:
+      aws:cdk:path: MainSlurmBasedCfnTemplate/OpenZfsStack
+    Condition: CreateOpenZfsStackCondition
   HyperPodParamClusterStack:
     Type: AWS::CloudFormation::Stack
     Properties:
@@ -1002,6 +1110,20 @@ Resources:
                 - FsxStack
                 - Outputs.FSxLustreFileSystemMountName
             - ''
+        EnabledOpenZfs:
+          Fn::If:
+            - CreateOpenZfsStackCondition
+            - 'true'
+            - 'false'
+        OpenZfsDnsName:
+          Fn::If:
+            - CreateOpenZfsStackCondition
+            - Fn::GetAtt:
+                - OpenZfsStack
+                - Outputs.FSxOpenZfsFileSystemDNSName
+            - ''
+        OpenZfsMountPath:
+          Ref: OpenZfsMountPath
     Metadata:
       aws:cdk:path: MainSlurmBasedCfnTemplate/HyperPodParamClusterStack
     Condition: CreateHyperPodClusterStackCondition

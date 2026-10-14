@@ -19,6 +19,21 @@ Parameters:
     Type: String
     Default: ''
     Description: Mount name of the FSx for Lustre file system
+  EnabledOpenZfs:
+    Type: String
+    Default: 'false'
+    AllowedValues:
+      - 'true'
+      - 'false'
+    Description: Conditionally wait on OpenZfsStack if deployed
+  OpenZfsDnsName:
+    Type: String
+    Default: ''
+    Description: DNS name of the FSx for OpenZFS file system
+  OpenZfsMountPath:
+    Type: String
+    Default: /home
+    Description: Local path on cluster instances where the FSx for OpenZFS file system is mounted
   SlurmConfigStrategy:
     Type: String
     Default: ''
@@ -277,6 +292,12 @@ Resources:
             Ref: FsxDnsName
           FSX_MOUNT_NAME:
             Ref: FsxMountName
+          ENABLED_OPENZFS:
+            Ref: EnabledOpenZfs
+          OPENZFS_DNS_NAME:
+            Ref: OpenZfsDnsName
+          OPENZFS_MOUNT_PATH:
+            Ref: OpenZfsMountPath
           SLURM_CONFIG_STRATEGY:
             Ref: SlurmConfigStrategy
           ENABLE_SOURCE_S3_URI_ONLY:

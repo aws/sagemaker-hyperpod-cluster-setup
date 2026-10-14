@@ -1,0 +1,312 @@
+Description: FSx for OpenZFS File System Stack for SageMaker HyperPod with Slurm
+Parameters:
+  ResourceNamePrefix:
+    Type: String
+    Default: sagemaker-hyperpod-slurm
+    Description: Prefix to be used for all resources created by this template.
+  OpenZfsFileSystemId:
+    Type: String
+    Default: ''
+    Description: Existing FSx for OpenZFS file system
+  OpenZfsAvailabilityZoneId:
+    Type: String
+    Default: ''
+    Description: The availability zone id of the preferred file server subnet
+  PrivateSubnetIds:
+    Type: String
+    Default: ''
+    Description: Comma-separated list of private subnet IDs
+  SecurityGroupIds:
+    Type: CommaDelimitedList
+    Default: ''
+    Description: Comma-separated list of security group IDs for the FSx file system
+  OpenZfsDeploymentType:
+    Type: String
+    Default: MULTI_AZ_1
+    Description: Deployment type for the FSx for OpenZFS file system
+  OpenZfsStorageCapacity:
+    Type: Number
+    Default: 200
+    Description: Storage capacity for the FSx for OpenZFS file system in GiB
+  OpenZfsThroughputCapacity:
+    Type: Number
+    Default: 160
+    Description: Throughput capacity for the FSx for OpenZFS file system in MB/s
+  OpenZfsDataCompressionType:
+    Type: String
+    Default: LZ4
+    AllowedValues:
+      - LZ4
+      - ZSTD
+      - NONE
+    Description: Data compression type for the root volume of the FSx for OpenZFS file system
+  OpenZfsAutomaticBackupRetentionDays:
+    Type: Number
+    Default: 30
+    Description: Number of days to retain automatic daily backups (0 disables automatic backups)
+Conditions:
+  UseOpenZfsFileSystemIdCondition:
+    Fn::Not:
+      - Fn::Equals:
+          - Ref: OpenZfsFileSystemId
+          - ''
+  IsMultiAzDeploymentTypeCondition:
+    Fn::Equals:
+      - Ref: OpenZfsDeploymentType
+      - MULTI_AZ_1
+  CreateNewOpenZfsCondition:
+    Fn::Not:
+      - Condition: UseOpenZfsFileSystemIdCondition
+Resources:
+  OpenZfsLambdaExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Path: /
+      Policies:
+        - PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action:
+                  - ec2:DescribeSubnets
+                  - ec2:DescribeRouteTables
+                  - fsx:DescribeFileSystems
+                Resource: '*'
+          PolicyName: OpenZfsLambdaPolicy
+    Metadata:
+      aws:cdk:path: SlurmOpenZfsCfnTemplate/OpenZfsLambdaExecutionRole
+  OpenZfsHelperFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      Code:
+        ZipFile: |
+          import boto3
+          import cfnresponse
+          import json
+          import logging
+
+          logger = logging.getLogger()
+          logger.setLevel(logging.INFO)
+
+          def fail(event, context, error_msg):
+              logger.error(error_msg)
+              cfnresponse.send(event, context, cfnresponse.FAILED, {'Error': error_msg}, reason=error_msg)
+
+          def describe_existing_file_system(file_system_id):
+              fsx = boto3.client('fsx')
+              response = fsx.describe_file_systems(FileSystemIds=[file_system_id])
+              if not response['FileSystems']:
+                  raise ValueError(f"FSx file system {file_system_id} not found")
+              fs = response['FileSystems'][0]
+              if fs.get('FileSystemType') != 'OPENZFS':
+                  raise ValueError(f"The file system {file_system_id} is not an FSx for OpenZFS file system")
+              return {'DnsName': fs['DNSName'], 'FileSystemId': file_system_id}
+
+          def select_network(private_subnet_ids, preferred_az_id, is_multi_az):
+              # DescribeSubnets with an empty list returns every subnet in the account
+              if not private_subnet_ids:
+                  raise ValueError("PrivateSubnetIds must contain at least one subnet ID")
+              ec2 = boto3.client('ec2')
+              subnets = ec2.describe_subnets(SubnetIds=private_subnet_ids)['Subnets']
+              if not subnets:
+                  raise ValueError("No private subnets found for the FSx for OpenZFS file system")
+
+              # Keep the caller's subnet order so selection is deterministic
+              order = {subnet_id: index for index, subnet_id in enumerate(private_subnet_ids)}
+              subnets.sort(key=lambda subnet: order.get(subnet['SubnetId'], len(order)))
+
+              preferred = next((s for s in subnets if s['AvailabilityZoneId'] == preferred_az_id), subnets[0])
+              logger.info(f"Selected preferred subnet {preferred['SubnetId']} in AZ ID {preferred['AvailabilityZoneId']}")
+
+              response_data = {'PreferredSubnetId': preferred['SubnetId'], 'StandbySubnetId': '', 'RouteTableIds': ''}
+              if not is_multi_az:
+                  return response_data
+
+              standby = next((s for s in subnets if s['AvailabilityZoneId'] != preferred['AvailabilityZoneId']), None)
+              if not standby:
+                  raise ValueError("MULTI_AZ_1 requires private subnets in at least two availability zones")
+              logger.info(f"Selected standby subnet {standby['SubnetId']} in AZ ID {standby['AvailabilityZoneId']}")
+              response_data['StandbySubnetId'] = standby['SubnetId']
+
+              # Multi-AZ endpoints are reached through route table entries, so include every
+              # route table the cluster subnets use, falling back to the VPC main route table
+              route_tables = ec2.describe_route_tables(
+                  Filters=[{'Name': 'association.subnet-id', 'Values': [s['SubnetId'] for s in subnets]}]
+              )['RouteTables']
+              route_table_ids = {rt['RouteTableId'] for rt in route_tables}
+              associated_subnet_ids = {
+                  assoc['SubnetId'] for rt in route_tables for assoc in rt.get('Associations', []) if assoc.get('SubnetId')
+              }
+              if any(s['SubnetId'] not in associated_subnet_ids for s in subnets):
+                  main_route_tables = ec2.describe_route_tables(
+                      Filters=[
+                          {'Name': 'vpc-id', 'Values': [preferred['VpcId']]},
+                          {'Name': 'association.main', 'Values': ['true']},
+                      ]
+                  )['RouteTables']
+                  route_table_ids.update(rt['RouteTableId'] for rt in main_route_tables)
+
+              response_data['RouteTableIds'] = ','.join(sorted(route_table_ids))
+              logger.info(f"Selected route tables {response_data['RouteTableIds']}")
+              return response_data
+
+          def handler(event, context):
+              logger.info(f"Received event: {json.dumps(event)}")
+
+              # Return immediately if this is a DELETE request
+              if event.get('RequestType') == 'Delete':
+                  logger.info("Delete request received. Returning early.")
+                  cfnresponse.send(event, context, cfnresponse.SUCCESS, {})
+                  return
+
+              try:
+                  properties = event['ResourceProperties']
+                  file_system_id = properties.get('OpenZfsFileSystemId', '')
+                  if file_system_id:
+                      response_data = describe_existing_file_system(file_system_id)
+                  else:
+                      private_subnet_ids = [s.strip() for s in properties.get('PrivateSubnetIds', '').split(',') if s.strip()]
+                      response_data = select_network(
+                          private_subnet_ids,
+                          properties.get('OpenZfsAvailabilityZoneId', ''),
+                          properties.get('OpenZfsDeploymentType', '') == 'MULTI_AZ_1',
+                      )
+                  cfnresponse.send(event, context, cfnresponse.SUCCESS, response_data)
+              except Exception as e:
+                  fail(event, context, str(e))
+      Handler: index.handler
+      Role:
+        Fn::GetAtt:
+          - OpenZfsLambdaExecutionRole
+          - Arn
+      Runtime: python3.12
+      Timeout: 60
+    Metadata:
+      aws:cdk:path: SlurmOpenZfsCfnTemplate/OpenZfsHelperFunction
+  OpenZfsHelperResource:
+    Type: AWS::CloudFormation::CustomResource
+    Properties:
+      ServiceToken:
+        Fn::GetAtt:
+          - OpenZfsHelperFunction
+          - Arn
+      OpenZfsFileSystemId:
+        Ref: OpenZfsFileSystemId
+      OpenZfsAvailabilityZoneId:
+        Ref: OpenZfsAvailabilityZoneId
+      OpenZfsDeploymentType:
+        Ref: OpenZfsDeploymentType
+      PrivateSubnetIds:
+        Ref: PrivateSubnetIds
+      Timestamp: '1791913986986'
+    Metadata:
+      aws:cdk:path: SlurmOpenZfsCfnTemplate/OpenZfsHelperResource
+  FSxOpenZfsFileSystem:
+    Type: AWS::FSx::FileSystem
+    Properties:
+      FileSystemType: OPENZFS
+      OpenZFSConfiguration:
+        AutomaticBackupRetentionDays:
+          Ref: OpenZfsAutomaticBackupRetentionDays
+        CopyTagsToBackups: true
+        CopyTagsToVolumes: true
+        DeploymentType:
+          Ref: OpenZfsDeploymentType
+        PreferredSubnetId:
+          Fn::If:
+            - IsMultiAzDeploymentTypeCondition
+            - Fn::GetAtt:
+                - OpenZfsHelperResource
+                - PreferredSubnetId
+            - Ref: AWS::NoValue
+        RootVolumeConfiguration:
+          DataCompressionType:
+            Ref: OpenZfsDataCompressionType
+          NfsExports:
+            - ClientConfigurations:
+                - Clients: '*'
+                  Options:
+                    - rw
+                    - crossmnt
+                    - no_root_squash
+        RouteTableIds:
+          Fn::If:
+            - IsMultiAzDeploymentTypeCondition
+            - Fn::Split:
+                - ','
+                - Fn::GetAtt:
+                    - OpenZfsHelperResource
+                    - RouteTableIds
+            - Ref: AWS::NoValue
+        ThroughputCapacity:
+          Ref: OpenZfsThroughputCapacity
+      SecurityGroupIds:
+        Ref: SecurityGroupIds
+      StorageCapacity:
+        Ref: OpenZfsStorageCapacity
+      StorageType: SSD
+      SubnetIds:
+        Fn::If:
+          - IsMultiAzDeploymentTypeCondition
+          - - Fn::GetAtt:
+                - OpenZfsHelperResource
+                - PreferredSubnetId
+            - Fn::GetAtt:
+                - OpenZfsHelperResource
+                - StandbySubnetId
+          - - Fn::GetAtt:
+                - OpenZfsHelperResource
+                - PreferredSubnetId
+      Tags:
+        - Key: aws-sagemaker-hyperpod-prerequiste
+          Value:
+            Fn::Sub:
+              - ${ResourceNamePrefix}-fsx-openzfs
+              - ResourceNamePrefix:
+                  Ref: ResourceNamePrefix
+        - Key: Name
+          Value:
+            Fn::Sub:
+              - ${ResourceNamePrefix}-fsx-openzfs
+              - ResourceNamePrefix:
+                  Ref: ResourceNamePrefix
+    Metadata:
+      aws:cdk:path: SlurmOpenZfsCfnTemplate/FSxOpenZfsFileSystem
+    Condition: CreateNewOpenZfsCondition
+Outputs:
+  FSxOpenZfsFileSystemId:
+    Description: The ID of the FSx for OpenZFS file system
+    Value:
+      Fn::If:
+        - UseOpenZfsFileSystemIdCondition
+        - Ref: OpenZfsFileSystemId
+        - Ref: FSxOpenZfsFileSystem
+    Export:
+      Name:
+        Fn::Sub: ${AWS::StackName}-FSxOpenZfsFileSystemId
+  FSxOpenZfsFileSystemDNSName:
+    Description: The DNS name of the FSx for OpenZFS file system
+    Value:
+      Fn::If:
+        - UseOpenZfsFileSystemIdCondition
+        - Fn::GetAtt:
+            - OpenZfsHelperResource
+            - DnsName
+        - Fn::GetAtt:
+            - FSxOpenZfsFileSystem
+            - DNSName
+    Export:
+      Name:
+        Fn::Sub: ${AWS::StackName}-FSxOpenZfsFileSystemDNSName
+  OpenZfsDeploymentComplete:
+    Description: Indicates FSx for OpenZFS deployment is complete
+    Value: OpenZfsDeploymentComplete

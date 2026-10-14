@@ -44,8 +44,12 @@ Parameters:
       HyperPod service default (slurm_acct_db_<clusterhash>).
   AccountingDatabaseEngineVersion:
     Type: String
-    Default: ''
-    Description: Optional MariaDB engine version. Leave blank to use the RDS default for MariaDB.
+    Default: '11.8'
+    AllowedPattern: ^\d+\.\d+(\.\d+)?$
+    ConstraintDescription: Must be a MariaDB version such as 11.8 or 11.8.8.
+    Description: >-
+      MariaDB engine version, as <major>.<minor> (RDS picks the latest patch) or a full version. Also selects the DB
+      parameter group family.
   ExistingExecutionRoleName:
     Type: String
     Default: ''
@@ -57,11 +61,6 @@ Conditions:
     Fn::Not:
       - Fn::Equals:
           - Ref: AccountingDatabaseInstanceIdentifier
-          - ''
-  HasEngineVersionCondition:
-    Fn::Not:
-      - Fn::Equals:
-          - Ref: AccountingDatabaseEngineVersion
           - ''
   HasDatabaseNameCondition:
     Fn::Not:
@@ -113,6 +112,35 @@ Resources:
         Ref: AccountingDatabasePort
     Metadata:
       aws:cdk:path: SlurmAccountingDbCfnTemplate/AccountingDbIngressFromCluster
+  AccountingDbParameterGroup:
+    Type: AWS::RDS::DBParameterGroup
+    Properties:
+      Description: Slurm accounting database settings (Amazon RDS for MariaDB)
+      Family:
+        Fn::Join:
+          - ''
+          - - mariadb
+            - Fn::Select:
+                - 0
+                - Fn::Split:
+                    - .
+                    - Ref: AccountingDatabaseEngineVersion
+            - .
+            - Fn::Select:
+                - 1
+                - Fn::Split:
+                    - .
+                    - Ref: AccountingDatabaseEngineVersion
+      Parameters:
+        innodb_lock_wait_timeout: '900'
+        innodb_snapshot_isolation: '0'
+        max_allowed_packet: '67108864'
+      Tags:
+        - Key: Name
+          Value:
+            Fn::Sub: ${ResourceNamePrefix}-accounting-db-parameter-group
+    Metadata:
+      aws:cdk:path: SlurmAccountingDbCfnTemplate/AccountingDbParameterGroup
   AccountingDbInstance:
     Type: AWS::RDS::DBInstance
     Properties:
@@ -125,14 +153,13 @@ Resources:
           - HasInstanceIdentifierCondition
           - Ref: AccountingDatabaseInstanceIdentifier
           - Ref: AWS::NoValue
+      DBParameterGroupName:
+        Ref: AccountingDbParameterGroup
       DBSubnetGroupName:
         Ref: AccountingDbSubnetGroup
       Engine: mariadb
       EngineVersion:
-        Fn::If:
-          - HasEngineVersionCondition
-          - Ref: AccountingDatabaseEngineVersion
-          - Ref: AWS::NoValue
+        Ref: AccountingDatabaseEngineVersion
       ManageMasterUserPassword: true
       MasterUsername:
         Ref: AccountingDatabasePrimaryUsername
