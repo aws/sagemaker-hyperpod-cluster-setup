@@ -24,11 +24,15 @@ def lambda_handler(event, context):
         else:
             raise ValueError(f"Invalid request type: {request_type}")
  
+        # Without a physical id cfnresponse sends the log stream name, which changes between invocations, so
+        # CloudFormation would treat an Update as a replacement and send a Delete for the old id, deleting the stack
+        # that was just updated. Keep the id on Update and Delete; use the stack id on Create.
         cfnresponse.send(
             event,
             context,
             cfnresponse.SUCCESS,
-            response_data
+            response_data,
+            response_data.get('StackId') if request_type == 'Create' else event.get('PhysicalResourceId')
         )
 
     except Exception as e:
@@ -40,10 +44,29 @@ def lambda_handler(event, context):
             {
                 "Status": "FAILED",
                 "Reason": str(e)
-            }
+            },
+            event.get('PhysicalResourceId')
         )
  
  
+def optional_parameters(cfn, template_url, props):
+    """
+    Parameters newer than some observability templates, passed only when the template declares them: CloudFormation
+    rejects an undeclared parameter, e.g. when StackTemplateUrl points at an older template in a customer bucket.
+    If the template's parameters can't be read, they are left out (without the cluster name, the Grafana Lambda
+    only skips the CloudWatch alert rules).
+    """
+    if not props.get('HyperPodClusterName'):
+        return []
+    try:
+        declared = {p['ParameterKey'] for p in cfn.get_template_summary(TemplateURL=template_url).get('Parameters', [])}
+    except Exception as e:
+        print(f"Could not read the observability template's parameters: {str(e)}")
+        return []
+    if 'HyperPodClusterName' not in declared:
+        return []
+    return [{'ParameterKey': 'HyperPodClusterName', 'ParameterValue': props['HyperPodClusterName']}]
+
 def on_create(event):
     """
     Handle Create request to create a new HyperPod cluster
@@ -182,7 +205,7 @@ def on_create(event):
                 'ParameterKey': 'ExecutionRoleName',
                 'ParameterValue': props.get('ExecutionRoleName', '')
                 },
-            ],
+            ] + optional_parameters(cfn, template_url, props),
             Capabilities=['CAPABILITY_IAM', 'CAPABILITY_NAMED_IAM', 'CAPABILITY_AUTO_EXPAND'],
         )
         print(f"Stack creation initiated: {response['StackId']}")
@@ -329,12 +352,22 @@ def on_update(event):
                 'ParameterKey': 'ExecutionRoleName',
                 'ParameterValue': props.get('ExecutionRoleName', '')
                 },
-            ],
+            ] + optional_parameters(cfn, template_url, props),
             Capabilities=['CAPABILITY_IAM', 'CAPABILITY_NAMED_IAM', 'CAPABILITY_AUTO_EXPAND'],
         )
         print(f"Stack creation initiated: {response['StackId']}")
         response_data['StackId'] = response['StackId']
         return response_data
+    except ClientError as e:
+        # A property change (e.g. HyperPodClusterName) that leaves the nested stack's template and parameters as they
+        # are is a no-op for CloudFormation, not a failure.
+        if 'No updates are to be performed' in str(e):
+            print(f"No updates to the observability stack: {str(e)}")
+            # The main stack reads the StackId attribute.
+            response_data['StackId'] = cfn.describe_stacks(StackName=stack_name)['Stacks'][0]['StackId']
+            return response_data
+        print(f"Failed to create Cloudformation Workspace: {str(e)}")
+        raise
     except Exception as e:
         print(f"Failed to create Cloudformation Workspace: {str(e)}")
         raise

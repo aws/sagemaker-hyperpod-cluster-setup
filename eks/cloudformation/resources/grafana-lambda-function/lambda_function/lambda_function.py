@@ -5,6 +5,7 @@ import urllib3
 import logging
 import cfnresponse
 import yaml
+import re
 import zipfile
 import tempfile
 from botocore.exceptions import ClientError
@@ -15,6 +16,16 @@ GRAFANA_WORKSPACE_TOKEN_KEY = 'GRAFANA_WORKSPACE_TOKEN_KEY'
 REGION = 'REGION'
 S3_BUCKET = 'S3_BUCKET'
 DASHBOARD_PREFIX_S3_KEY = 'DASHBOARD_PREFIX_S3_KEY'
+HYPERPOD_CLUSTER_NAME = 'HYPERPOD_CLUSTER_NAME'
+
+# cloudwatchRulesClusterNamePlaceholder in HyperPodObservabilityAssets.
+CLOUDWATCH_RULES_CLUSTER_PLACEHOLDER = '__HYPERPOD_CLUSTER_NAME__'
+CLOUDWATCH_OPENTELEMETRY_DATASOURCE_UID = 'cloudwatch-opentelemetry'
+
+# Bounded so a hung Grafana call can't run to the Lambda timeout and leave CloudFormation without a response.
+GRAFANA_HTTP_TIMEOUT = urllib3.Timeout(connect=5, read=30)
+# urllib3 only status-retries idempotent methods, so POSTs are never replayed.
+GRAFANA_HTTP_RETRIES = urllib3.Retry(total=3, backoff_factor=1, status_forcelist=(429, 500, 502, 503, 504), raise_on_status=False)
 
 
 logger = logging.getLogger()
@@ -68,30 +79,75 @@ def download_and_extract_assets():
 
 def get_rules_datasource_uid():
     """Alert rules query AMP when there is a Prometheus workspace; otherwise metrics go to CloudWatch"""
-    return 'prometheus' if os.environ.get(PROMETHEUS_WORKSPACE_ID) else 'cloudwatch-opentelemetry'
+    return 'prometheus' if os.environ.get(PROMETHEUS_WORKSPACE_ID) else CLOUDWATCH_OPENTELEMETRY_DATASOURCE_UID
+
+def cluster_hash(cluster_name):
+    """8-hex FNV-1a of the cluster name. Keep in sync with clusterHash in IronManConsole-Assets."""
+    h = 0x811c9dc5
+    for b in cluster_name.encode('utf-8'):
+        h = ((h ^ b) * 0x01000193) & 0xffffffff
+    return f"{h:08x}"
+
+def alert_rule_uid(alert, cluster_name=None):
+    """
+    Fixed per alert (e.g. GPUHighTemperature -> hp-gpu-high-temperature) so stack updates and reruns hit the same
+    rule instead of creating a duplicate. CloudWatch rules are per cluster (several clusters can share a workspace),
+    so their uid also carries a hash of the cluster name. Keep in sync with alertRuleUid in IronManConsole-Assets.
+    """
+    uid = re.sub(r'([a-z0-9])([A-Z])', r'\1-\2', alert)
+    uid = re.sub(r'([A-Z])([A-Z][a-z])', r'\1-\2', uid)
+    uid = f"hp-{uid.lower()}"
+    return f"{uid}-{cluster_hash(cluster_name)}" if cluster_name else uid
+
+def alert_rule_title(alert, cluster_name=None):
+    """CloudWatch rules are per cluster, so their title names it. Keep in sync with IronManConsole-Assets."""
+    return f"{alert} ({cluster_name})" if cluster_name else alert
+
+def cloudwatch_cluster_name():
+    """The HyperPod cluster CloudWatch rules are scoped to, or None for AMP rules."""
+    return None if os.environ.get(PROMETHEUS_WORKSPACE_ID) else os.environ.get(HYPERPOD_CLUSTER_NAME)
+
+def load_rules(extract_dir):
+    """
+    The AMP rules, or with no Prometheus workspace the CloudWatch rules scoped to the HyperPod cluster.
+    CloudWatch metrics are account-wide, so without the cluster name no rules are created rather than unscoped ones.
+    """
+    if os.environ.get(PROMETHEUS_WORKSPACE_ID):
+        with open(os.path.join(extract_dir, 'alerts', 'alert-rules.yaml'), 'r', encoding='utf-8') as f:
+            return yaml.safe_load(f)
+
+    cluster_name = os.environ.get(HYPERPOD_CLUSTER_NAME)
+    rules_path = os.path.join(extract_dir, 'alerts', 'alert-rules-cloudwatch.yaml')
+    if not cluster_name or not os.path.exists(rules_path):
+        logger.warning("Skipping alert rules: no HyperPod cluster name or CloudWatch rules for a CloudWatch destination")
+        return None
+    with open(rules_path, 'r', encoding='utf-8') as f:
+        return yaml.safe_load(f.read().replace(CLOUDWATCH_RULES_CLUSTER_PLACEHOLDER, cluster_name))
 
 def convert_rules_to_json():
     try:
         datasource_uid = get_rules_datasource_uid()
         extract_dir = download_and_extract_assets()
-        rules_path = os.path.join(extract_dir, 'alerts', 'alert-rules.yaml')
-        
-        with open(rules_path, 'r', encoding='utf-8') as f:
-            data = yaml.safe_load(f)
+        data = load_rules(extract_dir)
+        if data is None:
+            return []
 
+        cluster_name = cloudwatch_cluster_name()
         rules = []
         for rule in data['groups'][0]['rules']:
             rule_json = {
-                "title": rule['alert'],
+                "title": alert_rule_title(rule['alert'], cluster_name),
                 "folderUID": "aws-sm-hp-observability-rules",
-                # Grafana 13 rejects a rule without a group ("interval (0s) should be non-zero")
+                # Grafana 12+ rejects rules without a group ("interval (0s) should be non-zero").
                 "ruleGroup": data['groups'][0]['name'],
                 "provenance": "",
                 "noDataState": "OK",
                 "execErrState": "Error",
                 "for": rule.get('for', '5m'),
+                "labels": rule.get('labels', {}),
+                "annotations": rule.get('annotations', {}),
                 "orgId": 1,
-                "uid": "",
+                "uid": alert_rule_uid(rule['alert'], cluster_name),
                 "condition": "A",
                 "data": [
                     {
@@ -117,11 +173,9 @@ def convert_rules_to_json():
 
         return rules
     except Exception as e:
+        # Raised so create_alert_rules records the error in the response data.
         logger.error(f"Error converting rules: {str(e)}")
-        return {
-            'message': 'Failed to convert rules',
-            'error': str(e)
-        }
+        raise
 
 def make_grafana_request(endpoint, method, payload=None, additional_headers=None):
     try:
@@ -137,7 +191,7 @@ def make_grafana_request(endpoint, method, payload=None, additional_headers=None
         if additional_headers:
             headers.update(additional_headers)
 
-        http = urllib3.PoolManager()
+        http = urllib3.PoolManager(timeout=GRAFANA_HTTP_TIMEOUT, retries=GRAFANA_HTTP_RETRIES)
 
         response = http.request(
             method,
@@ -211,7 +265,68 @@ def create_grafana_datasource():
     except Exception as e:
         return handle_resource_creation('Datasource', lambda: raise_or_return(e))
 
+AMAZON_PROMETHEUS_PLUGIN_ID = 'grafana-amazonprometheus-datasource'
+
+def create_cloudwatch_opentelemetry_datasource():
+    """CloudWatch OpenTelemetry (PromQL over CloudWatch OTLP metrics), used when there is no Prometheus workspace."""
+    try:
+        validate_env_vars()
+        region = os.environ[REGION]
+
+        datasource_payload = {
+            "name": "CloudWatch OpenTelemetry",
+            "type": AMAZON_PROMETHEUS_PLUGIN_ID,
+            "uid": CLOUDWATCH_OPENTELEMETRY_DATASOURCE_UID,
+            "url": f"https://monitoring.{region}.amazonaws.com",
+            "access": "proxy",
+            "isDefault": False,
+            "jsonData": {
+                "authType": "sigv4",
+                "sigV4Auth": True,
+                "sigV4Region": region,
+                "defaultRegion": region,
+                "httpMethod": "POST",
+                "sigV4AuthType": "ec2_iam_role",
+                # The plugin signs as aps unless told otherwise; CloudWatch requires monitoring.
+                "sigv4Service": "monitoring"
+            }
+        }
+
+        response = make_grafana_request('datasources', 'POST', datasource_payload)
+
+        if response.status in [200, 201]:
+            response_data = json.loads(response.data.decode('utf-8'))
+            return {
+                'message': 'CloudWatch OpenTelemetry datasource created successfully',
+                'datasourceId': response_data.get('id')
+            }
+        elif response.status == 409:
+            return {
+                'message': 'CloudWatch OpenTelemetry datasource already exists',
+                'status': 'existing'
+            }
+        else:
+            raise Exception(f"Failed to create CloudWatch OpenTelemetry datasource. Status: {response.status}")
+
+    except Exception as e:
+        return handle_resource_creation('Datasource', lambda: raise_or_return(e))
+
+def get_prometheus_datasource_type():
+    """
+    Grafana 13's core Prometheus plugin no longer SigV4-signs requests (AMP returns 403), so use the Amazon
+    Managed Prometheus plugin wherever it is installed (AMG 12+). Older workspaces keep the core plugin.
+    """
+    response = make_grafana_request(f'plugins/{AMAZON_PROMETHEUS_PLUGIN_ID}/settings', 'GET')
+    if response.status == 200:
+        return AMAZON_PROMETHEUS_PLUGIN_ID
+    if response.status == 404:
+        return 'prometheus'
+    # Anything else is transient; guessing would provision a data source that 403s on Grafana 13.
+    raise Exception(f"Failed to check {AMAZON_PROMETHEUS_PLUGIN_ID} plugin. Status: {response.status}")
+
 def create_prometheus_datasource():
+    # Outside the try: the handler below folds errors into response_data, which would report SUCCESS or break cfnresponse.
+    datasource_type = get_prometheus_datasource_type()
     try:
         validate_env_vars()
         region = os.environ[REGION]
@@ -219,7 +334,7 @@ def create_prometheus_datasource():
 
         datasource_payload = {
             "name": "prometheus",
-            "type": "prometheus",
+            "type": datasource_type,
             "uid": "prometheus",
             "url": prometheus_url,
             "access": "proxy",
@@ -343,38 +458,90 @@ def create_folder():
             'error': str(e)
         }
 
+def get_existing_rules():
+    """
+    The rules already in the alerts folder. Rules created before uids were fixed (9.4/10.4) have random uids, and
+    earlier runs could leave several copies, so copies are found by title. If the rules can't be listed, rules are
+    created by uid only.
+    """
+    try:
+        response = make_grafana_request('v1/provisioning/alert-rules', 'GET')
+        if response.status != 200:
+            logger.warning(f"Could not list alert rules (status {response.status}); creating rules by uid only")
+            return []
+        return [r for r in json.loads(response.data.decode('utf-8')) if r.get('folderUID') == 'aws-sm-hp-observability-rules']
+    except Exception as e:
+        logger.warning(f"Could not list alert rules ({str(e)}); creating rules by uid only")
+        return []
+
+def rule_datasource_uids(rule):
+    return {query.get('datasourceUid') for query in rule.get('data', [])}
+
+def alert_rule_base_title(rule):
+    """The plain alert title a CloudWatch rule's per-cluster title is built from, or None for an AMP rule."""
+    cluster_name = cloudwatch_cluster_name()
+    suffix = f" ({cluster_name})"
+    return rule['title'][:-len(suffix)] if cluster_name and rule['title'].endswith(suffix) else None
+
+def delete_alert_rule(uid):
+    response = make_grafana_request(f'v1/provisioning/alert-rules/{uid}', 'DELETE', None, {'X-Disable-Provenance': 'true'})
+    if response.status not in (200, 204, 404):
+        logger.warning(f"Failed to delete alert rule {uid}. Status: {response.status}")
+
 def create_alert_rules():
     try:
         rules = convert_rules_to_json()
         results = []
+        existing_rules = get_existing_rules() if rules else []
 
         for rule in rules:
             try:
-                response = make_grafana_request(
-                    'v1/provisioning/alert-rules',
-                    'POST',
-                    rule,
-                    {'X-Disable-Provenance': 'true'}
-                )
+                # Only rules on the same data source: another cluster sharing the workspace (e.g. an AMP cluster when
+                # this one is on CloudWatch) can have rules with the same titles.
+                same_datasource = [
+                    r for r in existing_rules if rule['data'][0]['datasourceUid'] in rule_datasource_uids(r)
+                ]
+                copies = [r['uid'] for r in same_datasource if r['title'] == rule['title']]
+                # Keep one copy (the fixed uid if present) and update it in place; otherwise create the rule.
+                keep = (rule['uid'] if rule['uid'] in copies else copies[0]) if copies else None
+                if keep:
+                    response = make_grafana_request(
+                        f'v1/provisioning/alert-rules/{keep}',
+                        'PUT',
+                        {**rule, 'uid': keep},
+                        {'X-Disable-Provenance': 'true'}
+                    )
+                else:
+                    response = make_grafana_request(
+                        'v1/provisioning/alert-rules',
+                        'POST',
+                        rule,
+                        {'X-Disable-Provenance': 'true'}
+                    )
 
-                if (response.status == 400 and 
-                    'conflict' in response.data.decode('utf-8').lower()):
-                    
+                # Rules have fixed uids, so a rerun gets 409; older Grafana reports a conflict as 400.
+                if not keep and (response.status == 409 or (response.status == 400 and
+                        'conflict' in response.data.decode('utf-8').lower())):
                     logger.info(f"Alert rule {rule['title']} already exists - skipping")
-                    result = {
-                        'message': f'Alert rule {rule["title"]} already exists',
-                        'status': 'existing'
-                    }
+                    result = {'message': f'Alert rule {rule["title"]} already exists', 'status': 'existing'}
                 elif response.status in [200, 201]:
                     result = {
-                        'message': f'Alert rule {rule["title"]} created successfully',
-                        'ruleId': json.loads(response.data.decode('utf-8')).get('id')
+                        'message': f'Alert rule {rule["title"]} {"updated" if keep else "created successfully"}',
+                        'status': 'updated' if keep else 'created',
                     }
                 else:
                     result = {
-                        'message': f'Failed to create alert rule {rule["title"]}',
+                        'message': f'Failed to {"update" if keep else "create"} alert rule {rule["title"]}',
                         'status': response.status
                     }
+
+                # Only once the rule is written: delete the other copies, and the plain-titled CloudWatch rule a
+                # per-cluster CloudWatch rule replaces (an unscoped one from before rules were per cluster). A failed
+                # write never leaves the alert without a rule.
+                if result['status'] in ('updated', 'created', 'existing'):
+                    replaced = [r['uid'] for r in same_datasource if r['title'] == alert_rule_base_title(rule)]
+                    for uid in [u for u in copies if u != keep] + replaced:
+                        delete_alert_rule(uid)
 
                 results.append(result)
 
@@ -480,8 +647,13 @@ def on_create():
         datasource_result = create_grafana_datasource()
         response_data["resources"]["grafanaDatasource"] = datasource_result
 
-        prometheus_result = create_prometheus_datasource()
-        response_data["resources"]["prometheusDatasource"] = prometheus_result
+        # Without a Prometheus workspace, metrics go to CloudWatch and are queried through CloudWatch OpenTelemetry.
+        if os.environ.get(PROMETHEUS_WORKSPACE_ID):
+            prometheus_result = create_prometheus_datasource()
+            response_data["resources"]["prometheusDatasource"] = prometheus_result
+        else:
+            cloudwatch_opentelemetry_result = create_cloudwatch_opentelemetry_datasource()
+            response_data["resources"]["cloudwatchOpenTelemetryDatasource"] = cloudwatch_opentelemetry_result
         
         # Create folder
         folder_result = create_folder()

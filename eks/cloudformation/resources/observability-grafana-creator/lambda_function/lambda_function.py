@@ -63,17 +63,22 @@ def on_create():
         tags = {
             "SageMaker": "true"
         }
+        create_args = {
+            'accountAccessType': account_access_type,
+            'authenticationProviders': authentication_providers,
+            'permissionType': permission_type,
+            'configuration': configuration,
+            'workspaceName': workspace_name,
+            'workspaceRoleArn': workspace_role_arn,
+            'tags': tags,
+        }
+        # Unset means AMG's default version; older templates don't pass this.
+        grafana_version = os.environ.get('GRAFANA_VERSION')
+        if grafana_version:
+            create_args['grafanaVersion'] = grafana_version
         grafana = boto3.client('grafana')
-        print(f"Creating Grafana Workspace: {workspace_name}")
-        response = grafana.create_workspace(
-            accountAccessType=account_access_type,
-            authenticationProviders=authentication_providers,
-            permissionType=permission_type,
-            configuration=configuration,
-            workspaceName=workspace_name,
-            workspaceRoleArn=workspace_role_arn,
-            tags=tags
-        )
+        print(f"Creating Grafana Workspace: {workspace_name} (grafanaVersion={grafana_version or 'default'})")
+        response = grafana.create_workspace(**create_args)
         print(f"Created Grafana Workspace: {workspace_name}")
         response_data['WorkspaceId'] = response['workspace']['id']
         retries = 0
