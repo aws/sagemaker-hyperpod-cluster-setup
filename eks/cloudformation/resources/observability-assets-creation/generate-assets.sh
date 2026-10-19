@@ -11,7 +11,7 @@ cd "$SCRIPT_DIR"
 node -e "
 const fs = require('fs');
 const {
-  clusterJson, efaJson, inferenceJson, tasksJson, trainingJson, rulesYaml, cloudwatchRulesYaml,
+  clusterJson, efaJson, inferenceJson, tasksJson, trainingJson, rulesYaml,
   slurmClustersJson, slurmJobsJson
 } = require('@amzn/hyperpod-observability-assets');
 
@@ -31,11 +31,8 @@ fs.writeFileSync('dashboards/templates/training.json', JSON.stringify(trainingJs
 fs.writeFileSync('dashboards/slurmTemplates/clusters.json', JSON.stringify(slurmClustersJson, null, 2));
 fs.writeFileSync('dashboards/slurmTemplates/jobs.json', JSON.stringify(slurmJobsJson, null, 2));
 
-// Write rules files. Assets versions before cloudwatchRulesYaml have only the AMP rules.
+// Write rules file
 fs.writeFileSync('alerts/alert-rules.yaml', rulesYaml);
-if (cloudwatchRulesYaml) {
-  fs.writeFileSync('alerts/alert-rules-cloudwatch.yaml', cloudwatchRulesYaml);
-}
 
 console.log('Assets written to current package');
 "
