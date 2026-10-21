@@ -10,6 +10,12 @@ Parameters:
     Type: String
     Default: eks
     Description: The name of the EKS cluster.
+  HyperPodClusterName:
+    Type: String
+    Default: ''
+    Description: >-
+      The name of the HyperPod cluster. Scopes the alert rules when metrics go to CloudWatch, which skips them without
+      it.
   CustomResourceS3Bucket:
     Type: String
     Default: aws-sagemaker-hyperpod-cluster-setup-us-east-2-prod
@@ -732,6 +738,7 @@ Resources:
                   - GrafanaWorkspaceRole
                   - Arn
               - Ref: GrafanaRole
+          GRAFANA_VERSION: '13.2'
           REGION:
             Fn::Sub: ${AWS::Region}
           AWS_ACCOUNT_ID:
@@ -1032,6 +1039,8 @@ Resources:
           DASHBOARD_PREFIX_S3_KEY:
             Ref: ObservabilityAssetsS3Key
           ORCHESTRATOR_TYPE: eks
+          HYPERPOD_CLUSTER_NAME:
+            Ref: HyperPodClusterName
       FunctionName:
         Fn::Sub: ${ResourceNamePrefix}-grafunc
       Handler: lambda_function.lambda_handler

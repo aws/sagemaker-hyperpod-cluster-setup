@@ -2047,12 +2047,36 @@ Resources:
         IdleResourceSharing:
           Ref: IdleResourceSharing
     DependsOn:
-      - CertManagerStack
       - EKSClusterStack
       - HyperPodClusterStack
+      - TaskGovernanceCertManagerWaitCondition
       - TaskGovernanceClusterPolicyLambdaStack
     Metadata:
       aws:cdk:path: MainEksBasedCfnTemplate/TaskGovernanceClusterPolicyStack
+    Condition: EnableTaskGovernanceClusterPolicyCondition
+  TaskGovernanceCertManagerWaitHandle:
+    Type: AWS::CloudFormation::WaitConditionHandle
+    DependsOn:
+      - CertManagerStack
+    Metadata:
+      aws:cdk:path: MainEksBasedCfnTemplate/TaskGovernanceCertManagerWaitHandle
+    Condition: InstallCertManagerCondition
+  TaskGovernanceNoCertManagerWaitHandle:
+    Type: AWS::CloudFormation::WaitConditionHandle
+    Metadata:
+      aws:cdk:path: MainEksBasedCfnTemplate/TaskGovernanceNoCertManagerWaitHandle
+  TaskGovernanceCertManagerWaitCondition:
+    Type: AWS::CloudFormation::WaitCondition
+    Properties:
+      Handle:
+        Fn::If:
+          - InstallCertManagerCondition
+          - Ref: TaskGovernanceCertManagerWaitHandle
+          - Ref: TaskGovernanceNoCertManagerWaitHandle
+      Timeout: '1'
+      Count: 0
+    Metadata:
+      aws:cdk:path: MainEksBasedCfnTemplate/TaskGovernanceCertManagerWaitCondition
     Condition: EnableTaskGovernanceClusterPolicyCondition
   FsxFilesystemStack:
     Type: AWS::CloudFormation::Stack
@@ -2511,6 +2535,13 @@ Resources:
               - EKSClusterStack
               - Outputs.EKSClusterName
           - Ref: EKSClusterName
+      HyperPodClusterName:
+        Fn::If:
+          - CreateHyperPodClusterStackCondition
+          - Fn::GetAtt:
+              - HyperPodClusterStack
+              - Outputs.HyperPodClusterName
+          - Ref: HyperPodClusterName
       CustomResourceS3Bucket:
         Fn::If:
           - CustomBucketCondition

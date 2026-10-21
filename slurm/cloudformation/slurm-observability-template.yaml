@@ -443,6 +443,7 @@ Resources:
                   - GrafanaWorkspaceRole
                   - Arn
               - Ref: GrafanaRole
+          GRAFANA_VERSION: '13.2'
           REGION:
             Fn::Sub: ${AWS::Region}
           AWS_ACCOUNT_ID:
