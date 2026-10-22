@@ -73,6 +73,21 @@ Parameters:
     Type: String
     Default: ''
     Description: The name of the cluster execution role.
+  MetricsDestination:
+    Type: String
+    Default: amp
+    AllowedValues:
+      - amp
+      - cloudwatch
+    Description: >-
+      Where the add-on sends metrics: amp (an Amazon Managed Service for Prometheus workspace) or cloudwatch (no
+      workspace).
+  ObservabilityAddonVersion:
+    Type: String
+    Default: ''
+    Description: >-
+      The observability add-on version, for example v1.4.0-eksbuild.1. Empty installs the default version.
+      MetricsDestination cloudwatch needs v1.3.0 or later.
   CreatePrometheusWorkspace:
     Type: String
     Default: 'false'
@@ -187,6 +202,21 @@ Parameters:
     Type: CommaDelimitedList
     Default: subnet-1234567890abcdef0,subnet-1234567890abcdef1
     Description: List of private subnet IDs for VPC endpoints
+Rules:
+  CloudWatchMetricsNeedObservabilityAddonVersion:
+    RuleCondition:
+      Fn::Equals:
+        - Ref: MetricsDestination
+        - cloudwatch
+    Assertions:
+      - Assert:
+          Fn::Not:
+            - Fn::Equals:
+                - Ref: ObservabilityAddonVersion
+                - ''
+        AssertDescription: >-
+          MetricsDestination cloudwatch needs ObservabilityAddonVersion: an add-on version that accepts
+          metricsDestination (v1.3.0 or later).
 Mappings:
   AMGRegionMapping:
     us-east-1:
@@ -221,10 +251,19 @@ Conditions:
           - Fn::Equals:
               - Ref: CreateGrafanaWorkspace
               - disabled
-  PrometheusNewWorkspaceCondition:
+  CloudWatchMetricsCondition:
     Fn::Equals:
-      - Ref: CreatePrometheusWorkspace
-      - 'true'
+      - Ref: MetricsDestination
+      - cloudwatch
+  AmpMetricsCondition:
+    Fn::Not:
+      - Condition: CloudWatchMetricsCondition
+  PrometheusNewWorkspaceCondition:
+    Fn::And:
+      - Fn::Equals:
+          - Ref: CreatePrometheusWorkspace
+          - 'true'
+      - Condition: AmpMetricsCondition
   GrafanaNewWorkspaceCondition:
     Fn::And:
       - Fn::Equals:
@@ -262,6 +301,11 @@ Conditions:
     Fn::Equals:
       - Ref: IsRIG
       - 'true'
+  ObservabilityAddonVersionCondition:
+    Fn::Not:
+      - Fn::Equals:
+          - Ref: ObservabilityAddonVersion
+          - ''
 Resources:
   GrafanaVPCEndpoint:
     Type: AWS::EC2::VPCEndpoint
@@ -310,6 +354,7 @@ Resources:
         Ref: VpcId
     Metadata:
       aws:cdk:path: ObservabilityCfnTemplate/PrometheusVPCEndpoint
+    Condition: AmpMetricsCondition
   PrometheusWorkspace:
     Type: AWS::APS::Workspace
     Properties:
@@ -351,20 +396,34 @@ Resources:
         - PolicyDocument:
             Version: 2012-10-17
             Statement:
-              - Sid: PrometheusAccess
-                Effect: Allow
-                Action:
-                  - aps:RemoteWrite
-                Resource:
-                  Fn::Sub:
-                    - arn:aws:aps:${AWS::Region}:${AWS::AccountId}:workspace/${PrometheusWorkspaceId}
-                    - PrometheusWorkspaceId:
-                        Fn::If:
-                          - PrometheusNewWorkspaceCondition
-                          - Fn::GetAtt:
-                              - PrometheusWorkspace
-                              - WorkspaceId
-                          - Ref: PrometheusWorkspaceId
+              - Fn::If:
+                  - AmpMetricsCondition
+                  - Sid: PrometheusAccess
+                    Effect: Allow
+                    Action:
+                      - aps:RemoteWrite
+                    Resource:
+                      Fn::Sub:
+                        - arn:aws:aps:${AWS::Region}:${AWS::AccountId}:workspace/${PrometheusWorkspaceId}
+                        - PrometheusWorkspaceId:
+                            Fn::If:
+                              - PrometheusNewWorkspaceCondition
+                              - Fn::GetAtt:
+                                  - PrometheusWorkspace
+                                  - WorkspaceId
+                              - Ref: PrometheusWorkspaceId
+                  - Ref: AWS::NoValue
+              - Fn::If:
+                  - CloudWatchMetricsCondition
+                  - Sid: CloudwatchMetricsAccess
+                    Effect: Allow
+                    Action: cloudwatch:PutMetricData
+                    Resource: '*'
+                    Condition:
+                      StringEquals:
+                        aws:ResourceAccount:
+                          Fn::Sub: ${AWS::AccountId}
+                  - Ref: AWS::NoValue
               - Sid: CloudwatchLogsAccess
                 Effect: Allow
                 Action:
@@ -395,20 +454,34 @@ Resources:
       PolicyDocument:
         Version: 2012-10-17
         Statement:
-          - Sid: PrometheusAccess
-            Effect: Allow
-            Action:
-              - aps:RemoteWrite
-            Resource:
-              Fn::Sub:
-                - arn:aws:aps:${AWS::Region}:${AWS::AccountId}:workspace/${PrometheusWorkspaceId}
-                - PrometheusWorkspaceId:
-                    Fn::If:
-                      - PrometheusNewWorkspaceCondition
-                      - Fn::GetAtt:
-                          - PrometheusWorkspace
-                          - WorkspaceId
-                      - Ref: PrometheusWorkspaceId
+          - Fn::If:
+              - AmpMetricsCondition
+              - Sid: PrometheusAccess
+                Effect: Allow
+                Action:
+                  - aps:RemoteWrite
+                Resource:
+                  Fn::Sub:
+                    - arn:aws:aps:${AWS::Region}:${AWS::AccountId}:workspace/${PrometheusWorkspaceId}
+                    - PrometheusWorkspaceId:
+                        Fn::If:
+                          - PrometheusNewWorkspaceCondition
+                          - Fn::GetAtt:
+                              - PrometheusWorkspace
+                              - WorkspaceId
+                          - Ref: PrometheusWorkspaceId
+              - Ref: AWS::NoValue
+          - Fn::If:
+              - CloudWatchMetricsCondition
+              - Sid: CloudwatchMetricsAccess
+                Effect: Allow
+                Action: cloudwatch:PutMetricData
+                Resource: '*'
+                Condition:
+                  StringEquals:
+                    aws:ResourceAccount:
+                      Fn::Sub: ${AWS::AccountId}
+              - Ref: AWS::NoValue
           - Sid: CloudwatchLogsAccess
             Effect: Allow
             Action:
@@ -532,45 +605,72 @@ Resources:
     Type: AWS::EKS::Addon
     Properties:
       AddonName: amazon-sagemaker-hyperpod-observability
+      AddonVersion:
+        Fn::If:
+          - ObservabilityAddonVersionCondition
+          - Ref: ObservabilityAddonVersion
+          - Ref: AWS::NoValue
       ClusterName:
         Ref: EKSClusterName
       ConfigurationValues:
-        Fn::Join:
-          - ''
-          - - '{"ampWorkspace":{"prometheusEndpoint":"https://aps-workspaces.'
-            - Fn::Sub: ${AWS::Region}
-            - .amazonaws.com/workspaces/
-            - Fn::If:
-                - PrometheusNewWorkspaceCondition
-                - Fn::GetAtt:
-                    - PrometheusWorkspace
-                    - WorkspaceId
-                - Ref: PrometheusWorkspaceId
-            - '","arn":"'
-            - Fn::If:
-                - PrometheusNewWorkspaceCondition
-                - Fn::GetAtt:
-                    - PrometheusWorkspace
-                    - Arn
-                - Ref: PrometheusWorkspaceArn
-            - '"},"metricsProvider":{"trainingMetrics":{"level":"'
-            - Ref: TrainingMetricLevel
-            - >-
-              ","scrapeInterval":30},"inferenceMetrics":{"level":"BASIC","scrapeInterval":30},"taskGovernanceMetrics":{"level":"
-            - Ref: TaskGovernanceMetricLevel
-            - '","scrapeInterval":30},"scalingMetrics":{"level":"'
-            - Ref: ScalingMetricLevel
-            - '","scrapeInterval":30},"clusterMetrics":{"level":"'
-            - Ref: ClusterMetricLevel
-            - '","scrapeInterval":30},"nodeMetrics":{"level":"'
-            - Ref: NodeMetricLevel
-            - '","scrapeInterval":30},"acceleratedComputeMetrics":{"level":"'
-            - Ref: AcceleratedComputeMetricLevel
-            - '","scrapeInterval":30},"networkMetrics":{"level":"'
-            - Ref: NetworkMetricLevel
-            - '","scrapeInterval":30},"rayMetrics":{"level":"'
-            - Ref: RayMetricLevel
-            - '","scrapeInterval":30},"logging":{"enabled":true}}}'
+        Fn::If:
+          - CloudWatchMetricsCondition
+          - Fn::Join:
+              - ''
+              - - '{"metricsDestination":"cloudwatch","metricsProvider":{"trainingMetrics":{"level":"'
+                - Ref: TrainingMetricLevel
+                - >-
+                  ","scrapeInterval":30},"inferenceMetrics":{"level":"BASIC","scrapeInterval":30},"taskGovernanceMetrics":{"level":"
+                - Ref: TaskGovernanceMetricLevel
+                - '","scrapeInterval":30},"scalingMetrics":{"level":"'
+                - Ref: ScalingMetricLevel
+                - '","scrapeInterval":30},"clusterMetrics":{"level":"'
+                - Ref: ClusterMetricLevel
+                - '","scrapeInterval":30},"nodeMetrics":{"level":"'
+                - Ref: NodeMetricLevel
+                - '","scrapeInterval":30},"acceleratedComputeMetrics":{"level":"'
+                - Ref: AcceleratedComputeMetricLevel
+                - '","scrapeInterval":30},"networkMetrics":{"level":"'
+                - Ref: NetworkMetricLevel
+                - '","scrapeInterval":30},"rayMetrics":{"level":"'
+                - Ref: RayMetricLevel
+                - '","scrapeInterval":30},"logging":{"enabled":true}}}'
+          - Fn::Join:
+              - ''
+              - - '{"ampWorkspace":{"prometheusEndpoint":"https://aps-workspaces.'
+                - Fn::Sub: ${AWS::Region}
+                - .amazonaws.com/workspaces/
+                - Fn::If:
+                    - PrometheusNewWorkspaceCondition
+                    - Fn::GetAtt:
+                        - PrometheusWorkspace
+                        - WorkspaceId
+                    - Ref: PrometheusWorkspaceId
+                - '","arn":"'
+                - Fn::If:
+                    - PrometheusNewWorkspaceCondition
+                    - Fn::GetAtt:
+                        - PrometheusWorkspace
+                        - Arn
+                    - Ref: PrometheusWorkspaceArn
+                - '"},"metricsProvider":{"trainingMetrics":{"level":"'
+                - Ref: TrainingMetricLevel
+                - >-
+                  ","scrapeInterval":30},"inferenceMetrics":{"level":"BASIC","scrapeInterval":30},"taskGovernanceMetrics":{"level":"
+                - Ref: TaskGovernanceMetricLevel
+                - '","scrapeInterval":30},"scalingMetrics":{"level":"'
+                - Ref: ScalingMetricLevel
+                - '","scrapeInterval":30},"clusterMetrics":{"level":"'
+                - Ref: ClusterMetricLevel
+                - '","scrapeInterval":30},"nodeMetrics":{"level":"'
+                - Ref: NodeMetricLevel
+                - '","scrapeInterval":30},"acceleratedComputeMetrics":{"level":"'
+                - Ref: AcceleratedComputeMetricLevel
+                - '","scrapeInterval":30},"networkMetrics":{"level":"'
+                - Ref: NetworkMetricLevel
+                - '","scrapeInterval":30},"rayMetrics":{"level":"'
+                - Ref: RayMetricLevel
+                - '","scrapeInterval":30},"logging":{"enabled":true}}}'
       PodIdentityAssociations:
         - RoleArn:
             Fn::If:
@@ -591,45 +691,72 @@ Resources:
     Type: AWS::EKS::Addon
     Properties:
       AddonName: amazon-sagemaker-hyperpod-observability
+      AddonVersion:
+        Fn::If:
+          - ObservabilityAddonVersionCondition
+          - Ref: ObservabilityAddonVersion
+          - Ref: AWS::NoValue
       ClusterName:
         Ref: EKSClusterName
       ConfigurationValues:
-        Fn::Join:
-          - ''
-          - - '{"ampWorkspace":{"prometheusEndpoint":"https://aps-workspaces.'
-            - Fn::Sub: ${AWS::Region}
-            - .amazonaws.com/workspaces/
-            - Fn::If:
-                - PrometheusNewWorkspaceCondition
-                - Fn::GetAtt:
-                    - PrometheusWorkspace
-                    - WorkspaceId
-                - Ref: PrometheusWorkspaceId
-            - '","arn":"'
-            - Fn::If:
-                - PrometheusNewWorkspaceCondition
-                - Fn::GetAtt:
-                    - PrometheusWorkspace
-                    - Arn
-                - Ref: PrometheusWorkspaceArn
-            - '"},"metricsProvider":{"trainingMetrics":{"level":"'
-            - Ref: TrainingMetricLevel
-            - >-
-              ","scrapeInterval":30},"inferenceMetrics":{"level":"BASIC","scrapeInterval":30},"taskGovernanceMetrics":{"level":"
-            - Ref: TaskGovernanceMetricLevel
-            - '","scrapeInterval":30},"scalingMetrics":{"level":"'
-            - Ref: ScalingMetricLevel
-            - '","scrapeInterval":30},"clusterMetrics":{"level":"'
-            - Ref: ClusterMetricLevel
-            - '","scrapeInterval":30},"nodeMetrics":{"level":"'
-            - Ref: NodeMetricLevel
-            - '","scrapeInterval":30},"acceleratedComputeMetrics":{"level":"'
-            - Ref: AcceleratedComputeMetricLevel
-            - '","scrapeInterval":30},"networkMetrics":{"level":"'
-            - Ref: NetworkMetricLevel
-            - '","scrapeInterval":30},"rayMetrics":{"level":"'
-            - Ref: RayMetricLevel
-            - '","scrapeInterval":30},"logging":{"enabled":false}}}'
+        Fn::If:
+          - CloudWatchMetricsCondition
+          - Fn::Join:
+              - ''
+              - - '{"metricsDestination":"cloudwatch","metricsProvider":{"trainingMetrics":{"level":"'
+                - Ref: TrainingMetricLevel
+                - >-
+                  ","scrapeInterval":30},"inferenceMetrics":{"level":"BASIC","scrapeInterval":30},"taskGovernanceMetrics":{"level":"
+                - Ref: TaskGovernanceMetricLevel
+                - '","scrapeInterval":30},"scalingMetrics":{"level":"'
+                - Ref: ScalingMetricLevel
+                - '","scrapeInterval":30},"clusterMetrics":{"level":"'
+                - Ref: ClusterMetricLevel
+                - '","scrapeInterval":30},"nodeMetrics":{"level":"'
+                - Ref: NodeMetricLevel
+                - '","scrapeInterval":30},"acceleratedComputeMetrics":{"level":"'
+                - Ref: AcceleratedComputeMetricLevel
+                - '","scrapeInterval":30},"networkMetrics":{"level":"'
+                - Ref: NetworkMetricLevel
+                - '","scrapeInterval":30},"rayMetrics":{"level":"'
+                - Ref: RayMetricLevel
+                - '","scrapeInterval":30},"logging":{"enabled":false}}}'
+          - Fn::Join:
+              - ''
+              - - '{"ampWorkspace":{"prometheusEndpoint":"https://aps-workspaces.'
+                - Fn::Sub: ${AWS::Region}
+                - .amazonaws.com/workspaces/
+                - Fn::If:
+                    - PrometheusNewWorkspaceCondition
+                    - Fn::GetAtt:
+                        - PrometheusWorkspace
+                        - WorkspaceId
+                    - Ref: PrometheusWorkspaceId
+                - '","arn":"'
+                - Fn::If:
+                    - PrometheusNewWorkspaceCondition
+                    - Fn::GetAtt:
+                        - PrometheusWorkspace
+                        - Arn
+                    - Ref: PrometheusWorkspaceArn
+                - '"},"metricsProvider":{"trainingMetrics":{"level":"'
+                - Ref: TrainingMetricLevel
+                - >-
+                  ","scrapeInterval":30},"inferenceMetrics":{"level":"BASIC","scrapeInterval":30},"taskGovernanceMetrics":{"level":"
+                - Ref: TaskGovernanceMetricLevel
+                - '","scrapeInterval":30},"scalingMetrics":{"level":"'
+                - Ref: ScalingMetricLevel
+                - '","scrapeInterval":30},"clusterMetrics":{"level":"'
+                - Ref: ClusterMetricLevel
+                - '","scrapeInterval":30},"nodeMetrics":{"level":"'
+                - Ref: NodeMetricLevel
+                - '","scrapeInterval":30},"acceleratedComputeMetrics":{"level":"'
+                - Ref: AcceleratedComputeMetricLevel
+                - '","scrapeInterval":30},"networkMetrics":{"level":"'
+                - Ref: NetworkMetricLevel
+                - '","scrapeInterval":30},"rayMetrics":{"level":"'
+                - Ref: RayMetricLevel
+                - '","scrapeInterval":30},"logging":{"enabled":false}}}'
       PodIdentityAssociations:
         - RoleArn:
             Fn::If:
@@ -1019,11 +1146,14 @@ Resources:
               - Ref: GrafanaWorkspaceId
           PROMETHEUS_WORKSPACE_ID:
             Fn::If:
-              - PrometheusNewWorkspaceCondition
-              - Fn::GetAtt:
-                  - PrometheusWorkspace
-                  - WorkspaceId
-              - Ref: PrometheusWorkspaceId
+              - CloudWatchMetricsCondition
+              - ''
+              - Fn::If:
+                  - PrometheusNewWorkspaceCondition
+                  - Fn::GetAtt:
+                      - PrometheusWorkspace
+                      - WorkspaceId
+                  - Ref: PrometheusWorkspaceId
           GRAFANA_WORKSPACE_TOKEN_KEY:
             Fn::GetAtt:
               - GrafanaServiceAccountCustomResource
@@ -1119,6 +1249,7 @@ Outputs:
     Export:
       Name:
         Fn::Sub: ${AWS::StackName}-PrometheusVPCEndpointId
+    Condition: AmpMetricsCondition
   HyperpodPrometheusWorkspaceId:
     Description: Prometheus Workspace ID
     Value:
@@ -1131,6 +1262,7 @@ Outputs:
     Export:
       Name:
         Fn::Sub: ${AWS::StackName}-PrometheusWorkspaceId
+    Condition: AmpMetricsCondition
   HyperpodPrometheusWorkspaceArn:
     Description: Prometheus Workspace Arn
     Value:
@@ -1143,6 +1275,7 @@ Outputs:
     Export:
       Name:
         Fn::Sub: ${AWS::StackName}-PrometheusWorkspaceArn
+    Condition: AmpMetricsCondition
   HyperpodPrometheusWorkspaceEndpoint:
     Description: Prometheus Workspace Endpoint
     Value:
@@ -1155,6 +1288,7 @@ Outputs:
     Export:
       Name:
         Fn::Sub: ${AWS::StackName}-PrometheusWorkspaceEndpoint
+    Condition: AmpMetricsCondition
   HyperpodGrafanaWorkspaceArn:
     Description: Grafana Workspace Arn
     Value:

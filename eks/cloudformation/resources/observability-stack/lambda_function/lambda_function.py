@@ -49,23 +49,25 @@ def lambda_handler(event, context):
         )
  
  
+OPTIONAL_PARAMETERS = ['HyperPodClusterName', 'MetricsDestination', 'ObservabilityAddonVersion']
+
 def optional_parameters(cfn, template_url, props):
     """
     Parameters newer than some observability templates, passed only when the template declares them: CloudFormation
     rejects an undeclared parameter, e.g. when StackTemplateUrl points at an older template in a customer bucket.
     If the template's parameters can't be read, they are left out (without the cluster name, the Grafana Lambda
-    only skips the CloudWatch alert rules).
+    only skips the CloudWatch alert rules; without MetricsDestination, the template's default is AMP; without
+    ObservabilityAddonVersion, EKS installs its default add-on version).
     """
-    if not props.get('HyperPodClusterName'):
+    keys = [key for key in OPTIONAL_PARAMETERS if props.get(key)]
+    if not keys:
         return []
     try:
         declared = {p['ParameterKey'] for p in cfn.get_template_summary(TemplateURL=template_url).get('Parameters', [])}
     except Exception as e:
         print(f"Could not read the observability template's parameters: {str(e)}")
         return []
-    if 'HyperPodClusterName' not in declared:
-        return []
-    return [{'ParameterKey': 'HyperPodClusterName', 'ParameterValue': props['HyperPodClusterName']}]
+    return [{'ParameterKey': key, 'ParameterValue': props[key]} for key in keys if key in declared]
 
 def on_create(event):
     """

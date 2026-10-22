@@ -243,6 +243,42 @@ class TestAlertRules(unittest.TestCase):
         self.assertEqual(result['status'], 'existing')
 
 
+class TestDashboardTemplates(unittest.TestCase):
+    def setUp(self):
+        self.assets = tempfile.TemporaryDirectory()
+        for folder, title in (('templates', 'AMP'), ('cloudwatchTemplates', 'CloudWatch')):
+            os.makedirs(os.path.join(self.assets.name, 'dashboards', folder))
+            with open(os.path.join(self.assets.name, 'dashboards', folder, 'cluster.json'), 'w', encoding='utf-8') as f:
+                json.dump({'dashboard': {'uid': 'cluster', 'title': title}}, f)
+
+    def tearDown(self):
+        self.assets.cleanup()
+
+    def _installed_title(self, **env):
+        posted = []
+
+        def fake_request(endpoint, method, payload=None, additional_headers=None):
+            posted.append(payload)
+            return response(200, {'uid': 'cluster'})
+
+        with patch.dict(os.environ, {**ENV, **env}, clear=True), \
+                patch.object(lambda_function, 'download_and_extract_assets', return_value=self.assets.name), \
+                patch.object(lambda_function, 'make_grafana_request', fake_request):
+            lambda_function.create_dashboard('cluster')
+        return posted[0]['dashboard']['title']
+
+    def test_amp_installs_the_amp_dashboards(self):
+        self.assertEqual(self._installed_title(), 'AMP')
+
+    def test_without_amp_installs_the_cloudwatch_dashboards(self):
+        self.assertEqual(self._installed_title(PROMETHEUS_WORKSPACE_ID=''), 'CloudWatch')
+
+    def test_without_amp_falls_back_to_the_amp_dashboards_with_older_assets(self):
+        os.remove(os.path.join(self.assets.name, 'dashboards', 'cloudwatchTemplates', 'cluster.json'))
+
+        self.assertEqual(self._installed_title(PROMETHEUS_WORKSPACE_ID=''), 'AMP')
+
+
 class TestAlertRuleUid(unittest.TestCase):
     def test_cloudwatch_uids_carry_a_cluster_hash_within_the_grafana_uid_limit(self):
         self.assertEqual(alert_rule_uid('GPUHighTemperature', 'hp-cluster-1'), 'hp-gpu-high-temperature-0b9d912c')

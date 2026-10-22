@@ -123,6 +123,8 @@ Metadata:
       - Label:
           default: Observability
         Parameters:
+          - MetricsDestination
+          - ObservabilityAddonVersion
           - PrometheusWorkspaceId
           - PrometheusWorkspaceArn
           - PrometheusWorkspaceEndpoint
@@ -369,6 +371,10 @@ Metadata:
         default: Tiered KV Cache Configuration
       RestrictedInstanceGroupsConfig:
         default: Restricted Instance Groups Configuration
+      MetricsDestination:
+        default: Metrics Destination
+      ObservabilityAddonVersion:
+        default: Observability Add-on Version
       PrometheusWorkspaceId:
         default: Prometheus Workspace Id
       PrometheusWorkspaceArn:
@@ -987,6 +993,21 @@ Parameters:
     Type: String
     Default: ''
     Description: Existing FSx for Lustre file system
+  MetricsDestination:
+    Type: String
+    Default: amp
+    AllowedValues:
+      - amp
+      - cloudwatch
+    Description: >-
+      Where the observability add-on sends metrics: amp (an Amazon Managed Service for Prometheus workspace) or
+      cloudwatch (no workspace).
+  ObservabilityAddonVersion:
+    Type: String
+    Default: ''
+    Description: >-
+      The observability add-on version, for example v1.4.0-eksbuild.1. Empty installs the default version.
+      MetricsDestination cloudwatch needs v1.3.0 or later.
   PrometheusWorkspaceId:
     Type: String
     Default: ''
@@ -1192,6 +1213,21 @@ Parameters:
       - 'true'
       - 'false'
     Description: Boolean to Create FSx for Lustre File System Stack
+Rules:
+  CloudWatchMetricsNeedObservabilityAddonVersion:
+    RuleCondition:
+      Fn::Equals:
+        - Ref: MetricsDestination
+        - cloudwatch
+    Assertions:
+      - Assert:
+          Fn::Not:
+            - Fn::Equals:
+                - Ref: ObservabilityAddonVersion
+                - ''
+        AssertDescription: >-
+          MetricsDestination cloudwatch needs ObservabilityAddonVersion: an add-on version that accepts
+          metricsDestination (v1.3.0 or later).
 Conditions:
   EnableHPInferenceFeatureCondition:
     Fn::Equals:
@@ -2586,6 +2622,10 @@ Resources:
         Ref: RayMetricLevel
       Logging:
         Ref: Logging
+      MetricsDestination:
+        Ref: MetricsDestination
+      ObservabilityAddonVersion:
+        Ref: ObservabilityAddonVersion
       GrafanaWorkspaceName:
         Ref: GrafanaWorkspaceName
       GrafanaWorkspaceId:

@@ -372,8 +372,13 @@ def create_dashboard(template_name):
     try:
         extract_dir = download_and_extract_assets()
         orchestrator = os.environ.get('ORCHESTRATOR_TYPE', 'eks')
+        cloudwatch_path = os.path.join(extract_dir, 'dashboards', 'cloudwatchTemplates', f'{template_name}.json')
         if orchestrator == 'slurm':
             dashboard_path = os.path.join(extract_dir, 'dashboards', 'slurmTemplates', f'{template_name}.json')
+        # Without a Prometheus workspace, metrics go to CloudWatch: the same dashboards (same uids) with queries on
+        # the CloudWatch labels. Assets versions before them have only the AMP dashboards.
+        elif not os.environ.get(PROMETHEUS_WORKSPACE_ID) and os.path.exists(cloudwatch_path):
+            dashboard_path = cloudwatch_path
         else:
             dashboard_path = os.path.join(extract_dir, 'dashboards', 'templates', f'{template_name}.json')
         logger.info(f"Loading dashboard template from: {dashboard_path}")

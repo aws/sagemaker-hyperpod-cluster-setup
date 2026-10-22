@@ -94,6 +94,52 @@ class TestHyperPodClusterNameParameter(unittest.TestCase):
 
 
     @patch('lambda_function.boto3.client')
+    def test_metrics_destination_is_passed_when_the_template_declares_it(self, mock_client):
+        cloudformation = self._cloudformation(declared=('HyperPodClusterName', 'MetricsDestination'))
+        mock_client.return_value = cloudformation
+
+        on_create(self._event(HyperPodClusterName='hp-cluster-1', MetricsDestination='cloudwatch'))
+        on_update(self._event(HyperPodClusterName='hp-cluster-1', MetricsDestination='cloudwatch'))
+
+        for call in (cloudformation.create_stack.call_args, cloudformation.update_stack.call_args):
+            self.assertEqual(self._parameter(call, 'MetricsDestination'), 'cloudwatch')
+            self.assertEqual(self._parameter(call, 'HyperPodClusterName'), 'hp-cluster-1')
+
+    @patch('lambda_function.boto3.client')
+    def test_metrics_destination_is_not_passed_to_an_older_template(self, mock_client):
+        # The older template's default is AMP.
+        cloudformation = self._cloudformation(declared=('HyperPodClusterName',))
+        mock_client.return_value = cloudformation
+
+        on_create(self._event(HyperPodClusterName='hp-cluster-1', MetricsDestination='cloudwatch'))
+
+        keys = [p['ParameterKey'] for p in cloudformation.create_stack.call_args.kwargs['Parameters']]
+        self.assertNotIn('MetricsDestination', keys)
+        self.assertIn('HyperPodClusterName', keys)
+
+    @patch('lambda_function.boto3.client')
+    def test_addon_version_is_passed_only_when_set_and_declared(self, mock_client):
+        cloudformation = self._cloudformation(declared=('MetricsDestination', 'ObservabilityAddonVersion'))
+        mock_client.return_value = cloudformation
+
+        on_create(self._event(MetricsDestination='cloudwatch', ObservabilityAddonVersion='v1.4.0-eksbuild.1'))
+        self.assertEqual(
+            self._parameter(cloudformation.create_stack.call_args, 'ObservabilityAddonVersion'), 'v1.4.0-eksbuild.1'
+        )
+
+        # Empty keeps the template's default (EKS's default add-on version).
+        on_update(self._event(MetricsDestination='cloudwatch', ObservabilityAddonVersion=''))
+        keys = [p['ParameterKey'] for p in cloudformation.update_stack.call_args.kwargs['Parameters']]
+        self.assertNotIn('ObservabilityAddonVersion', keys)
+
+        # An older template doesn't declare it.
+        cloudformation = self._cloudformation(declared=('MetricsDestination',))
+        mock_client.return_value = cloudformation
+        on_create(self._event(MetricsDestination='cloudwatch', ObservabilityAddonVersion='v1.4.0-eksbuild.1'))
+        keys = [p['ParameterKey'] for p in cloudformation.create_stack.call_args.kwargs['Parameters']]
+        self.assertNotIn('ObservabilityAddonVersion', keys)
+
+    @patch('lambda_function.boto3.client')
     def test_update_with_nothing_to_change_succeeds(self, mock_client):
         # e.g. the HyperPodClusterName property changed but the nested stack's template and parameters didn't
         cloudformation = self._cloudformation()

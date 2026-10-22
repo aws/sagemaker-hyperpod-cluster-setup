@@ -12,7 +12,7 @@ node -e "
 const fs = require('fs');
 const {
   clusterJson, efaJson, inferenceJson, tasksJson, trainingJson, rulesYaml, cloudwatchRulesYaml,
-  slurmClustersJson, slurmJobsJson
+  slurmClustersJson, slurmJobsJson, cloudwatchDashboardRegistry
 } = require('@amzn/hyperpod-observability-assets');
 
 // Create directories
@@ -26,6 +26,17 @@ fs.writeFileSync('dashboards/templates/efa.json', JSON.stringify(efaJson, null, 
 fs.writeFileSync('dashboards/templates/inference.json', JSON.stringify(inferenceJson, null, 2));
 fs.writeFileSync('dashboards/templates/tasks.json', JSON.stringify(tasksJson, null, 2));
 fs.writeFileSync('dashboards/templates/training.json', JSON.stringify(trainingJson, null, 2));
+
+// Write the CloudWatch versions of the EKS dashboards (same uids), for clusters whose metrics go to CloudWatch.
+// Assets versions before cloudwatchDashboardRegistry have only the AMP dashboards.
+if (cloudwatchDashboardRegistry) {
+  fs.mkdirSync('dashboards/cloudwatchTemplates', { recursive: true });
+  const dashboards = { cluster: clusterJson, efa: efaJson, inference: inferenceJson, tasks: tasksJson, training: trainingJson };
+  Object.entries(dashboards).forEach(([name, json]) => {
+    const entry = cloudwatchDashboardRegistry.find((e) => e.uid === json.dashboard.uid);
+    fs.writeFileSync('dashboards/cloudwatchTemplates/' + name + '.json', JSON.stringify(entry.template, null, 2));
+  });
+}
 
 // Write Slurm dashboard files
 fs.writeFileSync('dashboards/slurmTemplates/clusters.json', JSON.stringify(slurmClustersJson, null, 2));
