@@ -2181,12 +2181,16 @@
       "sagemaker",
       "hyperpod",
       "fsx",
-      "version-1.0.1"
+      "version-1.0.2"
     ],
     "templating": {
       "list": [
         {
-          "current": {},
+          "current": {
+            "selected": false,
+            "text": "cloudwatch",
+            "value": "cloudwatch"
+          },
           "hide": 0,
           "includeAll": false,
           "label": "Datasource",
@@ -2299,5 +2303,5 @@
     "version": 18,
     "weekStart": ""
   },
-  "message": "1.0.1: clear unused default values"
+  "message": "1.0.2: pin data source variables for Grafana 12+"
 }

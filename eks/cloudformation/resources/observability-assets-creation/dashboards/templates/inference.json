@@ -4309,12 +4309,16 @@
       "hyperpod",
       "metrics",
       "model",
-      "version-1.3.0"
+      "version-1.3.2"
     ],
     "templating": {
       "list": [
         {
-          "current": {},
+          "current": {
+            "selected": false,
+            "text": "prometheus",
+            "value": "prometheus"
+          },
           "hide": 2,
           "includeAll": false,
           "label": "Datasource",
@@ -4466,10 +4470,11 @@
       ]
     },
     "timezone": "",
-    "title": "Inference",
+    "title": "Inference Deployments",
     "uid": "aws-sm-hp-observability-inference-v1_0",
     "version": 19,
     "weekStart": ""
   },
-  "message": "1.3.0: Add DPD metrics with new panels"
+  "folderUid": "aws-sm-hp-observability-inference",
+  "message": "1.3.2: pin data source variables for Grafana 12+"
 }

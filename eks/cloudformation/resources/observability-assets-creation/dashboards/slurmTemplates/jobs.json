@@ -2513,12 +2513,16 @@
       "sagemaker",
       "hyperpod-slurm",
       "job",
-      "version-1.0.0"
+      "version-1.0.1"
     ],
     "templating": {
       "list": [
         {
-          "current": {},
+          "current": {
+            "selected": false,
+            "text": "prometheus",
+            "value": "prometheus"
+          },
           "description": "Data source to query metrics from",
           "hide": 0,
           "includeAll": false,
@@ -2905,5 +2909,5 @@
     "version": 1,
     "weekStart": ""
   },
-  "message": "1.0.0: initial Slurm Jobs dashboard"
+  "message": "1.0.1: pin data source variables for Grafana 12+"
 }

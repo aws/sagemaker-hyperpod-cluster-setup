@@ -20280,12 +20280,16 @@
       "sagemaker",
       "hyperpod-slurm",
       "cluster",
-      "version-1.0.0"
+      "version-1.0.1"
     ],
     "templating": {
       "list": [
         {
-          "current": {},
+          "current": {
+            "selected": false,
+            "text": "prometheus",
+            "value": "prometheus"
+          },
           "hide": 0,
           "includeAll": false,
           "label": "Data Source",
@@ -20432,5 +20436,5 @@
     "version": 1,
     "weekStart": ""
   },
-  "message": "1.0.0: initial Slurm Cluster dashboard"
+  "message": "1.0.1: pin data source variables for Grafana 12+"
 }

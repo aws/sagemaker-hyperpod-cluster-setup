@@ -3112,7 +3112,7 @@
       "kpi",
       "training",
       "metrics",
-      "version-1.1.0"
+      "version-1.1.1"
     ],
     "templating": {
       "list": [
@@ -3166,7 +3166,11 @@
           "type": "query"
         },
         {
-          "current": {},
+          "current": {
+            "selected": false,
+            "text": "prometheus",
+            "value": "prometheus"
+          },
           "hide": 2,
           "includeAll": false,
           "multi": false,
@@ -3245,5 +3249,5 @@
     "version": 9,
     "weekStart": ""
   },
-  "message": "1.1.0: add SDK Training Metrics and Training KPIs sections"
+  "message": "1.1.1: pin data source variables for Grafana 12+"
 }
