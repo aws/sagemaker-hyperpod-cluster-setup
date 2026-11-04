@@ -49,7 +49,7 @@ def lambda_handler(event, context):
         )
  
  
-OPTIONAL_PARAMETERS = ['HyperPodClusterName', 'MetricsDestination', 'ObservabilityAddonVersion']
+OPTIONAL_PARAMETERS = ['HyperPodClusterName', 'MetricsDestination', 'ObservabilityAddonVersion', 'HostProfiling']
 
 def optional_parameters(cfn, template_url, props):
     """
@@ -57,7 +57,8 @@ def optional_parameters(cfn, template_url, props):
     rejects an undeclared parameter, e.g. when StackTemplateUrl points at an older template in a customer bucket.
     If the template's parameters can't be read, they are left out (without the cluster name, the Grafana Lambda
     only skips the CloudWatch alert rules; without MetricsDestination, the template's default is AMP; without
-    ObservabilityAddonVersion, EKS installs its default add-on version).
+    ObservabilityAddonVersion, EKS installs its default add-on version; without HostProfiling, the template's default
+    leaves host profiling off).
     """
     keys = [key for key in OPTIONAL_PARAMETERS if props.get(key)]
     if not keys:

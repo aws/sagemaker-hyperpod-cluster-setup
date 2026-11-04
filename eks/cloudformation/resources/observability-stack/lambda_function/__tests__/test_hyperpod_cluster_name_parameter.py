@@ -140,6 +140,24 @@ class TestHyperPodClusterNameParameter(unittest.TestCase):
         self.assertNotIn('ObservabilityAddonVersion', keys)
 
     @patch('lambda_function.boto3.client')
+    def test_host_profiling_is_passed_only_when_declared(self, mock_client):
+        cloudformation = self._cloudformation(declared=('ObservabilityAddonVersion', 'HostProfiling'))
+        mock_client.return_value = cloudformation
+
+        on_create(self._event(ObservabilityAddonVersion='v1.4.0-eksbuild.1', HostProfiling='true'))
+        on_update(self._event(ObservabilityAddonVersion='v1.4.0-eksbuild.1', HostProfiling='false'))
+        self.assertEqual(self._parameter(cloudformation.create_stack.call_args, 'HostProfiling'), 'true')
+        self.assertEqual(self._parameter(cloudformation.update_stack.call_args, 'HostProfiling'), 'false')
+
+        # An older template doesn't declare it; its add-on configuration has no host profiling.
+        cloudformation = self._cloudformation(declared=('ObservabilityAddonVersion',))
+        mock_client.return_value = cloudformation
+        on_create(self._event(ObservabilityAddonVersion='v1.4.0-eksbuild.1', HostProfiling='true'))
+        keys = [p['ParameterKey'] for p in cloudformation.create_stack.call_args.kwargs['Parameters']]
+        self.assertNotIn('HostProfiling', keys)
+        self.assertIn('ObservabilityAddonVersion', keys)
+
+    @patch('lambda_function.boto3.client')
     def test_update_with_nothing_to_change_succeeds(self, mock_client):
         # e.g. the HyperPodClusterName property changed but the nested stack's template and parameters didn't
         cloudformation = self._cloudformation()

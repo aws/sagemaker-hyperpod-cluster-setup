@@ -12,7 +12,7 @@ node -e "
 const fs = require('fs');
 const {
   clusterJson, efaJson, inferenceJson, tasksJson, trainingJson, rulesYaml, cloudwatchRulesYaml,
-  slurmClustersJson, slurmJobsJson, cloudwatchDashboardRegistry
+  slurmClustersJson, slurmJobsJson, cloudwatchDashboardRegistry, cloudwatchSlurmClustersJson, cloudwatchSlurmJobsJson
 } = require('@amzn/hyperpod-observability-assets');
 
 // Create directories
@@ -41,6 +41,13 @@ if (cloudwatchDashboardRegistry) {
 // Write Slurm dashboard files
 fs.writeFileSync('dashboards/slurmTemplates/clusters.json', JSON.stringify(slurmClustersJson, null, 2));
 fs.writeFileSync('dashboards/slurmTemplates/jobs.json', JSON.stringify(slurmJobsJson, null, 2));
+
+// The CloudWatch versions of the Slurm dashboards (same uids). Assets versions before them have only the AMP ones.
+if (cloudwatchSlurmClustersJson && cloudwatchSlurmJobsJson) {
+  fs.mkdirSync('dashboards/slurmCloudwatchTemplates', { recursive: true });
+  fs.writeFileSync('dashboards/slurmCloudwatchTemplates/clusters.json', JSON.stringify(cloudwatchSlurmClustersJson, null, 2));
+  fs.writeFileSync('dashboards/slurmCloudwatchTemplates/jobs.json', JSON.stringify(cloudwatchSlurmJobsJson, null, 2));
+}
 
 // Write rules files. Assets versions before cloudwatchRulesYaml have only the AMP rules.
 fs.writeFileSync('alerts/alert-rules.yaml', rulesYaml);

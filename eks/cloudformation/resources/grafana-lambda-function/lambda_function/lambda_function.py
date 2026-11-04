@@ -17,6 +17,8 @@ REGION = 'REGION'
 S3_BUCKET = 'S3_BUCKET'
 DASHBOARD_PREFIX_S3_KEY = 'DASHBOARD_PREFIX_S3_KEY'
 HYPERPOD_CLUSTER_NAME = 'HYPERPOD_CLUSTER_NAME'
+# 'true' only where the cluster waits for this stack, so a conflict can fail it before a cluster exists.
+SLURM_DASHBOARD_CONFLICT_FAILS = 'SLURM_DASHBOARD_CONFLICT_FAILS'
 
 # cloudwatchRulesClusterNamePlaceholder in HyperPodObservabilityAssets.
 CLOUDWATCH_RULES_CLUSTER_PLACEHOLDER = '__HYPERPOD_CLUSTER_NAME__'
@@ -269,6 +271,21 @@ AMAZON_PROMETHEUS_PLUGIN_ID = 'grafana-amazonprometheus-datasource'
 
 def create_cloudwatch_opentelemetry_datasource():
     """CloudWatch OpenTelemetry (PromQL over CloudWatch OTLP metrics), used when there is no Prometheus workspace."""
+    # Slurm only, outside the try like the Prometheus data source's check: the data source is only the Amazon Managed
+    # Service for Prometheus plugin, which older workspaces don't have. It fails the stack only on the extension path,
+    # before the cluster; on the node agent path, alongside the cluster, the data source is skipped (best effort).
+    if os.environ.get('ORCHESTRATOR_TYPE') == 'slurm':
+        try:
+            if get_prometheus_datasource_type() != AMAZON_PROMETHEUS_PLUGIN_ID:
+                raise Exception(
+                    f"Grafana workspace {os.environ[GRAFANA_WORKSPACE_ID]} has no Amazon Managed Service for "
+                    "Prometheus plugin, which the CloudWatch data source needs"
+                )
+        except Exception as e:
+            if os.environ.get(SLURM_DASHBOARD_CONFLICT_FAILS) == 'true':
+                raise
+            logger.warning(f"Skipping the CloudWatch OpenTelemetry datasource: {str(e)}")
+            return {'message': str(e), 'status': 'skipped'}
     try:
         validate_env_vars()
         region = os.environ[REGION]
@@ -368,12 +385,68 @@ def create_prometheus_datasource():
     except Exception as e:
         return handle_resource_creation('Datasource', lambda: raise_or_return(e))
 
+def check_slurm_dashboard_sets(templates):
+    """
+    Finds the Slurm dashboards the workspace already has from the other metric store's set: the AMP and CloudWatch
+    sets share uids, so overwriting one would break the dashboards of the clusters that use it. Only with assets that
+    have the CloudWatch set; before it there was one. The CloudWatch dashboards query CloudWatch's resource attributes
+    (@resource.*), the AMP ones never do; keep in sync with SlurmGrafanaDashboards in IronManConsole-Assets.
+    Raises on a conflict, or a dashboard it can't read, with SLURM_DASHBOARD_CONFLICT_FAILS; otherwise returns them as
+    {template: reason}, not to be written, since a failure would delete the cluster being created alongside.
+    """
+    cloudwatch = not os.environ.get(PROMETHEUS_WORKSPACE_ID)
+    folder = 'slurmCloudwatchTemplates' if cloudwatch else 'slurmTemplates'
+    skipped = {}
+    try:
+        extract_dir = download_and_extract_assets()
+    except Exception:
+        # Then no dashboard is written either, which doesn't fail the stack.
+        return skipped
+    for template_name in templates:
+        if not os.path.exists(os.path.join(extract_dir, 'dashboards', 'slurmCloudwatchTemplates', f'{template_name}.json')):
+            continue
+        try:
+            with open(os.path.join(extract_dir, 'dashboards', folder, f'{template_name}.json'), 'r', encoding='utf-8') as f:
+                dashboard_data = json.load(f)
+            uid = dashboard_data.get('dashboard', dashboard_data).get('uid')
+            response = make_grafana_request(f'dashboards/uid/{uid}', 'GET')
+            if response.status == 404:
+                continue
+            # Anything else is transient; guessing could overwrite the other set.
+            if response.status != 200:
+                raise Exception(f"Failed to read Grafana dashboard {uid}. Status: {response.status}")
+            installed = json.loads(response.data.decode('utf-8')).get('dashboard') or {}
+            if ('@resource.' in json.dumps(installed)) != cloudwatch:
+                ours = 'CloudWatch' if cloudwatch else 'Amazon Managed Service for Prometheus'
+                theirs = 'Amazon Managed Service for Prometheus' if cloudwatch else 'CloudWatch'
+                raise Exception(
+                    f"Grafana workspace {os.environ[GRAFANA_WORKSPACE_ID]} already has the Slurm dashboard "
+                    f"{installed.get('title') or uid} ({uid}) for {theirs} metrics, and this stack's metrics go to "
+                    f"{ours}: the two sets share dashboard uids. Use another Grafana workspace"
+                )
+        except Exception as e:
+            if os.environ.get(SLURM_DASHBOARD_CONFLICT_FAILS) == 'true':
+                raise
+            logger.warning(f'Skipping dashboard {template_name}: {e}')
+            skipped[template_name] = str(e)
+    return skipped
+
 def create_dashboard(template_name):
     try:
         extract_dir = download_and_extract_assets()
         orchestrator = os.environ.get('ORCHESTRATOR_TYPE', 'eks')
         cloudwatch_path = os.path.join(extract_dir, 'dashboards', 'cloudwatchTemplates', f'{template_name}.json')
-        if orchestrator == 'slurm':
+        slurm_cloudwatch_path = os.path.join(
+            extract_dir, 'dashboards', 'slurmCloudwatchTemplates', f'{template_name}.json'
+        )
+        # Slurm clusters whose metrics go to CloudWatch get the CloudWatch Slurm dashboards (same uids). Assets without
+        # them get none: the AMP ones don't read CloudWatch, and the console sets the CloudWatch ones up.
+        if orchestrator == 'slurm' and not os.environ.get(PROMETHEUS_WORKSPACE_ID):
+            if not os.path.exists(slurm_cloudwatch_path):
+                logger.warning(f'Skipping dashboard {template_name}: the assets have no CloudWatch Slurm dashboards')
+                return {'status': 'skipped', 'message': f'No CloudWatch Slurm dashboard {template_name} in the assets'}
+            dashboard_path = slurm_cloudwatch_path
+        elif orchestrator == 'slurm':
             dashboard_path = os.path.join(extract_dir, 'dashboards', 'slurmTemplates', f'{template_name}.json')
         # Without a Prometheus workspace, metrics go to CloudWatch: the same dashboards (same uids) with queries on
         # the CloudWatch labels. Assets versions before them have only the AMP dashboards.
@@ -611,11 +684,14 @@ def lambda_handler(event, context):
         else:
             raise ValueError(f"Invalid request type: {request_type}")
         
+        failed = response_data.get("Status") != "SUCCESS"
+        # A failure's own reason, so CloudFormation (and the console) show it, not only the log stream.
         cfnresponse.send(
             event,
             context,
-            cfnresponse.SUCCESS if response_data.get("Status") == "SUCCESS" else cfnresponse.FAILED,
-            response_data
+            cfnresponse.FAILED if failed else cfnresponse.SUCCESS,
+            response_data,
+            reason=failure_reason(response_data.get("Reason"), context) if failed else None
         )
 
     except Exception as e:
@@ -627,8 +703,13 @@ def lambda_handler(event, context):
             {
                 "Status": "FAILED",
                 "Reason": str(e)
-            }
+            },
+            reason=failure_reason(str(e), context)
         )
+
+def failure_reason(message, context):
+    """The reason for a FAILED response: the error, with the log stream, short enough for CloudFormation's limit."""
+    return f"{str(message)[:800]} (log stream: {getattr(context, 'log_stream_name', '-')})"
 
 def on_create():
     """Handle Create request"""
@@ -648,6 +729,15 @@ def on_create():
         # Validate environment variables
         validate_env_vars()
 
+        orchestrator = os.environ.get('ORCHESTRATOR_TYPE', 'eks')
+        skipped_dashboards = {}
+        if orchestrator == 'slurm':
+            dashboard_templates = ['clusters', 'jobs']
+            # Before anything is written, so a conflict that fails the stack leaves the workspace as it was.
+            skipped_dashboards = check_slurm_dashboard_sets(dashboard_templates)
+        else:
+            dashboard_templates = ['cluster', 'efa', 'training', 'inference', 'tasks']
+
         # Create data sources with logging
         datasource_result = create_grafana_datasource()
         response_data["resources"]["grafanaDatasource"] = datasource_result
@@ -665,18 +755,27 @@ def on_create():
         response_data["resources"]["folder"] = folder_result
 
         # Create dashboards
-        orchestrator = os.environ.get('ORCHESTRATOR_TYPE', 'eks')
-        if orchestrator == 'slurm':
-            dashboard_templates = ['clusters', 'jobs']
-        else:
-            dashboard_templates = ['cluster', 'efa', 'training', 'inference', 'tasks']
         for template in dashboard_templates:
+            if template in skipped_dashboards:
+                response_data["resources"]["dashboards"].append({
+                    'template': template,
+                    'status': 'skipped',
+                    'reason': skipped_dashboards[template]
+                })
+                continue
             try:
                 result = create_dashboard(template)
                 
+                # create_dashboard returns its own failure as {'error': ...} rather than raising.
+                if 'error' in result:
+                    status = 'error'
+                elif result.get('status') in ('existing', 'skipped'):
+                    status = result['status']
+                else:
+                    status = 'success'
                 dashboard_entry = {
                     'template': template,
-                    'status': 'success' if result.get('status') != 'existing' else 'existing',
+                    'status': status,
                     'result': result
                 }
                 response_data["resources"]["dashboards"].append(dashboard_entry)

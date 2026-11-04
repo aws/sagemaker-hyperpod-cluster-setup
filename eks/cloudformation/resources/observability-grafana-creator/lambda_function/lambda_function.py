@@ -6,14 +6,29 @@ import json
 from botocore.exceptions import ClientError
 import time
 
+# CloudFormation rejects a response body over 4096 bytes; this leaves room for the rest of it.
+MAX_REASON_LENGTH = 1000
+
+
+def failure_reason(request_type, error, context):
+    """The error itself, so the stack event says why (for example the account's workspace quota), and the log stream."""
+    if isinstance(error, ClientError):
+        message = f"{error.response['Error'].get('Code')}: {error.response['Error'].get('Message')}"
+    else:
+        message = f"{type(error).__name__}: {error}"
+    action = 'create' if request_type == 'Create' else 'process the request for'
+    suffix = f" (log stream: {context.log_stream_name})"
+    return f"Failed to {action} Grafana workspace: {message}"[:MAX_REASON_LENGTH - len(suffix)] + suffix
+
+
 def lambda_handler(event, context):
     """
     Handle CloudFormation custom resource requests for managing SageMaker HyperPod Observability
     """
+    request_type = event.get('RequestType')
     try: 
         print(f'boto3 version: {boto3.__version__}')
         print(f'botocore version: {botocore.__version__}')
-        request_type = event['RequestType']
  
         if request_type == 'Create':
             response_data = on_create()
@@ -40,7 +55,8 @@ def lambda_handler(event, context):
             {
                 "Status": "FAILED",
                 "Reason": str(e)
-            }
+            },
+            reason=failure_reason(request_type, e, context)
         )
  
  

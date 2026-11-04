@@ -125,6 +125,7 @@ Metadata:
         Parameters:
           - MetricsDestination
           - ObservabilityAddonVersion
+          - HostProfiling
           - PrometheusWorkspaceId
           - PrometheusWorkspaceArn
           - PrometheusWorkspaceEndpoint
@@ -375,6 +376,8 @@ Metadata:
         default: Metrics Destination
       ObservabilityAddonVersion:
         default: Observability Add-on Version
+      HostProfiling:
+        default: Host Profiling
       PrometheusWorkspaceId:
         default: Prometheus Workspace Id
       PrometheusWorkspaceArn:
@@ -1008,6 +1011,15 @@ Parameters:
     Description: >-
       The observability add-on version, for example v1.4.0-eksbuild.1. Empty installs the default version.
       MetricsDestination cloudwatch needs v1.3.0 or later.
+  HostProfiling:
+    Type: String
+    Default: 'false'
+    AllowedValues:
+      - 'true'
+      - 'false'
+    Description: >-
+      Whether the add-on runs the eBPF host CPU profiler and sends profiles to CloudWatch Profiles. true needs
+      ObservabilityAddonVersion v1.4.0 or later.
   PrometheusWorkspaceId:
     Type: String
     Default: ''
@@ -1228,6 +1240,20 @@ Rules:
         AssertDescription: >-
           MetricsDestination cloudwatch needs ObservabilityAddonVersion: an add-on version that accepts
           metricsDestination (v1.3.0 or later).
+  HostProfilingNeedsObservabilityAddonVersion:
+    RuleCondition:
+      Fn::Equals:
+        - Ref: HostProfiling
+        - 'true'
+    Assertions:
+      - Assert:
+          Fn::Not:
+            - Fn::Equals:
+                - Ref: ObservabilityAddonVersion
+                - ''
+        AssertDescription: >-
+          HostProfiling true needs ObservabilityAddonVersion: an add-on version that accepts profilesProvider (v1.4.0 or
+          later).
 Conditions:
   EnableHPInferenceFeatureCondition:
     Fn::Equals:
@@ -2626,6 +2652,8 @@ Resources:
         Ref: MetricsDestination
       ObservabilityAddonVersion:
         Ref: ObservabilityAddonVersion
+      HostProfiling:
+        Ref: HostProfiling
       GrafanaWorkspaceName:
         Ref: GrafanaWorkspaceName
       GrafanaWorkspaceId:

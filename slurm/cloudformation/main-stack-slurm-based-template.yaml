@@ -322,6 +322,20 @@ Parameters:
     Type: String
     Default: role
     Description: The name of the IAM role that SageMaker will use to access the AWS resources on your behalf.
+  SageMakerIAMRoleNameWithoutPath:
+    Type: String
+    Default: ''
+    Description: >-
+      The name of the existing IAM role in SageMakerIAMRoleName without its IAM path (for example Name for
+      service-role/Name), for the observability policies attached to it. Empty uses SageMakerIAMRoleName.
+  InstanceGroupExecutionRoleNames:
+    Type: String
+    Default: ''
+    Description: >-
+      Comma-separated names (without path or ARN) of the execution roles of instance groups that have their own, other
+      than SageMakerIAMRoleName, for example team-b-role,team-c-role. The observability policies are attached to them
+      too, since nodes send metrics as their instance group's execution role. Empty attaches them to the cluster
+      execution role only.
   S3BucketName:
     Type: String
     Default: bucket
@@ -647,6 +661,27 @@ Parameters:
       - BASIC
       - DISABLED
     Description: The level of job metrics.
+  MetricsDestination:
+    Type: String
+    Default: amp
+    AllowedValues:
+      - amp
+      - cloudwatch
+    Description: >-
+      Where metrics go: amp (an Amazon Managed Service for Prometheus workspace) or cloudwatch (the stack installs the
+      observability extension when it creates the cluster). Setting cloudwatch in an update of an existing stack is not
+      supported: it would install the extension on the existing cluster and remove the node agent's config writer.
+      Change the metric store from the cluster's Extensions tab.
+  ClusterExtensions:
+    Type: String
+    Default: ''
+    Description: >-
+      Cluster extensions to install when the stack creates the cluster, as a JSON list of {"ExtensionName",
+      "ConfigurationValues"}. Set, or with cloudwatch, the sagemaker-observability extension collects the metrics
+      instead of the node agent, with the Prometheus remote-write URL (amp) and the Grafana workspace added to its
+      configuration. Setting it in an update of an existing stack is not supported: it would install them on the
+      existing cluster and remove the node agent's config writer. Install or change extensions from the cluster's
+      Extensions tab.
 Conditions:
   CreateVPCStackCondition:
     Fn::Equals:
@@ -706,6 +741,30 @@ Conditions:
     Fn::Equals:
       - Ref: EnableObservabilityFeature
       - 'true'
+  HasClusterExtensionsCondition:
+    Fn::Not:
+      - Fn::Equals:
+          - Ref: ClusterExtensions
+          - ''
+  InstallObservabilityExtensionCondition:
+    Fn::And:
+      - Condition: EnableObservabilityCondition
+      - Fn::Or:
+          - Fn::Equals:
+              - Ref: MetricsDestination
+              - cloudwatch
+          - Condition: HasClusterExtensionsCondition
+  HasSageMakerIAMRoleNameWithoutPathCondition:
+    Fn::Not:
+      - Fn::Equals:
+          - Ref: SageMakerIAMRoleNameWithoutPath
+          - ''
+  ClusterExtensionsCondition:
+    Fn::And:
+      - Condition: CreateHyperPodClusterStackCondition
+      - Fn::Or:
+          - Condition: InstallObservabilityExtensionCondition
+          - Condition: HasClusterExtensionsCondition
 Resources:
   VPCStack:
     Type: AWS::CloudFormation::Stack
@@ -1134,6 +1193,8 @@ Resources:
         Fn::GetAtt:
           - HyperPodParamClusterStack
           - Outputs.HyperPodClusterTemplateUrlOutput
+    DependsOn:
+      - ObservabilityBeforeCluster
     Metadata:
       aws:cdk:path: MainSlurmBasedCfnTemplate/HyperPodClusterStack
     Condition: CreateHyperPodClusterStackCondition
@@ -1173,11 +1234,16 @@ Resources:
             - Ref: PrivateSubnetIds
         ExecutionRoleName:
           Fn::If:
-            - CreateSageMakerIAMRoleStackCondition
-            - Fn::GetAtt:
-                - IamRoleStack
-                - Outputs.AmazonSagemakerClusterExecutionRoleName
-            - Ref: SageMakerIAMRoleName
+            - HasSageMakerIAMRoleNameWithoutPathCondition
+            - Ref: SageMakerIAMRoleNameWithoutPath
+            - Fn::If:
+                - CreateSageMakerIAMRoleStackCondition
+                - Fn::GetAtt:
+                    - IamRoleStack
+                    - Outputs.AmazonSagemakerClusterExecutionRoleName
+                - Ref: SageMakerIAMRoleName
+        InstanceGroupExecutionRoleNames:
+          Ref: InstanceGroupExecutionRoleNames
         LCSBucketName:
           Fn::If:
             - CreateLifeCycleScriptStackCondition
@@ -1227,6 +1293,166 @@ Resources:
           Ref: NcclMetricLevel
         JobMetricLevel:
           Ref: JobMetricLevel
+        MetricsDestination:
+          Ref: MetricsDestination
+        ObservabilityExtension:
+          Fn::If:
+            - InstallObservabilityExtensionCondition
+            - 'true'
+            - 'false'
+        HyperPodClusterName:
+          Ref: HyperPodClusterName
     Metadata:
       aws:cdk:path: MainSlurmBasedCfnTemplate/ObservabilityStack
     Condition: EnableObservabilityCondition
+  ObservabilityBeforeCluster:
+    Type: AWS::CloudFormation::WaitConditionHandle
+    Metadata:
+      ObservabilityStack:
+        Fn::If:
+          - InstallObservabilityExtensionCondition
+          - Ref: ObservabilityStack
+          - ''
+  ClusterExtensionsRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - Fn::Sub: arn:${AWS::Partition}:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        - PolicyName: ClusterExtensions
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action:
+                  - sagemaker:DescribeCluster
+                  - sagemaker:ListClusterExtensions
+                  - sagemaker:CreateClusterExtension
+                  - sagemaker:DescribeClusterExtension
+                  - sagemaker:AddTags
+                Resource:
+                  - Fn::Sub: arn:${AWS::Partition}:sagemaker:${AWS::Region}:${AWS::AccountId}:cluster/*
+                  - Fn::Sub: arn:${AWS::Partition}:sagemaker:${AWS::Region}:${AWS::AccountId}:extension/*
+    Metadata:
+      aws:cdk:path: MainSlurmBasedCfnTemplate/ClusterExtensionsRole
+    Condition: ClusterExtensionsCondition
+  ClusterExtensionsFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      Handler: lambda_function.lambda_handler
+      Role:
+        Fn::GetAtt:
+          - ClusterExtensionsRole
+          - Arn
+      Runtime: python3.14
+      Timeout: 900
+      MemorySize: 256
+      Code:
+        S3Bucket:
+          Fn::If:
+            - CustomBucketCondition
+            - Ref: CustomBucketName
+            - Fn::Sub: aws-sagemaker-hyperpod-cluster-setup-${AWS::Region}-${Stage}
+        S3Key:
+          Fn::Sub: resources/artifacts/cluster-extensions-lambda-function.zip
+      Tags:
+        - Key: SageMaker
+          Value: 'true'
+    Metadata:
+      aws:cdk:path: MainSlurmBasedCfnTemplate/ClusterExtensionsFunction
+    Condition: ClusterExtensionsCondition
+  ClusterExtensionsInstall:
+    Type: Custom::ClusterExtensions
+    Properties:
+      ServiceToken:
+        Fn::GetAtt:
+          - ClusterExtensionsFunction
+          - Arn
+      ClusterArn:
+        Fn::GetAtt:
+          - HyperPodClusterStack
+          - Outputs.HyperPodClusterArn
+      Extensions:
+        Ref: ClusterExtensions
+      InstallObservability:
+        Fn::If:
+          - InstallObservabilityExtensionCondition
+          - 'true'
+          - 'false'
+      GrafanaWorkspaceId:
+        Fn::If:
+          - InstallObservabilityExtensionCondition
+          - Fn::GetAtt:
+              - ObservabilityStack
+              - Outputs.ExtensionGrafanaWorkspaceId
+          - ''
+      RemoteWriteUrl:
+        Fn::If:
+          - InstallObservabilityExtensionCondition
+          - Fn::GetAtt:
+              - ObservabilityStack
+              - Outputs.ExtensionRemoteWriteUrl
+          - ''
+      NodeMetricLevel:
+        Ref: NodeMetricLevel
+      AcceleratedComputeMetricLevel:
+        Ref: AcceleratedComputeMetricLevel
+      NetworkMetricLevel:
+        Ref: NetworkMetricLevel
+      ClusterMetricLevel:
+        Ref: ClusterMetricLevel
+      NcclMetricLevel:
+        Ref: NcclMetricLevel
+      JobMetricLevel:
+        Ref: JobMetricLevel
+    Metadata:
+      aws:cdk:path: MainSlurmBasedCfnTemplate/ClusterExtensionsInstall
+    Condition: ClusterExtensionsCondition
+Rules:
+  ClusterExtensionsNeedContinuousProvisioning:
+    RuleCondition:
+      Fn::Or:
+        - Fn::Equals:
+            - Ref: MetricsDestination
+            - cloudwatch
+        - Fn::Not:
+            - Fn::Equals:
+                - Ref: ClusterExtensions
+                - ''
+    Assertions:
+      - Assert:
+          Fn::Equals:
+            - Ref: NodeProvisioningMode
+            - Continuous
+        AssertDescription: >-
+          MetricsDestination cloudwatch and ClusterExtensions need NodeProvisioningMode Continuous: cluster extensions
+          are only supported on clusters with continuous provisioning.
+      - Assert:
+          Fn::Equals:
+            - Ref: CreateHyperPodClusterStack
+            - 'true'
+        AssertDescription: >-
+          MetricsDestination cloudwatch and ClusterExtensions need CreateHyperPodClusterStack true: the stack installs
+          cluster extensions only on a cluster it creates.
+Outputs:
+  ClusterExtensionsInstallStatus:
+    Description: 'Each cluster extension: Active, another extension status, or NotInstalled (JSON, by extension name)'
+    Value:
+      Fn::GetAtt:
+        - ClusterExtensionsInstall
+        - InstallStatus
+    Condition: ClusterExtensionsCondition
+  ClusterExtensionsInstallReason:
+    Description: Why each cluster extension has that status (JSON)
+    Value:
+      Fn::GetAtt:
+        - ClusterExtensionsInstall
+        - InstallReason
+    Condition: ClusterExtensionsCondition

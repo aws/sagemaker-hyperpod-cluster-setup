@@ -63,7 +63,7 @@ class TestRestrictedInstanceGroupsConfig(unittest.TestCase):
         mock_upload.return_value = 'https://s3.amazonaws.com/template.yaml'
 
         with patch.dict(os.environ, self.base_env, clear=False):
-            create_hyperpod_cluster()
+            create_hyperpod_cluster([])
 
         create_params = mock_generate.call_args[0][0]
         self.assertEqual(create_params['RestrictedInstanceGroupsConfig'], config)
@@ -81,7 +81,7 @@ class TestRestrictedInstanceGroupsConfig(unittest.TestCase):
         mock_upload.return_value = 'https://s3.amazonaws.com/template.yaml'
 
         with patch.dict(os.environ, self.base_env, clear=False):
-            create_hyperpod_cluster()
+            create_hyperpod_cluster([])
 
         create_params = mock_generate.call_args[0][0]
         self.assertEqual(create_params['RestrictedInstanceGroupsConfig'], config)
@@ -94,7 +94,7 @@ class TestRestrictedInstanceGroupsConfig(unittest.TestCase):
         mock_upload.return_value = 'https://s3.amazonaws.com/template.yaml'
 
         with patch.dict(os.environ, self.base_env, clear=False):
-            create_hyperpod_cluster()
+            create_hyperpod_cluster([])
 
         create_params = mock_generate.call_args[0][0]
         self.assertNotIn('RestrictedInstanceGroupsConfig', create_params)
@@ -107,7 +107,7 @@ class TestRestrictedInstanceGroupsConfig(unittest.TestCase):
         mock_upload.return_value = 'https://s3.amazonaws.com/template.yaml'
 
         with patch.dict(os.environ, self.base_env, clear=False):
-            create_hyperpod_cluster()
+            create_hyperpod_cluster([])
 
         create_params = mock_generate.call_args[0][0]
         self.assertNotIn('RestrictedInstanceGroupsConfig', create_params)

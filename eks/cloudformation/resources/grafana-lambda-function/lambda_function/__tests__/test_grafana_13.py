@@ -80,8 +80,34 @@ class TestPluginCheckFailureFailsStack(unittest.TestCase):
         _, _, status, data = send.call_args[0]
         self.assertIs(status, lambda_function.cfnresponse.FAILED)
         self.assertIn('503', json.loads(json.dumps(data))['Reason'])
+        # CloudFormation shows the error itself, not only the log stream.
+        self.assertIn('503', send.call_args.kwargs['reason'])
         create_dashboard.assert_not_called()
         create_alert_rules.assert_not_called()
+
+
+class TestDashboardStatus(unittest.TestCase):
+    def test_reports_a_dashboard_that_failed_to_create_as_an_error(self):
+        results = {
+            'cluster': {'message': 'Dashboard cluster created successfully', 'uid': 'u1'},
+            'efa': {'message': 'Dashboard efa already exists', 'status': 'existing'},
+            'training': {'message': 'Failed to create dashboard training', 'error': 'Status: 500'},
+        }
+        with patch.dict(os.environ, ENV, clear=True), \
+                patch.object(lambda_function, 'create_grafana_datasource'), \
+                patch.object(lambda_function, 'create_prometheus_datasource'), \
+                patch.object(lambda_function, 'create_folder'), \
+                patch.object(lambda_function, 'create_alert_rules'), \
+                patch.object(lambda_function, 'create_dashboard',
+                             side_effect=lambda name: results.get(name, {'message': 'created'})):
+            data = lambda_function.on_create()
+
+        statuses = {d['template']: d['status'] for d in data['resources']['dashboards']}
+        self.assertEqual(statuses['cluster'], 'success')
+        self.assertEqual(statuses['efa'], 'existing')
+        self.assertEqual(statuses['training'], 'error')
+        # A dashboard is best effort: it does not fail the stack.
+        self.assertEqual(data['Status'], 'SUCCESS')
 
 
 class TestGrafanaHttpClient(unittest.TestCase):

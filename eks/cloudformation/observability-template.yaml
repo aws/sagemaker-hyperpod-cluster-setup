@@ -88,6 +88,15 @@ Parameters:
     Description: >-
       The observability add-on version, for example v1.4.0-eksbuild.1. Empty installs the default version.
       MetricsDestination cloudwatch needs v1.3.0 or later.
+  HostProfiling:
+    Type: String
+    Default: 'false'
+    AllowedValues:
+      - 'true'
+      - 'false'
+    Description: >-
+      Whether the add-on runs the eBPF host CPU profiler and sends profiles to CloudWatch Profiles. true needs
+      ObservabilityAddonVersion v1.4.0 or later.
   CreatePrometheusWorkspace:
     Type: String
     Default: 'false'
@@ -217,6 +226,20 @@ Rules:
         AssertDescription: >-
           MetricsDestination cloudwatch needs ObservabilityAddonVersion: an add-on version that accepts
           metricsDestination (v1.3.0 or later).
+  HostProfilingNeedsObservabilityAddonVersion:
+    RuleCondition:
+      Fn::Equals:
+        - Ref: HostProfiling
+        - 'true'
+    Assertions:
+      - Assert:
+          Fn::Not:
+            - Fn::Equals:
+                - Ref: ObservabilityAddonVersion
+                - ''
+        AssertDescription: >-
+          HostProfiling true needs ObservabilityAddonVersion: an add-on version that accepts profilesProvider (v1.4.0 or
+          later).
 Mappings:
   AMGRegionMapping:
     us-east-1:
@@ -300,6 +323,10 @@ Conditions:
   IsRIGCondition:
     Fn::Equals:
       - Ref: IsRIG
+      - 'true'
+  HostProfilingCondition:
+    Fn::Equals:
+      - Ref: HostProfiling
       - 'true'
   ObservabilityAddonVersionCondition:
     Fn::Not:
@@ -441,6 +468,10 @@ Resources:
                 Resource:
                   - Fn::Sub: arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/sagemaker/Clusters/*
                   - Fn::Sub: arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/sagemaker/Clusters/*:log-stream:*
+              - Sid: CloudwatchProfilesAccess
+                Effect: Allow
+                Action: cloudwatch:PutProfileRecords
+                Resource: '*'
           PolicyName:
             Fn::Sub: ${ResourceNamePrefix}-OnPol
       RoleName:
@@ -614,63 +645,125 @@ Resources:
         Ref: EKSClusterName
       ConfigurationValues:
         Fn::If:
-          - CloudWatchMetricsCondition
-          - Fn::Join:
-              - ''
-              - - '{"metricsDestination":"cloudwatch","metricsProvider":{"trainingMetrics":{"level":"'
-                - Ref: TrainingMetricLevel
-                - >-
-                  ","scrapeInterval":30},"inferenceMetrics":{"level":"BASIC","scrapeInterval":30},"taskGovernanceMetrics":{"level":"
-                - Ref: TaskGovernanceMetricLevel
-                - '","scrapeInterval":30},"scalingMetrics":{"level":"'
-                - Ref: ScalingMetricLevel
-                - '","scrapeInterval":30},"clusterMetrics":{"level":"'
-                - Ref: ClusterMetricLevel
-                - '","scrapeInterval":30},"nodeMetrics":{"level":"'
-                - Ref: NodeMetricLevel
-                - '","scrapeInterval":30},"acceleratedComputeMetrics":{"level":"'
-                - Ref: AcceleratedComputeMetricLevel
-                - '","scrapeInterval":30},"networkMetrics":{"level":"'
-                - Ref: NetworkMetricLevel
-                - '","scrapeInterval":30},"rayMetrics":{"level":"'
-                - Ref: RayMetricLevel
-                - '","scrapeInterval":30},"logging":{"enabled":true}}}'
-          - Fn::Join:
-              - ''
-              - - '{"ampWorkspace":{"prometheusEndpoint":"https://aps-workspaces.'
-                - Fn::Sub: ${AWS::Region}
-                - .amazonaws.com/workspaces/
-                - Fn::If:
-                    - PrometheusNewWorkspaceCondition
-                    - Fn::GetAtt:
-                        - PrometheusWorkspace
-                        - WorkspaceId
-                    - Ref: PrometheusWorkspaceId
-                - '","arn":"'
-                - Fn::If:
-                    - PrometheusNewWorkspaceCondition
-                    - Fn::GetAtt:
-                        - PrometheusWorkspace
-                        - Arn
-                    - Ref: PrometheusWorkspaceArn
-                - '"},"metricsProvider":{"trainingMetrics":{"level":"'
-                - Ref: TrainingMetricLevel
-                - >-
-                  ","scrapeInterval":30},"inferenceMetrics":{"level":"BASIC","scrapeInterval":30},"taskGovernanceMetrics":{"level":"
-                - Ref: TaskGovernanceMetricLevel
-                - '","scrapeInterval":30},"scalingMetrics":{"level":"'
-                - Ref: ScalingMetricLevel
-                - '","scrapeInterval":30},"clusterMetrics":{"level":"'
-                - Ref: ClusterMetricLevel
-                - '","scrapeInterval":30},"nodeMetrics":{"level":"'
-                - Ref: NodeMetricLevel
-                - '","scrapeInterval":30},"acceleratedComputeMetrics":{"level":"'
-                - Ref: AcceleratedComputeMetricLevel
-                - '","scrapeInterval":30},"networkMetrics":{"level":"'
-                - Ref: NetworkMetricLevel
-                - '","scrapeInterval":30},"rayMetrics":{"level":"'
-                - Ref: RayMetricLevel
-                - '","scrapeInterval":30},"logging":{"enabled":true}}}'
+          - HostProfilingCondition
+          - Fn::If:
+              - CloudWatchMetricsCondition
+              - Fn::Join:
+                  - ''
+                  - - '{"metricsDestination":"cloudwatch","metricsProvider":{"trainingMetrics":{"level":"'
+                    - Ref: TrainingMetricLevel
+                    - >-
+                      ","scrapeInterval":30},"inferenceMetrics":{"level":"BASIC","scrapeInterval":30},"taskGovernanceMetrics":{"level":"
+                    - Ref: TaskGovernanceMetricLevel
+                    - '","scrapeInterval":30},"scalingMetrics":{"level":"'
+                    - Ref: ScalingMetricLevel
+                    - '","scrapeInterval":30},"clusterMetrics":{"level":"'
+                    - Ref: ClusterMetricLevel
+                    - '","scrapeInterval":30},"nodeMetrics":{"level":"'
+                    - Ref: NodeMetricLevel
+                    - '","scrapeInterval":30},"acceleratedComputeMetrics":{"level":"'
+                    - Ref: AcceleratedComputeMetricLevel
+                    - '","scrapeInterval":30},"networkMetrics":{"level":"'
+                    - Ref: NetworkMetricLevel
+                    - '","scrapeInterval":30},"rayMetrics":{"level":"'
+                    - Ref: RayMetricLevel
+                    - >-
+                      ","scrapeInterval":30},"logging":{"enabled":true}},"profilesProvider":{"hostProfiling":{"enabled":true}}}
+              - Fn::Join:
+                  - ''
+                  - - '{"ampWorkspace":{"prometheusEndpoint":"https://aps-workspaces.'
+                    - Fn::Sub: ${AWS::Region}
+                    - .amazonaws.com/workspaces/
+                    - Fn::If:
+                        - PrometheusNewWorkspaceCondition
+                        - Fn::GetAtt:
+                            - PrometheusWorkspace
+                            - WorkspaceId
+                        - Ref: PrometheusWorkspaceId
+                    - '","arn":"'
+                    - Fn::If:
+                        - PrometheusNewWorkspaceCondition
+                        - Fn::GetAtt:
+                            - PrometheusWorkspace
+                            - Arn
+                        - Ref: PrometheusWorkspaceArn
+                    - '"},"metricsProvider":{"trainingMetrics":{"level":"'
+                    - Ref: TrainingMetricLevel
+                    - >-
+                      ","scrapeInterval":30},"inferenceMetrics":{"level":"BASIC","scrapeInterval":30},"taskGovernanceMetrics":{"level":"
+                    - Ref: TaskGovernanceMetricLevel
+                    - '","scrapeInterval":30},"scalingMetrics":{"level":"'
+                    - Ref: ScalingMetricLevel
+                    - '","scrapeInterval":30},"clusterMetrics":{"level":"'
+                    - Ref: ClusterMetricLevel
+                    - '","scrapeInterval":30},"nodeMetrics":{"level":"'
+                    - Ref: NodeMetricLevel
+                    - '","scrapeInterval":30},"acceleratedComputeMetrics":{"level":"'
+                    - Ref: AcceleratedComputeMetricLevel
+                    - '","scrapeInterval":30},"networkMetrics":{"level":"'
+                    - Ref: NetworkMetricLevel
+                    - '","scrapeInterval":30},"rayMetrics":{"level":"'
+                    - Ref: RayMetricLevel
+                    - >-
+                      ","scrapeInterval":30},"logging":{"enabled":true}},"profilesProvider":{"hostProfiling":{"enabled":true}}}
+          - Fn::If:
+              - CloudWatchMetricsCondition
+              - Fn::Join:
+                  - ''
+                  - - '{"metricsDestination":"cloudwatch","metricsProvider":{"trainingMetrics":{"level":"'
+                    - Ref: TrainingMetricLevel
+                    - >-
+                      ","scrapeInterval":30},"inferenceMetrics":{"level":"BASIC","scrapeInterval":30},"taskGovernanceMetrics":{"level":"
+                    - Ref: TaskGovernanceMetricLevel
+                    - '","scrapeInterval":30},"scalingMetrics":{"level":"'
+                    - Ref: ScalingMetricLevel
+                    - '","scrapeInterval":30},"clusterMetrics":{"level":"'
+                    - Ref: ClusterMetricLevel
+                    - '","scrapeInterval":30},"nodeMetrics":{"level":"'
+                    - Ref: NodeMetricLevel
+                    - '","scrapeInterval":30},"acceleratedComputeMetrics":{"level":"'
+                    - Ref: AcceleratedComputeMetricLevel
+                    - '","scrapeInterval":30},"networkMetrics":{"level":"'
+                    - Ref: NetworkMetricLevel
+                    - '","scrapeInterval":30},"rayMetrics":{"level":"'
+                    - Ref: RayMetricLevel
+                    - '","scrapeInterval":30},"logging":{"enabled":true}}}'
+              - Fn::Join:
+                  - ''
+                  - - '{"ampWorkspace":{"prometheusEndpoint":"https://aps-workspaces.'
+                    - Fn::Sub: ${AWS::Region}
+                    - .amazonaws.com/workspaces/
+                    - Fn::If:
+                        - PrometheusNewWorkspaceCondition
+                        - Fn::GetAtt:
+                            - PrometheusWorkspace
+                            - WorkspaceId
+                        - Ref: PrometheusWorkspaceId
+                    - '","arn":"'
+                    - Fn::If:
+                        - PrometheusNewWorkspaceCondition
+                        - Fn::GetAtt:
+                            - PrometheusWorkspace
+                            - Arn
+                        - Ref: PrometheusWorkspaceArn
+                    - '"},"metricsProvider":{"trainingMetrics":{"level":"'
+                    - Ref: TrainingMetricLevel
+                    - >-
+                      ","scrapeInterval":30},"inferenceMetrics":{"level":"BASIC","scrapeInterval":30},"taskGovernanceMetrics":{"level":"
+                    - Ref: TaskGovernanceMetricLevel
+                    - '","scrapeInterval":30},"scalingMetrics":{"level":"'
+                    - Ref: ScalingMetricLevel
+                    - '","scrapeInterval":30},"clusterMetrics":{"level":"'
+                    - Ref: ClusterMetricLevel
+                    - '","scrapeInterval":30},"nodeMetrics":{"level":"'
+                    - Ref: NodeMetricLevel
+                    - '","scrapeInterval":30},"acceleratedComputeMetrics":{"level":"'
+                    - Ref: AcceleratedComputeMetricLevel
+                    - '","scrapeInterval":30},"networkMetrics":{"level":"'
+                    - Ref: NetworkMetricLevel
+                    - '","scrapeInterval":30},"rayMetrics":{"level":"'
+                    - Ref: RayMetricLevel
+                    - '","scrapeInterval":30},"logging":{"enabled":true}}}'
       PodIdentityAssociations:
         - RoleArn:
             Fn::If:
@@ -700,63 +793,125 @@ Resources:
         Ref: EKSClusterName
       ConfigurationValues:
         Fn::If:
-          - CloudWatchMetricsCondition
-          - Fn::Join:
-              - ''
-              - - '{"metricsDestination":"cloudwatch","metricsProvider":{"trainingMetrics":{"level":"'
-                - Ref: TrainingMetricLevel
-                - >-
-                  ","scrapeInterval":30},"inferenceMetrics":{"level":"BASIC","scrapeInterval":30},"taskGovernanceMetrics":{"level":"
-                - Ref: TaskGovernanceMetricLevel
-                - '","scrapeInterval":30},"scalingMetrics":{"level":"'
-                - Ref: ScalingMetricLevel
-                - '","scrapeInterval":30},"clusterMetrics":{"level":"'
-                - Ref: ClusterMetricLevel
-                - '","scrapeInterval":30},"nodeMetrics":{"level":"'
-                - Ref: NodeMetricLevel
-                - '","scrapeInterval":30},"acceleratedComputeMetrics":{"level":"'
-                - Ref: AcceleratedComputeMetricLevel
-                - '","scrapeInterval":30},"networkMetrics":{"level":"'
-                - Ref: NetworkMetricLevel
-                - '","scrapeInterval":30},"rayMetrics":{"level":"'
-                - Ref: RayMetricLevel
-                - '","scrapeInterval":30},"logging":{"enabled":false}}}'
-          - Fn::Join:
-              - ''
-              - - '{"ampWorkspace":{"prometheusEndpoint":"https://aps-workspaces.'
-                - Fn::Sub: ${AWS::Region}
-                - .amazonaws.com/workspaces/
-                - Fn::If:
-                    - PrometheusNewWorkspaceCondition
-                    - Fn::GetAtt:
-                        - PrometheusWorkspace
-                        - WorkspaceId
-                    - Ref: PrometheusWorkspaceId
-                - '","arn":"'
-                - Fn::If:
-                    - PrometheusNewWorkspaceCondition
-                    - Fn::GetAtt:
-                        - PrometheusWorkspace
-                        - Arn
-                    - Ref: PrometheusWorkspaceArn
-                - '"},"metricsProvider":{"trainingMetrics":{"level":"'
-                - Ref: TrainingMetricLevel
-                - >-
-                  ","scrapeInterval":30},"inferenceMetrics":{"level":"BASIC","scrapeInterval":30},"taskGovernanceMetrics":{"level":"
-                - Ref: TaskGovernanceMetricLevel
-                - '","scrapeInterval":30},"scalingMetrics":{"level":"'
-                - Ref: ScalingMetricLevel
-                - '","scrapeInterval":30},"clusterMetrics":{"level":"'
-                - Ref: ClusterMetricLevel
-                - '","scrapeInterval":30},"nodeMetrics":{"level":"'
-                - Ref: NodeMetricLevel
-                - '","scrapeInterval":30},"acceleratedComputeMetrics":{"level":"'
-                - Ref: AcceleratedComputeMetricLevel
-                - '","scrapeInterval":30},"networkMetrics":{"level":"'
-                - Ref: NetworkMetricLevel
-                - '","scrapeInterval":30},"rayMetrics":{"level":"'
-                - Ref: RayMetricLevel
-                - '","scrapeInterval":30},"logging":{"enabled":false}}}'
+          - HostProfilingCondition
+          - Fn::If:
+              - CloudWatchMetricsCondition
+              - Fn::Join:
+                  - ''
+                  - - '{"metricsDestination":"cloudwatch","metricsProvider":{"trainingMetrics":{"level":"'
+                    - Ref: TrainingMetricLevel
+                    - >-
+                      ","scrapeInterval":30},"inferenceMetrics":{"level":"BASIC","scrapeInterval":30},"taskGovernanceMetrics":{"level":"
+                    - Ref: TaskGovernanceMetricLevel
+                    - '","scrapeInterval":30},"scalingMetrics":{"level":"'
+                    - Ref: ScalingMetricLevel
+                    - '","scrapeInterval":30},"clusterMetrics":{"level":"'
+                    - Ref: ClusterMetricLevel
+                    - '","scrapeInterval":30},"nodeMetrics":{"level":"'
+                    - Ref: NodeMetricLevel
+                    - '","scrapeInterval":30},"acceleratedComputeMetrics":{"level":"'
+                    - Ref: AcceleratedComputeMetricLevel
+                    - '","scrapeInterval":30},"networkMetrics":{"level":"'
+                    - Ref: NetworkMetricLevel
+                    - '","scrapeInterval":30},"rayMetrics":{"level":"'
+                    - Ref: RayMetricLevel
+                    - >-
+                      ","scrapeInterval":30},"logging":{"enabled":false}},"profilesProvider":{"hostProfiling":{"enabled":true}}}
+              - Fn::Join:
+                  - ''
+                  - - '{"ampWorkspace":{"prometheusEndpoint":"https://aps-workspaces.'
+                    - Fn::Sub: ${AWS::Region}
+                    - .amazonaws.com/workspaces/
+                    - Fn::If:
+                        - PrometheusNewWorkspaceCondition
+                        - Fn::GetAtt:
+                            - PrometheusWorkspace
+                            - WorkspaceId
+                        - Ref: PrometheusWorkspaceId
+                    - '","arn":"'
+                    - Fn::If:
+                        - PrometheusNewWorkspaceCondition
+                        - Fn::GetAtt:
+                            - PrometheusWorkspace
+                            - Arn
+                        - Ref: PrometheusWorkspaceArn
+                    - '"},"metricsProvider":{"trainingMetrics":{"level":"'
+                    - Ref: TrainingMetricLevel
+                    - >-
+                      ","scrapeInterval":30},"inferenceMetrics":{"level":"BASIC","scrapeInterval":30},"taskGovernanceMetrics":{"level":"
+                    - Ref: TaskGovernanceMetricLevel
+                    - '","scrapeInterval":30},"scalingMetrics":{"level":"'
+                    - Ref: ScalingMetricLevel
+                    - '","scrapeInterval":30},"clusterMetrics":{"level":"'
+                    - Ref: ClusterMetricLevel
+                    - '","scrapeInterval":30},"nodeMetrics":{"level":"'
+                    - Ref: NodeMetricLevel
+                    - '","scrapeInterval":30},"acceleratedComputeMetrics":{"level":"'
+                    - Ref: AcceleratedComputeMetricLevel
+                    - '","scrapeInterval":30},"networkMetrics":{"level":"'
+                    - Ref: NetworkMetricLevel
+                    - '","scrapeInterval":30},"rayMetrics":{"level":"'
+                    - Ref: RayMetricLevel
+                    - >-
+                      ","scrapeInterval":30},"logging":{"enabled":false}},"profilesProvider":{"hostProfiling":{"enabled":true}}}
+          - Fn::If:
+              - CloudWatchMetricsCondition
+              - Fn::Join:
+                  - ''
+                  - - '{"metricsDestination":"cloudwatch","metricsProvider":{"trainingMetrics":{"level":"'
+                    - Ref: TrainingMetricLevel
+                    - >-
+                      ","scrapeInterval":30},"inferenceMetrics":{"level":"BASIC","scrapeInterval":30},"taskGovernanceMetrics":{"level":"
+                    - Ref: TaskGovernanceMetricLevel
+                    - '","scrapeInterval":30},"scalingMetrics":{"level":"'
+                    - Ref: ScalingMetricLevel
+                    - '","scrapeInterval":30},"clusterMetrics":{"level":"'
+                    - Ref: ClusterMetricLevel
+                    - '","scrapeInterval":30},"nodeMetrics":{"level":"'
+                    - Ref: NodeMetricLevel
+                    - '","scrapeInterval":30},"acceleratedComputeMetrics":{"level":"'
+                    - Ref: AcceleratedComputeMetricLevel
+                    - '","scrapeInterval":30},"networkMetrics":{"level":"'
+                    - Ref: NetworkMetricLevel
+                    - '","scrapeInterval":30},"rayMetrics":{"level":"'
+                    - Ref: RayMetricLevel
+                    - '","scrapeInterval":30},"logging":{"enabled":false}}}'
+              - Fn::Join:
+                  - ''
+                  - - '{"ampWorkspace":{"prometheusEndpoint":"https://aps-workspaces.'
+                    - Fn::Sub: ${AWS::Region}
+                    - .amazonaws.com/workspaces/
+                    - Fn::If:
+                        - PrometheusNewWorkspaceCondition
+                        - Fn::GetAtt:
+                            - PrometheusWorkspace
+                            - WorkspaceId
+                        - Ref: PrometheusWorkspaceId
+                    - '","arn":"'
+                    - Fn::If:
+                        - PrometheusNewWorkspaceCondition
+                        - Fn::GetAtt:
+                            - PrometheusWorkspace
+                            - Arn
+                        - Ref: PrometheusWorkspaceArn
+                    - '"},"metricsProvider":{"trainingMetrics":{"level":"'
+                    - Ref: TrainingMetricLevel
+                    - >-
+                      ","scrapeInterval":30},"inferenceMetrics":{"level":"BASIC","scrapeInterval":30},"taskGovernanceMetrics":{"level":"
+                    - Ref: TaskGovernanceMetricLevel
+                    - '","scrapeInterval":30},"scalingMetrics":{"level":"'
+                    - Ref: ScalingMetricLevel
+                    - '","scrapeInterval":30},"clusterMetrics":{"level":"'
+                    - Ref: ClusterMetricLevel
+                    - '","scrapeInterval":30},"nodeMetrics":{"level":"'
+                    - Ref: NodeMetricLevel
+                    - '","scrapeInterval":30},"acceleratedComputeMetrics":{"level":"'
+                    - Ref: AcceleratedComputeMetricLevel
+                    - '","scrapeInterval":30},"networkMetrics":{"level":"'
+                    - Ref: NetworkMetricLevel
+                    - '","scrapeInterval":30},"rayMetrics":{"level":"'
+                    - Ref: RayMetricLevel
+                    - '","scrapeInterval":30},"logging":{"enabled":false}}}'
       PodIdentityAssociations:
         - RoleArn:
             Fn::If:

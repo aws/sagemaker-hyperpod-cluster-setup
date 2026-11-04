@@ -52,6 +52,12 @@ Parameters:
     Type: String
     Default: ''
     Description: The name of the cluster execution role.
+  InstanceGroupExecutionRoleNames:
+    Type: String
+    Default: ''
+    Description: >-
+      Comma-separated names (without path) of the instance groups' own execution roles, other than ExecutionRoleName,
+      which also get the observability policies.
   CreatePrometheusWorkspace:
     Type: String
     Default: 'false'
@@ -71,6 +77,30 @@ Parameters:
     Type: String
     Default: ''
     Description: The Endpoint of the existing Amazon Managed Service for Prometheus (AMP) workspace.
+  MetricsDestination:
+    Type: String
+    Default: amp
+    AllowedValues:
+      - amp
+      - cloudwatch
+    Description: >-
+      Where metrics go: amp (an Amazon Managed Service for Prometheus workspace, through the observability configuration
+      in the lifecycle script bucket) or cloudwatch (the main stack installs the observability extension).
+  ObservabilityExtension:
+    Type: String
+    Default: 'false'
+    AllowedValues:
+      - 'true'
+      - 'false'
+    Description: >-
+      Whether the main stack installs the observability extension, which collects the metrics instead of the node agent
+      (always true with cloudwatch).
+  HyperPodClusterName:
+    Type: String
+    Default: ''
+    Description: >-
+      The HyperPod cluster the CloudWatch alert rules are for (metrics in CloudWatch are account-wide). Empty creates no
+      alert rules for cloudwatch.
   CreateGrafanaWorkspace:
     Type: String
     Default: 'false'
@@ -182,10 +212,26 @@ Conditions:
           - Fn::Equals:
               - Ref: CreateGrafanaWorkspace
               - disabled
-  PrometheusNewWorkspaceCondition:
+  CloudWatchMetricsCondition:
     Fn::Equals:
-      - Ref: CreatePrometheusWorkspace
-      - 'true'
+      - Ref: MetricsDestination
+      - cloudwatch
+  AmpMetricsCondition:
+    Fn::Not:
+      - Condition: CloudWatchMetricsCondition
+  NodeAgentCondition:
+    Fn::And:
+      - Condition: AmpMetricsCondition
+      - Fn::Not:
+          - Fn::Equals:
+              - Ref: ObservabilityExtension
+              - 'true'
+  PrometheusNewWorkspaceCondition:
+    Fn::And:
+      - Fn::Equals:
+          - Ref: CreatePrometheusWorkspace
+          - 'true'
+      - Condition: AmpMetricsCondition
   GrafanaNewWorkspaceCondition:
     Fn::And:
       - Fn::Equals:
@@ -202,6 +248,11 @@ Conditions:
       - Fn::Equals:
           - Ref: CreateGrafanaWorkspace
           - 'true'
+  HasInstanceGroupExecutionRoles:
+    Fn::Not:
+      - Fn::Equals:
+          - Ref: InstanceGroupExecutionRoleNames
+          - ''
   CreateGrafanaRoleCondition:
     Fn::And:
       - Fn::Equals:
@@ -256,6 +307,7 @@ Resources:
         Ref: VpcId
     Metadata:
       aws:cdk:path: ObservabilitySlurmCfnTemplate/PrometheusVPCEndpoint
+    Condition: AmpMetricsCondition
   PrometheusWorkspace:
     Type: AWS::APS::Workspace
     Properties:
@@ -292,12 +344,58 @@ Resources:
                           - PrometheusWorkspace
                           - WorkspaceId
                       - Ref: PrometheusWorkspaceId
+          - Sid: CloudwatchProfilesAccess
+            Effect: Allow
+            Action: cloudwatch:PutProfileRecords
+            Resource: '*'
       PolicyName:
         Fn::Sub: ${ResourceNamePrefix}-obs-policy
       Roles:
-        - Ref: ExecutionRoleName
+        Fn::If:
+          - HasInstanceGroupExecutionRoles
+          - Fn::Split:
+              - ','
+              - Fn::Join:
+                  - ','
+                  - - Ref: ExecutionRoleName
+                    - Ref: InstanceGroupExecutionRoleNames
+          - - Ref: ExecutionRoleName
     Metadata:
       aws:cdk:path: ObservabilitySlurmCfnTemplate/ExecutionRoleObservabilityPolicy
+    Condition: AmpMetricsCondition
+  ExecutionRoleCloudWatchMetricsPolicy:
+    Type: AWS::IAM::Policy
+    Properties:
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Sid: CloudwatchMetricsAccess
+            Effect: Allow
+            Action: cloudwatch:PutMetricData
+            Resource: '*'
+            Condition:
+              StringEquals:
+                aws:ResourceAccount:
+                  Fn::Sub: ${AWS::AccountId}
+          - Sid: CloudwatchProfilesAccess
+            Effect: Allow
+            Action: cloudwatch:PutProfileRecords
+            Resource: '*'
+      PolicyName:
+        Fn::Sub: ${ResourceNamePrefix}-obs-cw-policy
+      Roles:
+        Fn::If:
+          - HasInstanceGroupExecutionRoles
+          - Fn::Split:
+              - ','
+              - Fn::Join:
+                  - ','
+                  - - Ref: ExecutionRoleName
+                    - Ref: InstanceGroupExecutionRoleNames
+          - - Ref: ExecutionRoleName
+    Metadata:
+      aws:cdk:path: ObservabilitySlurmCfnTemplate/ExecutionRoleCloudWatchMetricsPolicy
+    Condition: CloudWatchMetricsCondition
   GrafanaWorkspaceRole:
     Type: AWS::IAM::Role
     Properties:
@@ -333,6 +431,18 @@ Resources:
                 Action:
                   - aps:ListWorkspaces
                 Resource: '*'
+              - Fn::If:
+                  - CloudWatchMetricsCondition
+                  - Sid: AllowReadingMetricsFromCloudWatch
+                    Effect: Allow
+                    Action:
+                      - cloudwatch:ListMetrics
+                      - cloudwatch:GetMetricStatistics
+                      - cloudwatch:GetMetricData
+                      - cloudwatch:DescribeAlarmsForMetric
+                      - cloudwatch:GetInsightRuleReport
+                    Resource: '*'
+                  - Ref: AWS::NoValue
               - Sid: AllowReadingAlertsFromPrometheus
                 Effect: Allow
                 Action:
@@ -635,11 +745,14 @@ Resources:
               - Ref: GrafanaWorkspaceId
           PROMETHEUS_WORKSPACE_ID:
             Fn::If:
-              - PrometheusNewWorkspaceCondition
-              - Fn::GetAtt:
-                  - PrometheusWorkspace
-                  - WorkspaceId
-              - Ref: PrometheusWorkspaceId
+              - CloudWatchMetricsCondition
+              - ''
+              - Fn::If:
+                  - PrometheusNewWorkspaceCondition
+                  - Fn::GetAtt:
+                      - PrometheusWorkspace
+                      - WorkspaceId
+                  - Ref: PrometheusWorkspaceId
           GRAFANA_WORKSPACE_TOKEN_KEY:
             Fn::GetAtt:
               - GrafanaServiceAccountCustomResource
@@ -655,6 +768,16 @@ Resources:
           DASHBOARD_PREFIX_S3_KEY:
             Ref: ObservabilityAssetsS3Key
           ORCHESTRATOR_TYPE: slurm
+          HYPERPOD_CLUSTER_NAME:
+            Fn::If:
+              - CloudWatchMetricsCondition
+              - Ref: HyperPodClusterName
+              - Ref: AWS::NoValue
+          SLURM_DASHBOARD_CONFLICT_FAILS:
+            Fn::If:
+              - NodeAgentCondition
+              - Ref: AWS::NoValue
+              - 'true'
       FunctionName:
         Fn::Sub: ${ResourceNamePrefix}-grafunc
       Handler: lambda_function.lambda_handler
@@ -720,6 +843,7 @@ Resources:
         Fn::Sub: ${ResourceNamePrefix}-CfgWr
     Metadata:
       aws:cdk:path: ObservabilitySlurmCfnTemplate/ConfigWriterLambdaRole
+    Condition: NodeAgentCondition
   ConfigWriterLambdaFunction:
     Type: AWS::Lambda::Function
     Properties:
@@ -804,6 +928,7 @@ Resources:
       Timeout: 60
     Metadata:
       aws:cdk:path: ObservabilitySlurmCfnTemplate/ConfigWriterLambdaFunction
+    Condition: NodeAgentCondition
   ConfigWriterCustomResource:
     Type: AWS::CloudFormation::CustomResource
     Properties:
@@ -813,6 +938,7 @@ Resources:
           - Arn
     Metadata:
       aws:cdk:path: ObservabilitySlurmCfnTemplate/ConfigWriterCustomResource
+    Condition: NodeAgentCondition
 Outputs:
   AMPRemoteWriteURL:
     Description: AMP Remote Write URL for observability-config.yaml
@@ -832,6 +958,7 @@ Outputs:
     Export:
       Name:
         Fn::Sub: ${AWS::StackName}-AMPRemoteWriteURL
+    Condition: AmpMetricsCondition
   PrometheusVPCEndpointId:
     Description: Prometheus VPC Endpoint ID
     Value:
@@ -839,6 +966,7 @@ Outputs:
     Export:
       Name:
         Fn::Sub: ${AWS::StackName}-PrometheusVPCEndpointId
+    Condition: AmpMetricsCondition
   HyperpodPrometheusWorkspaceId:
     Description: Prometheus Workspace ID
     Value:
@@ -851,6 +979,7 @@ Outputs:
     Export:
       Name:
         Fn::Sub: ${AWS::StackName}-PrometheusWorkspaceId
+    Condition: AmpMetricsCondition
   HyperpodPrometheusWorkspaceArn:
     Description: Prometheus Workspace ARN
     Value:
@@ -863,6 +992,7 @@ Outputs:
     Export:
       Name:
         Fn::Sub: ${AWS::StackName}-PrometheusWorkspaceArn
+    Condition: AmpMetricsCondition
   HyperpodPrometheusWorkspaceEndpoint:
     Description: Prometheus Workspace Endpoint
     Value:
@@ -875,6 +1005,7 @@ Outputs:
     Export:
       Name:
         Fn::Sub: ${AWS::StackName}-PrometheusWorkspaceEndpoint
+    Condition: AmpMetricsCondition
   HyperpodGrafanaWorkspaceId:
     Description: Grafana Workspace ID
     Value:
@@ -918,3 +1049,34 @@ Outputs:
     Export:
       Name:
         Fn::Sub: ${AWS::StackName}-ObservabilityConfigS3Uri
+    Condition: NodeAgentCondition
+  ExtensionGrafanaWorkspaceId:
+    Description: Grafana Workspace ID for the observability extension, empty without a workspace
+    Value:
+      Fn::If:
+        - IsAmgAllowed
+        - Fn::If:
+            - GrafanaNewWorkspaceCondition
+            - Fn::GetAtt:
+                - GrafanaWorkspaceCustomResource
+                - WorkspaceId
+            - Ref: GrafanaWorkspaceId
+        - ''
+  ExtensionRemoteWriteUrl:
+    Description: Prometheus remote-write URL for the observability extension, empty for CloudWatch
+    Value:
+      Fn::If:
+        - CloudWatchMetricsCondition
+        - ''
+        - Fn::Join:
+            - ''
+            - - https://aps-workspaces.
+              - Fn::Sub: ${AWS::Region}
+              - .amazonaws.com/workspaces/
+              - Fn::If:
+                  - PrometheusNewWorkspaceCondition
+                  - Fn::GetAtt:
+                      - PrometheusWorkspace
+                      - WorkspaceId
+                  - Ref: PrometheusWorkspaceId
+              - /api/v1/remote_write

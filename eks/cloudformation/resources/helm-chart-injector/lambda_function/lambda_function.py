@@ -139,6 +139,157 @@ def install_rig_dependencies():
         raise Exception(f"Failed to install RIG specific Helm chart: {e.cmd}. Return code: {e.returncode}")
 
 
+MODELEXPRESS_ENABLED = 'modelexpress.enabled=true'
+
+# Client profile ConfigMaps for ModelExpress inference pods (envFrom). Values come from
+# the HyperPod POC; the gdr profile is for instances with GPUDirect RDMA (p5, p5e, p5en,
+# p6, g7), non-gdr for instances without it (g5, g6, g6e), where P2P weights are slower
+# than S3 and only the compiled-kernel cache is transferred.
+MODELEXPRESS_PROFILE_COMMON = {
+    'VLLM_PLUGINS': 'modelexpress',
+    'VLLM_ENGINE_READY_TIMEOUT_S': '3600',
+    'VLLM_RPC_TIMEOUT': '7200000',
+    'MX_P2P_METADATA': '1',
+    'MX_METADATA_PORT': '5555',
+    'MX_WORKER_GRPC_PORT': '6555',
+    'MX_ARTIFACT_TRANSFER': '1',
+    'MX_MS_DISTRIBUTED': '1',
+    'MX_INSTANT_TENSOR': '0',
+    'RUNAI_STREAMER_CONCURRENCY': '8',
+    'RUNAI_STREAMER_S3_REQUEST_TIMEOUT_MS': '10000',
+    'MX_NIXL_BACKEND': 'LIBFABRIC',
+    'MX_RDMA_NIC_PIN': 'auto',
+    'FI_PROVIDER': 'efa',
+    'FI_EFA_USE_DEVICE_RDMA': '1',
+    'FI_EFA_ENABLE_SHM_TRANSFER': '0',
+    'FI_LOG_LEVEL': 'warn',
+    'NIXL_LOG_LEVEL': 'WARN',
+    'MODEL_EXPRESS_LOG_LEVEL': 'INFO',
+}
+MODELEXPRESS_PROFILES = {
+    'gdr': {'MX_LOAD_STRATEGY_CHAIN': 'INFERENCE'},
+    'non-gdr': {'MX_LOAD_STRATEGY_CHAIN': 'RL'},
+}
+
+
+def modelexpress_enabled():
+    """
+    Return True if OPERATORS enables ModelExpress (installed from its own chart).
+    """
+    return MODELEXPRESS_ENABLED in os.environ.get('OPERATORS', '').split(',')
+
+
+def modelexpress_profiles_manifest(namespace):
+    """
+    Render the client profile ConfigMaps for one namespace.
+    """
+    server_address = (
+        f"{os.environ['MODELEXPRESS_RELEASE']}.{os.environ['MODELEXPRESS_NAMESPACE']}"
+        f".svc.cluster.local:8001"
+    )
+    configmaps = []
+    for profile, settings in MODELEXPRESS_PROFILES.items():
+        configmaps.append({
+            'apiVersion': 'v1',
+            'kind': 'ConfigMap',
+            'metadata': {
+                'name': f'modelexpress-{profile}',
+                'namespace': namespace,
+                'labels': {
+                    'app.kubernetes.io/name': 'modelexpress',
+                    'app.kubernetes.io/component': 'client-profile',
+                    'app.kubernetes.io/managed-by': 'sagemaker-hyperpod-cluster-setup',
+                },
+            },
+            'data': {'MX_SERVER_ADDRESS': server_address, **MODELEXPRESS_PROFILE_COMMON, **settings},
+        })
+    return yaml.dump_all(configmaps, default_flow_style=False)
+
+
+def install_modelexpress():
+    """
+    Install or upgrade the ModelExpress server from the upstream ai-dynamo/modelexpress
+    chart, plus the client profile ConfigMaps.
+    """
+    try:
+        print("Installing ModelExpress...")
+
+        required_env_vars = [
+            'MODELEXPRESS_REPO_URL',
+            'MODELEXPRESS_REPO_REVISION',
+            'MODELEXPRESS_NAMESPACE',
+            'MODELEXPRESS_RELEASE',
+            'MODELEXPRESS_PROFILE_NAMESPACE',
+        ]
+
+        for var in required_env_vars:
+            if var not in os.environ:
+                raise ValueError(f"Missing required environment variable: {var}")
+
+        repo_dir = '/tmp/modelexpress'
+        subprocess.run(['rm', '-rf', repo_dir], check=True)
+        subprocess.run(['git', 'clone', os.environ['MODELEXPRESS_REPO_URL'], repo_dir], check=True)
+        subprocess.run(['git', '-C', repo_dir, 'checkout', os.environ['MODELEXPRESS_REPO_REVISION']], check=True)
+
+        # Kubernetes metadata backend needs no Redis; the server keeps no state on disk,
+        # so the chart's default PVC is not needed.
+        subprocess.run([
+            'helm', 'upgrade', '--install',
+            os.environ['MODELEXPRESS_RELEASE'],
+            f'{repo_dir}/helm',
+            '--namespace', os.environ['MODELEXPRESS_NAMESPACE'],
+            '--create-namespace',
+            '--set', 'env.MX_METADATA_BACKEND=kubernetes',
+            '--set', 'serviceAccount.rbac.enabled=true',
+            '--set', 'persistence.enabled=false',
+        ], check=True)
+
+        subprocess.run(
+            ['kubectl', 'apply', '-f', '-'],
+            input=modelexpress_profiles_manifest(os.environ['MODELEXPRESS_PROFILE_NAMESPACE']),
+            text=True,
+            check=True,
+        )
+
+        subprocess.run(['rm', '-rf', repo_dir], check=True)
+
+        print("ModelExpress installed successfully")
+
+    except subprocess.CalledProcessError as e:
+        raise Exception(f"Failed to install ModelExpress: {e.cmd}. Return code: {e.returncode}")
+
+
+def modelexpress_installed():
+    """
+    Return True if the ModelExpress release exists.
+    """
+    result = subprocess.run(
+        ['helm', 'status', os.environ['MODELEXPRESS_RELEASE'], '--namespace', os.environ['MODELEXPRESS_NAMESPACE']],
+        capture_output=True,
+        text=True,
+    )
+    return result.returncode == 0
+
+
+def uninstall_modelexpress():
+    """
+    Remove the ModelExpress release and client profiles. The CRDs are left in place,
+    as Helm does on uninstall.
+    """
+    print("Uninstalling ModelExpress...")
+    subprocess.run(
+        ['helm', 'uninstall', os.environ['MODELEXPRESS_RELEASE'], '--namespace', os.environ['MODELEXPRESS_NAMESPACE']],
+        check=True,
+    )
+    subprocess.run([
+        'kubectl', 'delete', 'configmap',
+        '--namespace', os.environ['MODELEXPRESS_PROFILE_NAMESPACE'],
+        '--selector', 'app.kubernetes.io/component=client-profile,app.kubernetes.io/name=modelexpress',
+        '--ignore-not-found',
+    ], check=True)
+    print("ModelExpress uninstalled successfully")
+
+
 def install_helm_chart():
     """
     Install custom Helm chart from GitHub repository
@@ -228,6 +379,9 @@ def install_helm_chart():
 
         if os.environ['CREATE_RIG'] == 'true':
             install_rig_dependencies()
+
+        if modelexpress_enabled():
+            install_modelexpress()
 
         # Clean up cloned repository
         subprocess.run(['rm', '-rf', '/tmp/helm-charts'], check=True)
@@ -446,6 +600,13 @@ def on_delete():
             except subprocess.CalledProcessError as e:
                 print(f"Warning: Failed to uninstall custom chart: {e}")
                 response_data["CustomChartUninstalled"] = False
+
+        if 'MODELEXPRESS_RELEASE' in os.environ:
+            try:
+                if modelexpress_installed():
+                    uninstall_modelexpress()
+            except subprocess.CalledProcessError as e:
+                print(f"Warning: Failed to uninstall ModelExpress: {e}")
 
 
         return response_data

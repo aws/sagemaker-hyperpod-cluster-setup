@@ -138,7 +138,7 @@ Resources:
             Fn::If:
               - CreateRIGCondition
               - 5b703ed8b2f1f60176013ead2519541381f0e177
-              - b1f2fdae29a4ac33ca4480cbfddc7bc8e641f14b
+              - 3c1fe4f83206bf96a3de051c9e8925a5546a2558
           CHART_PATH:
             Ref: HelmRepoPath
           OPERATORS:
@@ -151,6 +151,11 @@ Resources:
             Ref: CreateRIG
           RIG_SCRIPT_PATH:
             Ref: RigHelmScriptPath
+          MODELEXPRESS_REPO_URL: https://github.com/ai-dynamo/modelexpress.git
+          MODELEXPRESS_REPO_REVISION: ac6d03a87a550c8188c3ed59f187b90d4f0554f5
+          MODELEXPRESS_NAMESPACE: modelexpress
+          MODELEXPRESS_RELEASE: modelexpress
+          MODELEXPRESS_PROFILE_NAMESPACE: default
           LD_LIBRARY_PATH: /opt/python/lib
       FunctionName:
         Fn::Sub: ${ResourceNamePrefix}helmfunc
