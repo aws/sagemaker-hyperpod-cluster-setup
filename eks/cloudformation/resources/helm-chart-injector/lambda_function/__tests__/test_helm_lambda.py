@@ -1,7 +1,10 @@
+import json
 import unittest
 import os
 import sys
 from unittest.mock import patch, Mock
+
+import yaml
 
 sys.modules['cfnresponse'] = Mock()
 
@@ -115,6 +118,140 @@ class TestModelExpress(unittest.TestCase):
         with patch.dict(os.environ, _BASE_ENV, clear=True), patch('lambda_function.write_kubeconfig'):
             on_delete()
         self.assertNotIn(_UNINSTALL, _cmds(mock_run))
+
+
+def _sc(name, provisioner, default=None):
+    annotations = {default: 'true'} if default else {}
+    return {'metadata': {'name': name, 'annotations': annotations}, 'provisioner': provisioner}
+
+
+_DEFAULT = 'storageclass.kubernetes.io/is-default-class'
+_BETA_DEFAULT = 'storageclass.beta.kubernetes.io/is-default-class'
+_STORAGECLASS_READ = ['kubectl', 'get', 'storageclass', '-o', 'json']
+_APPLY = ['kubectl', 'apply', '-f', '-']
+_ANNOTATE_GP3 = ['kubectl', 'annotate', 'storageclass', 'gp3', _DEFAULT + '=true', '--overwrite']
+_DELETE_MANAGED = ['kubectl', 'delete', 'storageclass', '--selector',
+                   'app.kubernetes.io/managed-by=sagemaker-hyperpod-cluster-setup', '--ignore-not-found']
+_STORAGE_CLASS_ENV = {**_BASE_ENV, 'CREATE_DEFAULT_STORAGE_CLASS': 'true'}
+
+
+def _kubectl_reads(*storage_classes):
+    """subprocess.run side effect answering the StorageClass listing the step makes."""
+    def run(cmd, **kwargs):
+        if cmd == _STORAGECLASS_READ:
+            return Mock(returncode=0, stdout=json.dumps({'items': list(storage_classes)}))
+        return Mock(returncode=0, stdout='')
+    return run
+
+
+@patch('lambda_function.subprocess.run')
+class TestDefaultStorageClass(unittest.TestCase):
+
+    def _apply(self, mock_run, env, *storage_classes):
+        from lambda_function import apply_default_storage_class
+        mock_run.side_effect = _kubectl_reads(*storage_classes)
+        with patch.dict(os.environ, env, clear=True):
+            created = apply_default_storage_class()
+        manifests = [c[1]['input'] for c in mock_run.call_args_list if c[0][0] == _APPLY]
+        return created, manifests, _cmds(mock_run)
+
+    def test_creates_default_gp3_when_nothing_is_default(self, mock_run):
+        created, manifests, cmds = self._apply(mock_run, _STORAGE_CLASS_ENV, _sc('gp2', 'kubernetes.io/aws-ebs'))
+        self.assertTrue(created)
+        self.assertEqual(len(manifests), 1)
+        manifest = yaml.safe_load(manifests[0])
+        self.assertEqual(manifest['kind'], 'StorageClass')
+        self.assertEqual(manifest['metadata']['name'], 'gp3')
+        self.assertEqual(manifest['metadata']['annotations'], {_DEFAULT: 'true'})
+        self.assertEqual(manifest['metadata']['labels'], {'app.kubernetes.io/managed-by': 'sagemaker-hyperpod-cluster-setup'})
+        self.assertEqual(manifest['provisioner'], 'ebs.csi.aws.com')
+        self.assertEqual(manifest['parameters'], {'type': 'gp3', 'encrypted': 'true'})
+        self.assertEqual(manifest['volumeBindingMode'], 'WaitForFirstConsumer')
+        self.assertTrue(manifest['allowVolumeExpansion'])
+
+    def test_skips_a_cluster_this_stack_did_not_create(self, mock_run):
+        created, manifests, cmds = self._apply(mock_run, _BASE_ENV)
+        self.assertFalse(created)
+        self.assertEqual(manifests, [])
+        self.assertEqual([c for c in cmds if c[0] == 'kubectl'], [])
+
+    def test_fails_loudly_with_stderr_when_kubectl_fails(self, mock_run):
+        import subprocess
+        from lambda_function import apply_default_storage_class
+        mock_run.side_effect = subprocess.CalledProcessError(1, _STORAGECLASS_READ, stderr='Unauthorized')
+        with patch.dict(os.environ, _STORAGE_CLASS_ENV, clear=True), \
+                self.assertRaisesRegex(Exception, 'Failed to create the default StorageClass.*Unauthorized'):
+            apply_default_storage_class()
+
+    def test_fails_without_a_stray_none_when_stderr_was_not_captured(self, mock_run):
+        import subprocess
+        from lambda_function import apply_default_storage_class
+
+        def run(cmd, **kwargs):
+            if cmd == _ANNOTATE_GP3:
+                raise subprocess.CalledProcessError(1, cmd)  # stderr not captured -> None
+            return _kubectl_reads(_sc('gp3', 'ebs.csi.aws.com'))(cmd, **kwargs)
+
+        mock_run.side_effect = run
+        with patch.dict(os.environ, _STORAGE_CLASS_ENV, clear=True), self.assertRaises(Exception) as raised:
+            apply_default_storage_class()
+        self.assertIn('Failed to create the default StorageClass', str(raised.exception))
+        self.assertNotIn('None', str(raised.exception))
+
+    def test_marks_an_existing_gp3_class_default_instead_of_recreating_it(self, mock_run):
+        created, manifests, cmds = self._apply(mock_run, _STORAGE_CLASS_ENV, _sc('gp3', 'ebs.csi.aws.com'))
+        self.assertTrue(created)
+        self.assertEqual(manifests, [])
+        self.assertIn(_ANNOTATE_GP3, cmds)
+
+    def test_refuses_a_gp3_class_on_another_provisioner(self, mock_run):
+        from lambda_function import apply_default_storage_class
+        mock_run.side_effect = _kubectl_reads(_sc('gp3', 'kubernetes.io/aws-ebs'))
+        with patch.dict(os.environ, _STORAGE_CLASS_ENV, clear=True), \
+                self.assertRaisesRegex(Exception, 'provisioner kubernetes.io/aws-ebs, expected ebs.csi.aws.com'):
+            apply_default_storage_class()
+        self.assertNotIn(_ANNOTATE_GP3, _cmds(mock_run))
+
+    def test_is_a_no_op_once_gp3_is_the_default(self, mock_run):
+        created, manifests, cmds = self._apply(mock_run, _STORAGE_CLASS_ENV, _sc('gp3', 'ebs.csi.aws.com', default=_DEFAULT))
+        self.assertFalse(created)
+        self.assertEqual(manifests, [])
+        self.assertEqual([c for c in cmds if c[0] == 'kubectl'], [_STORAGECLASS_READ])
+
+    def test_an_existing_default_wins_over_an_existing_gp3(self, mock_run):
+        created, manifests, cmds = self._apply(
+            mock_run, _STORAGE_CLASS_ENV, _sc('gp3', 'ebs.csi.aws.com'), _sc('gp2', 'kubernetes.io/aws-ebs', default=_DEFAULT)
+        )
+        self.assertFalse(created)
+        self.assertEqual(manifests, [])
+        self.assertEqual([c for c in cmds if c[0] == 'kubectl'], [_STORAGECLASS_READ])
+
+    def test_keeps_an_existing_default(self, mock_run):
+        for annotation in (_DEFAULT, _BETA_DEFAULT):
+            mock_run.reset_mock()
+            created, manifests, cmds = self._apply(
+                mock_run, _STORAGE_CLASS_ENV, _sc('gp2', 'kubernetes.io/aws-ebs', default=annotation)
+            )
+            self.assertFalse(created, annotation)
+            self.assertEqual(manifests, [])
+            self.assertNotIn(_ANNOTATE_GP3, cmds)
+
+    def test_delete_removes_only_the_managed_class(self, mock_run):
+        from lambda_function import on_delete
+        mock_run.return_value = Mock(returncode=1, stdout='')  # helm status: ModelExpress not found
+        with patch.dict(os.environ, _BASE_ENV, clear=True), patch('lambda_function.write_kubeconfig'):
+            on_delete()
+        self.assertIn(_DELETE_MANAGED, _cmds(mock_run))
+
+    def test_create_reports_the_storage_class(self, mock_run):
+        from lambda_function import on_create
+        mock_run.side_effect = _kubectl_reads()
+        with patch.dict(os.environ, _STORAGE_CLASS_ENV, clear=True), \
+                patch('lambda_function.write_kubeconfig'), \
+                patch('lambda_function.os.path.exists', return_value=False):
+            response = on_create()
+        self.assertTrue(response['CustomChartInstalled'])
+        self.assertTrue(response['DefaultStorageClassSet'])
 
 
 if __name__ == '__main__':

@@ -1,4 +1,5 @@
 import boto3
+import json
 import os
 import subprocess
 import cfnresponse
@@ -290,6 +291,98 @@ def uninstall_modelexpress():
     print("ModelExpress uninstalled successfully")
 
 
+# Default StorageClass. EKS pre-creates only the legacy in-tree 'gp2' class and, from 1.30 on, no
+# longer marks it default, so a PVC that names no class stays Pending forever. The EKS stack
+# installs the aws-ebs-csi-driver add-on; this class makes it the default so workloads get an
+# encrypted gp3 volume without naming a class.
+DEFAULT_STORAGE_CLASS_NAME = 'gp3'
+DEFAULT_STORAGE_CLASS_ANNOTATION = 'storageclass.kubernetes.io/is-default-class'
+BETA_DEFAULT_STORAGE_CLASS_ANNOTATION = 'storageclass.beta.kubernetes.io/is-default-class'  # still honoured
+EBS_CSI_DRIVER = 'ebs.csi.aws.com'
+MANAGED_BY_KEY = 'app.kubernetes.io/managed-by'
+MANAGED_BY_VALUE = 'sagemaker-hyperpod-cluster-setup'
+DEFAULT_STORAGE_CLASS_MANIFEST = yaml.dump({
+    'apiVersion': 'storage.k8s.io/v1',
+    'kind': 'StorageClass',
+    'metadata': {
+        'name': DEFAULT_STORAGE_CLASS_NAME,
+        'annotations': {DEFAULT_STORAGE_CLASS_ANNOTATION: 'true'},
+        'labels': {MANAGED_BY_KEY: MANAGED_BY_VALUE},
+    },
+    'provisioner': EBS_CSI_DRIVER,
+    'parameters': {'type': 'gp3', 'encrypted': 'true'},
+    'reclaimPolicy': 'Delete',
+    'volumeBindingMode': 'WaitForFirstConsumer',
+    'allowVolumeExpansion': True,
+}, default_flow_style=False)
+
+
+def is_default_storage_class(storage_class):
+    annotations = storage_class.get('metadata', {}).get('annotations') or {}
+    return any(
+        annotations.get(key) == 'true'
+        for key in (DEFAULT_STORAGE_CLASS_ANNOTATION, BETA_DEFAULT_STORAGE_CLASS_ANNOTATION)
+    )
+
+
+def apply_default_storage_class():
+    """
+    Make gp3 on the EBS CSI driver the cluster's default StorageClass. Only done when the EKS stack
+    created the cluster (CREATE_DEFAULT_STORAGE_CLASS), because that is where the driver is installed
+    with the permissions HyperPod nodes need; a bring-your-own cluster keeps its own storage setup.
+    Skipped when the cluster already has a default StorageClass. A gp3 class that already exists on the
+    EBS CSI driver is only annotated default (its parameters are immutable, the annotation is not); one on
+    another provisioner is an error, because the integ test and this manifest both expect the driver.
+    Returns True when this run made gp3 the default, by creating or annotating it.
+    """
+    if os.environ.get('CREATE_DEFAULT_STORAGE_CLASS') != 'true':
+        print("CREATE_DEFAULT_STORAGE_CLASS is not true, skipping the default StorageClass")
+        return False
+
+    try:
+        listing = subprocess.run(['kubectl', 'get', 'storageclass', '-o', 'json'], check=True, capture_output=True, text=True)
+        storage_classes = {sc['metadata']['name']: sc for sc in json.loads(listing.stdout).get('items', [])}
+        defaults = sorted(name for name, sc in storage_classes.items() if is_default_storage_class(sc))
+        if defaults:
+            print(f"Cluster already has a default StorageClass {defaults}, leaving it unchanged")
+            return False
+
+        existing = storage_classes.get(DEFAULT_STORAGE_CLASS_NAME)
+        if existing is None:
+            print(f"Creating default StorageClass {DEFAULT_STORAGE_CLASS_NAME}...")
+            subprocess.run(['kubectl', 'apply', '-f', '-'], input=DEFAULT_STORAGE_CLASS_MANIFEST, text=True, check=True)
+            return True
+        if existing.get('provisioner') != EBS_CSI_DRIVER:
+            raise Exception(
+                f"StorageClass {DEFAULT_STORAGE_CLASS_NAME} exists with provisioner {existing.get('provisioner')}, "
+                f"expected {EBS_CSI_DRIVER}; refusing to make it the default"
+            )
+        print(f"StorageClass {DEFAULT_STORAGE_CLASS_NAME} already exists, marking it default...")
+        subprocess.run(
+            ['kubectl', 'annotate', 'storageclass', DEFAULT_STORAGE_CLASS_NAME, f'{DEFAULT_STORAGE_CLASS_ANNOTATION}=true', '--overwrite'],
+            check=True,
+        )
+        return True
+
+    except subprocess.CalledProcessError as e:
+        # Truncated: the message ends up in the CloudFormation response, which is capped at 4 KB.
+        stderr = f" Stderr: {e.stderr.strip()[:500]}" if e.stderr else ""
+        raise Exception(f"Failed to create the default StorageClass: {e.cmd}. Return code: {e.returncode}.{stderr}")
+
+
+def delete_default_storage_class():
+    """
+    Remove the default StorageClass this stack created (selected by its label, so a class the
+    customer created is never deleted; a pre-existing gp3 that this stack only annotated default
+    keeps that annotation). Volumes already provisioned keep working without it.
+    """
+    print("Deleting the default StorageClass created by this stack...")
+    subprocess.run(
+        ['kubectl', 'delete', 'storageclass', '--selector', f'{MANAGED_BY_KEY}={MANAGED_BY_VALUE}', '--ignore-not-found'],
+        check=True,
+    )
+
+
 def install_helm_chart():
     """
     Install custom Helm chart from GitHub repository
@@ -428,6 +521,8 @@ def on_create():
         install_helm_chart()
         response_data["CustomChartInstalled"] = True
 
+        response_data["DefaultStorageClassSet"] = apply_default_storage_class()
+
         return response_data
 
     except subprocess.CalledProcessError as e:
@@ -552,6 +647,8 @@ def on_update():
         update_helm_chart()
         response_data["CustomChartUpdated"] = True
 
+        response_data["DefaultStorageClassSet"] = apply_default_storage_class()
+
         return response_data
 
     except subprocess.CalledProcessError as e:
@@ -607,6 +704,11 @@ def on_delete():
                     uninstall_modelexpress()
             except subprocess.CalledProcessError as e:
                 print(f"Warning: Failed to uninstall ModelExpress: {e}")
+
+        try:
+            delete_default_storage_class()
+        except subprocess.CalledProcessError as e:
+            print(f"Warning: Failed to delete the default StorageClass: {e}")
 
 
         return response_data
