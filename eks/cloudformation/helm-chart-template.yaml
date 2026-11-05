@@ -31,6 +31,15 @@ Parameters:
       - 'true'
       - 'false'
     Description: Specify whether to install RIG dependencies. Set to "true" to enable RIG installation.
+  CreateDefaultStorageClass:
+    Type: String
+    Default: 'false'
+    AllowedValues:
+      - 'true'
+      - 'false'
+    Description: >-
+      Create a default gp3 StorageClass on the EBS CSI driver. Set to "true" only for an EKS cluster created by the EKS
+      stack, which installs the driver with the permissions HyperPod nodes need.
   Namespace:
     Type: String
     Default: kube-system
@@ -151,6 +160,8 @@ Resources:
             Ref: CreateRIG
           RIG_SCRIPT_PATH:
             Ref: RigHelmScriptPath
+          CREATE_DEFAULT_STORAGE_CLASS:
+            Ref: CreateDefaultStorageClass
           MODELEXPRESS_REPO_URL: https://github.com/ai-dynamo/modelexpress.git
           MODELEXPRESS_REPO_REVISION: ac6d03a87a550c8188c3ed59f187b90d4f0554f5
           MODELEXPRESS_NAMESPACE: modelexpress

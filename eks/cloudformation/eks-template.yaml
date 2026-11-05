@@ -116,6 +116,78 @@ Resources:
       ResolveConflicts: OVERWRITE
     Metadata:
       aws:cdk:path: EksCfnTemplate/PodIdentityAddOn
+  EbsCsiDriverRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Sid: AllowEksAuthToAssumeRoleForPodIdentity
+            Effect: Allow
+            Principal:
+              Service: pods.eks.amazonaws.com
+            Action:
+              - sts:AssumeRole
+              - sts:TagSession
+            Condition:
+              StringEquals:
+                aws:SourceAccount:
+                  Fn::Sub: ${AWS::AccountId}
+                aws:SourceArn:
+                  Fn::GetAtt:
+                    - EKSCluster
+                    - Arn
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AmazonEBSCSIDriverPolicy
+      Path: /
+      Policies:
+        - PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Sid: AttachVolumesToHyperPodNodes
+                Effect: Allow
+                Action:
+                  - sagemaker:AttachClusterNodeVolume
+                  - sagemaker:DetachClusterNodeVolume
+                Resource:
+                  Fn::Sub: arn:aws:sagemaker:${AWS::Region}:${AWS::AccountId}:cluster/*
+              - Sid: DescribeThisCluster
+                Effect: Allow
+                Action:
+                  - eks:DescribeCluster
+                Resource:
+                  Fn::GetAtt:
+                    - EKSCluster
+                    - Arn
+          PolicyName:
+            Fn::Sub: ${ResourceNamePrefix}-EbsCsiPol
+      RoleName:
+        Fn::Sub: ${ResourceNamePrefix}-ebs-csi
+      Tags:
+        - Key: aws-sagemaker-hyperpod-prerequiste
+          Value:
+            Fn::Sub: ${ResourceNamePrefix}-ebs-csi
+    Metadata:
+      aws:cdk:path: EksCfnTemplate/EbsCsiDriverRole
+  EbsCsiDriverAddOn:
+    Type: AWS::EKS::Addon
+    Properties:
+      AddonName: aws-ebs-csi-driver
+      ClusterName:
+        Ref: EKSCluster
+      ConfigurationValues: >-
+        {"controller":{"tolerations":[{"operator":"Exists","effect":"NoSchedule"},{"operator":"Exists","effect":"NoExecute"},{"operator":"Exists","effect":"PreferNoSchedule"}]}}
+      PodIdentityAssociations:
+        - RoleArn:
+            Fn::GetAtt:
+              - EbsCsiDriverRole
+              - Arn
+          ServiceAccount: ebs-csi-controller-sa
+      ResolveConflicts: OVERWRITE
+    DependsOn:
+      - PodIdentityAddOn
+    Metadata:
+      aws:cdk:path: EksCfnTemplate/EbsCsiDriverAddOn
 Outputs:
   EKSClusterArn:
     Description: ARN of the EKS Cluster

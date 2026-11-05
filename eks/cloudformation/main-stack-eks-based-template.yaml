@@ -1796,6 +1796,11 @@ Resources:
             - CreateRigCondition
             - 'true'
             - 'false'
+        CreateDefaultStorageClass:
+          Fn::If:
+            - CreateEKSClusterStackCondition
+            - 'true'
+            - 'false'
         CustomResourceS3Bucket:
           Fn::If:
             - CustomBucketCondition
