@@ -292,6 +292,12 @@ def get_tiered_storage_config_from_env():
     
     return None
 
+# The cluster tag naming the stack that sets up the cluster's observability. SETUP_STACK_TAG (Slurm, when the stack sets
+# up observability after the cluster) creates the cluster with it, so the console shows the setup in progress from the
+# start; the setup stack's launcher then sets it to the setup stack's ID.
+SETUP_STACK_TAG_KEY = 'hyperpod-cluster-extensions-stack'
+
+
 def get_tags_from_env():
     """
     Get tags from environment variables and automatically add required SageMaker tag for HPTO
@@ -348,6 +354,11 @@ def get_tags_from_env():
         if not sagemaker_tag_exists:
             tags.append({'Key': 'SageMaker', 'Value': 'true'})
             print("Added required SageMaker=true tag as HP training operator requires it.")
+
+    setup_stack_tag = os.environ.get('SETUP_STACK_TAG', '')
+    if setup_stack_tag:
+        tags = [tag for tag in tags if tag.get('Key') != SETUP_STACK_TAG_KEY]
+        tags.append({'Key': SETUP_STACK_TAG_KEY, 'Value': setup_stack_tag})
     
     return tags
 

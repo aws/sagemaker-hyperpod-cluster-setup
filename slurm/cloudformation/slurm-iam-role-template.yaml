@@ -58,6 +58,11 @@ Resources:
                   - ec2:CreateTags
                   - ec2:DetachNetworkInterface
                 Resource: '*'
+              - Sid: FsxDescribeForEfa
+                Effect: Allow
+                Action:
+                  - fsx:DescribeFileSystems
+                Resource: '*'
           PolicyName: AmazonSagemakerClusterVPCPolicy
         - PolicyDocument:
             Version: 2012-10-17

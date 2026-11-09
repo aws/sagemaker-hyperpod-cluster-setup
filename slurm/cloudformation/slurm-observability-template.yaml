@@ -55,6 +55,8 @@ Parameters:
   InstanceGroupExecutionRoleNames:
     Type: String
     Default: ''
+    AllowedPattern: ^$|^[\w+=.@-]+(,[\w+=.@-]+)*$
+    ConstraintDescription: must be comma-separated IAM role names (letters, digits and +=.@_-), without spaces, paths or ARNs.
     Description: >-
       Comma-separated names (without path) of the instance groups' own execution roles, other than ExecutionRoleName,
       which also get the observability policies.
@@ -494,6 +496,24 @@ Resources:
             Version: 2012-10-17
             Statement:
               - Effect: Allow
+                Action: grafana:TagResource
+                Resource:
+                  Fn::Sub: arn:${AWS::Partition}:grafana:${AWS::Region}:${AWS::AccountId}:/workspaces
+                Condition:
+                  ForAllValues:StringEquals:
+                    aws:TagKeys:
+                      - SageMaker
+                      - hyperpod-observability-stack
+                  StringEquals:
+                    aws:RequestTag/SageMaker: 'true'
+                    aws:RequestTag/hyperpod-observability-stack:
+                      Fn::Sub: ${AWS::StackName}
+          PolicyName:
+            Fn::Sub: ${ResourceNamePrefix}-AMGWSTAG
+        - PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
                 Action:
                   - iam:CreateServiceLinkedRole
                 Resource:
@@ -560,6 +580,8 @@ Resources:
             Fn::Sub: ${AWS::AccountId}
           PARTITION:
             Fn::Sub: ${AWS::Partition}
+          OBSERVABILITY_STACK_TAG:
+            Fn::Sub: ${AWS::StackName}
       FunctionName:
         Fn::Sub: ${ResourceNamePrefix}-amg-crfn
       Handler: lambda_function.lambda_handler

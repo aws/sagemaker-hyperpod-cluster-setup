@@ -8,7 +8,10 @@ import sys
 import unittest
 import urllib.error
 import uuid
-from unittest.mock import Mock, patch
+from datetime import datetime, timedelta, timezone
+from unittest.mock import MagicMock, Mock, patch
+
+from botocore.exceptions import ClientError
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
@@ -113,6 +116,49 @@ class TestRequestedExtensions(unittest.TestCase):
         properties = {'InstallObservability': 'false', 'Extensions': extensions((OBS, CONSOLE_OBS), (OTHER, {})), **LEVELS}
 
         self.assertEqual(lambda_function.requested_extensions(properties), [(OTHER, {})])
+
+    def test_installs_only_the_observability_extension_with_observability_only(self):
+        properties = {
+            'InstallObservability': 'true',
+            'ObservabilityOnly': 'true',
+            'Extensions': json.dumps([
+                {'ExtensionName': OTHER, 'ConfigurationValues': {}},
+                {'ExtensionName': OBS, 'ConfigurationValues': {}},
+                {'ExtensionName': 'sagemaker-bad', 'ConfigurationValues': 'not json'},
+                'not-an-object',
+            ]),
+            **LEVELS,
+        }
+
+        self.assertEqual(lambda_function.requested_extensions(properties), [(OBS, {'metricsProvider': TEMPLATE_METRICS})])
+        self.assertEqual(lambda_function.requested_names(properties), [OBS])
+        self.assertEqual(lambda_function.listed_extensions(properties)[1], {})
+        self.assertEqual(lambda_function.skipped_extensions(properties), [])
+
+    def test_installs_every_extension_but_observability_with_skip_observability(self):
+        properties = {
+            'InstallObservability': 'false',
+            'SkipObservability': 'true',
+            'Extensions': json.dumps([
+                {'ExtensionName': OBS, 'ConfigurationValues': CONSOLE_OBS},
+                {'ExtensionName': OTHER, 'ConfigurationValues': {}},
+                {'ExtensionName': 7},
+            ]),
+            **LEVELS,
+        }
+
+        self.assertEqual(lambda_function.requested_extensions(properties), [(OTHER, {})])
+        self.assertEqual(lambda_function.requested_names(properties), [OTHER])
+        self.assertEqual(list(lambda_function.listed_extensions(properties)[1]), ['ClusterExtensions[2]'])
+        # The setup stack installs it, so it isn't reported as skipped here.
+        self.assertEqual(lambda_function.skipped_extensions(properties), [])
+
+    def test_reports_a_list_that_is_not_json_only_outside_observability_only(self):
+        properties = {'Extensions': 'not json', **LEVELS}
+
+        self.assertEqual(list(lambda_function.listed_extensions({**properties, 'SkipObservability': 'true'})[1]),
+                         ['ClusterExtensions'])
+        self.assertEqual(lambda_function.listed_extensions({**properties, 'ObservabilityOnly': 'true'})[1], {})
 
     def test_turns_nccl_metrics_off_when_node_metrics_are_off(self):
         # The extension's schema allows NCCL metrics only with node metrics on.
@@ -483,6 +529,52 @@ class TestHandler(unittest.TestCase):
         self.assertEqual(data['InstallStatus'], {OBS: 'CreateFailed'})
         self.assertEqual(data['InstallReason'][OBS], f'{OBS_ARN} is CreateFailed')
 
+    def test_create_with_skip_observability_installs_the_others_without_tagging_the_cluster(self):
+        self.responses(
+            CreateClusterExtension={'ExtensionArn': OTHER_ARN},
+            DescribeClusterExtension={'ExtensionDetails': {'Status': 'Active'}},
+        )
+
+        lambda_function.lambda_handler(
+            event(InstallObservability='false', SkipObservability='true',
+                  Extensions=extensions((OBS, CONSOLE_OBS), (OTHER, {}))),
+            context(),
+        )
+
+        self.assertEqual([c['ExtensionName'] for c in self.calls('CreateClusterExtension')], [OTHER])
+        # The cluster's tag names the setup stack, which installs the observability extension.
+        self.assertEqual(self.calls('AddTags'), [])
+        status, data, physical_id = self.sent()
+        self.assertEqual(status, 'SUCCESS')
+        self.assertEqual(data['InstallStatus'], {OTHER: 'Active'})
+        self.assertEqual(physical_id, f'{CLUSTER_ARN}/extensions/{OTHER}/')
+
+    def test_create_with_skip_observability_and_only_observability_listed_installs_nothing(self):
+        self.responses()
+
+        lambda_function.lambda_handler(
+            event(InstallObservability='false', SkipObservability='true', Extensions=extensions((OBS, CONSOLE_OBS))),
+            context(),
+        )
+
+        self.assertEqual(self.calls('CreateClusterExtension'), [])
+        status, data, _ = self.sent()
+        self.assertEqual((status, data['InstallStatus']), ('SUCCESS', {}))
+
+    def test_create_with_observability_only_installs_only_observability(self):
+        self.responses(
+            CreateClusterExtension={'ExtensionArn': OBS_ARN},
+            DescribeClusterExtension={'ExtensionDetails': {'Status': 'Active'}},
+        )
+
+        lambda_function.lambda_handler(
+            event(ObservabilityOnly='true', Extensions=extensions((OTHER, {}), (OBS, CONSOLE_OBS))), context()
+        )
+
+        self.assertEqual([c['ExtensionName'] for c in self.calls('CreateClusterExtension')], [OBS])
+        self.assertEqual(len(self.calls('AddTags')), 1)
+        self.assertEqual(self.sent()[1]['InstallStatus'], {OBS: 'Active'})
+
     def test_create_installs_even_when_the_cluster_cannot_be_tagged(self):
         self.responses(
             AddTags=lambda_function.SageMakerError('AccessDeniedException', 'not authorized', 400),
@@ -534,6 +626,27 @@ class TestHandler(unittest.TestCase):
             len(self.calls('DescribeClusterExtension')),
             lambda_function.MAX_WAIT_SECONDS // lambda_function.POLL_SECONDS + 1,
         )
+
+    def test_setup_stack_waits_longer_and_keeps_an_extension_still_creating(self):
+        # The observability setup stack waits SETUP_STACK_MAX_WAIT_SECONDS for the outcome; still Creating then is not a
+        # failure (the outcome isn't known), so the stack isn't rolled back.
+        clock = [0]
+        self.responses(
+            CreateClusterExtension={'ExtensionArn': OBS_ARN},
+            DescribeClusterExtension={'ExtensionDetails': {'Status': 'Creating'}},
+        )
+
+        def sleep(seconds):
+            clock[0] += seconds
+
+        with patch('lambda_function.time.time', side_effect=lambda: clock[0]), \
+                patch('lambda_function.time.sleep', side_effect=sleep):
+            lambda_function.lambda_handler(event(FailOnFailedInstall='true'), context())
+
+        status, data, physical_id = self.sent()
+        self.assertEqual((status, data['InstallStatus']), ('SUCCESS', {OBS: 'Creating'}))
+        self.assertFalse(physical_id.endswith('/failed'))
+        self.assertEqual(clock[0], lambda_function.SETUP_STACK_MAX_WAIT_SECONDS)
 
     def test_create_keeps_polling_after_a_status_that_cannot_be_read(self):
         statuses = iter([
@@ -860,6 +973,318 @@ class TestHandler(unittest.TestCase):
         self.assertEqual(self.calls('ListClusterExtensions')[1], {'ClusterArn': CLUSTER_ARN, 'NextToken': 't1'})
         # Found on the second page, so reused rather than created again.
         self.assertEqual(self.calls('CreateClusterExtension'), [])
+
+
+class TestFailOnFailedInstall(unittest.TestCase):
+    """The observability setup stack's install, which fails the resource when an extension fails to install."""
+
+    setUp, tearDown = TestHandler.setUp, TestHandler.tearDown
+    responses, sent, calls = TestHandler.responses, TestHandler.sent, TestHandler.calls
+
+    def create(self, status=None, create_error=None, **properties):
+        def create(body):
+            if create_error:
+                raise create_error
+            return {'ExtensionArn': OBS_ARN}
+
+        describe = status if isinstance(status, Exception) else {'ExtensionDetails': {'Status': status}}
+        self.responses(CreateClusterExtension=create, DescribeClusterExtension=describe)
+        # Time for the installs and a status read, not for waiting on Creating.
+        lambda_function.lambda_handler(event(**properties), context(remaining=lambda_function.RESPONSE_MARGIN_MS + 5000))
+        status, data, physical_id = self.sent()
+        return status, data, physical_id, self.respond.call_args.kwargs.get('reason', '')
+
+    def test_fails_when_an_extension_fails_to_install(self):
+        validation = lambda_function.SageMakerError('ValidationException', f'{OBS_ARN}: schema', 400)
+        unreadable = lambda_function.SageMakerError('AccessDeniedException', 'no describe', 400)
+        for name, kwargs, expected in (
+            ('CreateFailed', {'status': 'CreateFailed'}, 'CreateFailed'),
+            ('NotInstalled', {'create_error': validation}, 'NotInstalled'),
+            ('Unknown', {'status': unreadable}, 'Unknown'),
+        ):
+            with self.subTest(name):
+                self.respond.reset_mock()
+                status, data, physical_id, reason = self.create(FailOnFailedInstall='true', **kwargs)
+                self.assertEqual(status, 'FAILED')
+                self.assertEqual(reason, f'Cluster extensions failed to install: {OBS} is {expected}')
+                self.assertNotIn('arn:', reason)
+                # The outcome and the extensions tried stay, for the rollback's Delete, which the marker tells.
+                self.assertEqual(data['InstallStatus'], {OBS: expected})
+                self.assertTrue(physical_id.startswith(f'{CLUSTER_ARN}/extensions/'))
+                self.assertTrue(physical_id.endswith('/failed'))
+                self.assertEqual(lambda_function.created_with(physical_id)[0], [OBS] if expected != 'NotInstalled' else [])
+
+    def test_succeeds_when_the_extensions_are_active_degraded_or_still_creating(self):
+        for status in ('Active', 'Degraded', 'Creating'):
+            with self.subTest(status):
+                self.respond.reset_mock()
+                result, _, physical_id, _ = self.create(status, FailOnFailedInstall='true')
+                self.assertEqual((result, physical_id), ('SUCCESS', f'{CLUSTER_ARN}/extensions/{OBS}/'))
+
+    def test_only_the_observability_extension_fails_the_resource(self):
+        arns = {OBS: OBS_ARN, OTHER: OTHER_ARN}
+        statuses = {OBS_ARN: 'Active', OTHER_ARN: 'CreateFailed'}
+        self.responses(
+            CreateClusterExtension=lambda body: {'ExtensionArn': arns[body['ExtensionName']]},
+            DescribeClusterExtension=lambda body: {'ExtensionDetails': {'Status': statuses[body['ExtensionArn']]}},
+        )
+        lambda_function.lambda_handler(
+            event(FailOnFailedInstall='true', Extensions=extensions((OTHER, {}))),
+            context(remaining=lambda_function.RESPONSE_MARGIN_MS + 5000),
+        )
+        status, data, physical_id = self.sent()
+        self.assertEqual(status, 'SUCCESS')
+        # Reported as before.
+        self.assertEqual(data['InstallStatus'], {OTHER: 'CreateFailed', OBS: 'Active'})
+        self.assertFalse(lambda_function.create_failed(physical_id))
+
+    def test_fails_when_the_run_fails_as_a_whole(self):
+        self.responses(DescribeCluster={'ClusterStatus': 'Failed'})
+        lambda_function.lambda_handler(event(FailOnFailedInstall='true'), context())
+        self.assertEqual(self.sent()[0], 'FAILED')
+        self.assertEqual(self.sent()[2], f'{CLUSTER_ARN}/extensions//{OBS}/failed')
+        self.assertEqual(
+            self.respond.call_args.kwargs['reason'], f'Cluster extensions failed to install: {OBS} is NotInstalled'
+        )
+
+    def test_still_succeeds_without_the_property(self):
+        result, _, physical_id, reason = self.create('CreateFailed')
+        self.assertEqual((result, physical_id, reason), ('SUCCESS', f'{CLUSTER_ARN}/extensions/{OBS}/', ''))
+
+    def delete(self, on_cluster, physical_id=f'{CLUSTER_ARN}/extensions/{OBS},{OTHER}/sagemaker-never', **properties):
+        listings = iter(on_cluster)
+        self.responses(ListClusterExtensions=lambda body: next(listings), DeleteClusterExtension={})
+        lambda_function.lambda_handler({**event('Delete', **properties), 'PhysicalResourceId': physical_id}, context())
+        return self.sent()[0]
+
+    def test_delete_removes_only_the_extensions_that_failed_to_install(self):
+        listed = {'Extensions': [
+            {'ExtensionName': OBS, 'ExtensionArn': OBS_ARN, 'Status': 'CreateFailed'},
+            {'ExtensionName': OTHER, 'ExtensionArn': OTHER_ARN, 'Status': 'Degraded'},
+            {'ExtensionName': 'sagemaker-console', 'ExtensionArn': 'arn-console', 'Status': 'CreateFailed'},
+        ]}
+        deleting = {'Extensions': [{**listed['Extensions'][0], 'Status': 'Deleting'}, listed['Extensions'][1]]}
+        gone = {'Extensions': [listed['Extensions'][1]]}
+
+        status = self.delete([listed, deleting, gone], FailOnFailedInstall='true')
+
+        self.assertEqual(status, 'SUCCESS')
+        # Not the Degraded one, nor one this resource didn't try.
+        self.assertEqual(self.calls('DeleteClusterExtension'), [{'ClusterArn': CLUSTER_ARN, 'ExtensionArn': OBS_ARN}])
+        self.assertEqual(len(self.calls('ListClusterExtensions')), 3)
+
+    def test_delete_succeeds_when_the_removal_fails(self):
+        self.responses(ListClusterExtensions=lambda_function.SageMakerError('AccessDeniedException', 'no list', 400))
+        lambda_function.lambda_handler(
+            {**event('Delete', FailOnFailedInstall='true'), 'PhysicalResourceId': f'{CLUSTER_ARN}/extensions/{OBS}/'},
+            context(),
+        )
+        self.assertEqual(self.sent()[0], 'SUCCESS')
+
+    def test_delete_after_a_failed_create_removes_observability_unless_active_or_degraded(self):
+        for status, removed in (('Creating', True), ('Updating', True), ('Degraded', False), ('Active', False)):
+            with self.subTest(status):
+                self.call.reset_mock()
+                self.respond.reset_mock()
+                listed = {'Extensions': [
+                    {'ExtensionName': OBS, 'ExtensionArn': OBS_ARN, 'Status': status},
+                    {'ExtensionName': OTHER, 'ExtensionArn': OTHER_ARN, 'Status': 'Creating'},
+                ]}
+                gone = {'Extensions': [listed['Extensions'][1]]}
+                # Counted Unknown at create (its reads failed), though it was still creating.
+                self.assertEqual(
+                    self.delete([listed, gone], physical_id=f'{CLUSTER_ARN}/extensions/{OBS},{OTHER}//failed',
+                                FailOnFailedInstall='true'),
+                    'SUCCESS',
+                )
+                expected = [{'ClusterArn': CLUSTER_ARN, 'ExtensionArn': OBS_ARN}] if removed else []
+                # The other extension, still creating, isn't the stack's to remove.
+                self.assertEqual(self.calls('DeleteClusterExtension'), expected)
+
+    def test_delete_without_the_marker_keeps_a_creating_observability_extension(self):
+        listed = {'Extensions': [{'ExtensionName': OBS, 'ExtensionArn': OBS_ARN, 'Status': 'Creating'}]}
+        self.assertEqual(self.delete([listed], physical_id=f'{CLUSTER_ARN}/extensions/{OBS}/', FailOnFailedInstall='true'),
+                         'SUCCESS')
+        self.assertEqual(self.calls('DeleteClusterExtension'), [])
+
+    def test_delete_after_a_failed_create_deletes_no_workspace(self):
+        listed = {'Extensions': [{'ExtensionName': OBS, 'ExtensionArn': OBS_ARN, 'Status': 'Active'}]}
+        with patch('lambda_function.boto3.client') as client:
+            self.delete([listed], physical_id=f'{CLUSTER_ARN}/extensions/{OBS}//failed', FailOnFailedInstall='true')
+        # The workspace cleanup resource does.
+        client.assert_not_called()
+
+    def test_marks_a_failed_create_within_the_physical_id_limit(self):
+        names = [f'sagemaker-{i:04d}-' + 'x' * 40 for i in range(30)]
+        physical_id = lambda_function.failed_physical_id(lambda_function.physical_resource_id(CLUSTER_ARN, names, []))
+        self.assertLessEqual(len(physical_id), lambda_function.MAX_PHYSICAL_ID_BYTES)
+        self.assertTrue(lambda_function.create_failed(physical_id))
+        self.assertFalse(lambda_function.create_failed(f'{CLUSTER_ARN}/extensions/{OBS}/failed'))
+
+    def test_delete_removes_nothing_without_the_property(self):
+        listed = {'Extensions': [{'ExtensionName': OBS, 'ExtensionArn': OBS_ARN, 'Status': 'CreateFailed'}]}
+        self.assertEqual(self.delete([listed]), 'SUCCESS')
+        self.assertEqual(self.call.call_args_list, [])
+
+
+SETUP_STACK_ID = 'arn:aws:cloudformation:us-west-2:123456789012:stack/p-observability/uuid-1'
+
+
+# The setup stack's create began then; workspaces created before it are an earlier stack's.
+CREATE_STARTED = datetime(2026, 11, 5, 10, 0, tzinfo=timezone.utc)
+BEFORE, AFTER = CREATE_STARTED - timedelta(hours=1), CREATE_STARTED + timedelta(minutes=3)
+
+
+def stack_event(status, physical_id=SETUP_STACK_ID, timestamp=CREATE_STARTED):
+    return {'PhysicalResourceId': physical_id, 'ResourceStatus': status, 'Timestamp': timestamp}
+
+
+def not_found(operation):
+    return ClientError({'Error': {'Code': 'ResourceNotFoundException', 'Message': 'gone'}}, operation)
+
+
+class TestWorkspaceCleanup(unittest.TestCase):
+    """Custom::ObservabilityWorkspaceCleanup, which deletes the workspaces of a setup stack that never completed."""
+
+    # Newest first: OnFailure DELETE after a failed create, and a delete after a completed create.
+    NEVER_CREATED = [stack_event('DELETE_IN_PROGRESS'), stack_event('CREATE_FAILED', 'nested'), stack_event('CREATE_IN_PROGRESS')]
+    COMPLETED = [stack_event('DELETE_IN_PROGRESS'), stack_event('CREATE_COMPLETE'), stack_event('CREATE_IN_PROGRESS')]
+
+    def setUp(self):
+        self.respond = patch('lambda_function.respond').start()
+        patch('lambda_function.time.sleep').start()
+        self.clients = {name: MagicMock() for name in ('cloudformation', 'amp', 'grafana')}
+        patch('lambda_function.boto3.client', side_effect=lambda name, **_: self.clients[name]).start()
+        tagged = {'SageMaker': 'true'}
+        amp_pages = [{'workspaces': [
+            {'workspaceId': 'ws-other', 'alias': 'p-ampws-old', 'tags': tagged, 'createdAt': AFTER},
+            {'workspaceId': 'ws-untagged', 'alias': 'p-ampws', 'tags': {}, 'createdAt': AFTER},
+            # The same alias, left by an earlier stack with the same ResourceNamePrefix.
+            {'workspaceId': 'ws-earlier', 'alias': 'p-ampws', 'tags': tagged, 'createdAt': BEFORE},
+        ]}, {'workspaces': [{'workspaceId': 'ws-1', 'alias': 'p-ampws', 'tags': tagged, 'createdAt': AFTER}]}]
+        grafana_pages = [{'workspaces': [
+            {'id': 'g-other', 'name': 'q-amgws', 'tags': tagged, 'created': AFTER},
+            {'id': 'g-earlier', 'name': 'p-amgws', 'tags': tagged, 'created': BEFORE},
+            {'id': 'g-1', 'name': 'p-amgws', 'tags': tagged, 'created': AFTER},
+        ]}]
+        self.clients['amp'].get_paginator.return_value.paginate.return_value = amp_pages
+        self.clients['grafana'].get_paginator.return_value.paginate.return_value = grafana_pages
+        for name in ('amp', 'grafana'):
+            self.clients[name].describe_workspace.side_effect = not_found('DescribeWorkspace')
+
+    def tearDown(self):
+        patch.stopall()
+
+    def handle(self, request_type='Delete', events=NEVER_CREATED, **properties):
+        self.clients['cloudformation'].describe_stack_events.return_value = {'StackEvents': list(events)}
+        e = {
+            'RequestType': request_type,
+            'ResourceType': 'Custom::ObservabilityWorkspaceCleanup',
+            'ResponseURL': 'https://cfn.example/response',
+            'StackId': SETUP_STACK_ID,
+            'RequestId': 'request-1',
+            'LogicalResourceId': 'WorkspaceCleanup',
+            'ResourceProperties': {
+                'ResourceNamePrefix': 'p', 'CreatePrometheusWorkspace': 'true', 'CreateGrafanaWorkspace': 'true', **properties,
+            },
+        }
+        lambda_function.lambda_handler(e, context())
+        self.assertEqual(self.respond.call_args[0][2], 'SUCCESS')
+        return self.respond.call_args[0][4]
+
+    def deleted(self):
+        return {name: [c.kwargs['workspaceId'] for c in self.clients[name].delete_workspace.call_args_list]
+                for name in ('amp', 'grafana')}
+
+    def test_create_and_update_do_nothing(self):
+        for request_type in ('Create', 'Update'):
+            with self.subTest(request_type):
+                physical_id = self.handle(request_type)
+                self.assertEqual(physical_id, f'{SETUP_STACK_ID}/workspace-cleanup')
+        self.assertEqual(self.deleted(), {'amp': [], 'grafana': []})
+        self.clients['cloudformation'].describe_stack_events.assert_not_called()
+
+    def test_deletes_the_workspaces_of_a_stack_that_never_completed_its_create(self):
+        self.handle()
+        # Only the exact alias and name, tagged SageMaker, and created since this stack's create began: not those of an
+        # earlier stack with the same prefix.
+        self.assertEqual(self.deleted(), {'amp': ['ws-1'], 'grafana': ['g-1']})
+        self.clients['amp'].get_paginator.return_value.paginate.assert_called_once_with(alias='p-ampws')
+        # Waited for them to go.
+        self.clients['amp'].describe_workspace.assert_called_once_with(workspaceId='ws-1')
+
+    def test_allows_for_clock_skew_but_not_an_older_workspace(self):
+        skewed = CREATE_STARTED - timedelta(seconds=lambda_function.CLOCK_SKEW_SECONDS - 1)
+        older = CREATE_STARTED - timedelta(seconds=lambda_function.CLOCK_SKEW_SECONDS + 1)
+        self.clients['amp'].get_paginator.return_value.paginate.return_value = [{'workspaces': [
+            {'workspaceId': 'ws-skewed', 'alias': 'p-ampws', 'tags': {'SageMaker': 'true'}, 'createdAt': skewed},
+            {'workspaceId': 'ws-older', 'alias': 'p-ampws', 'tags': {'SageMaker': 'true'}, 'createdAt': older},
+            {'workspaceId': 'ws-no-date', 'alias': 'p-ampws', 'tags': {'SageMaker': 'true'}},
+        ]}]
+        self.handle(CreateGrafanaWorkspace='false')
+        self.assertEqual(self.deleted(), {'amp': ['ws-skewed'], 'grafana': []})
+
+    def test_keeps_the_customers_workspaces(self):
+        self.handle(CreatePrometheusWorkspace='false', CreateGrafanaWorkspace='false')
+        self.assertEqual(self.deleted(), {'amp': [], 'grafana': []})
+        self.handle(CreateGrafanaWorkspace='disabled')
+        self.assertEqual(self.deleted(), {'amp': ['ws-1'], 'grafana': []})
+
+    def test_keeps_the_workspaces_of_a_stack_that_completed(self):
+        for events in (self.COMPLETED, [stack_event('DELETE_IN_PROGRESS'), stack_event('UPDATE_COMPLETE')], []):
+            with self.subTest(events=events):
+                self.handle(events=events)
+        self.assertEqual(self.deleted(), {'amp': [], 'grafana': []})
+
+    def test_a_workspace_already_gone_is_deleted(self):
+        self.clients['amp'].delete_workspace.side_effect = not_found('DeleteWorkspace')
+        self.handle()
+        self.clients['amp'].describe_workspace.assert_not_called()
+
+    def test_still_succeeds_on_an_error(self):
+        self.clients['grafana'].get_paginator.return_value.paginate.side_effect = ClientError(
+            {'Error': {'Code': 'AccessDeniedException', 'Message': 'no'}}, 'ListWorkspaces'
+        )
+        self.handle()
+        self.clients['cloudformation'].describe_stack_events.side_effect = RuntimeError('boom')
+        self.handle()
+
+
+class TestStackNeverCreated(unittest.TestCase):
+    def never_created(self, *pages):
+        cloudformation = MagicMock()
+        cloudformation.describe_stack_events.side_effect = [
+            {'StackEvents': events, **({'NextToken': f't{i}'} if i < len(pages) - 1 else {})}
+            for i, events in enumerate(pages)
+        ]
+        with patch('lambda_function.boto3.client', return_value=cloudformation):
+            return lambda_function.stack_never_created(SETUP_STACK_ID), cloudformation.describe_stack_events.call_args_list
+
+    def test_reads_the_pages_back_to_the_create(self):
+        result, calls = self.never_created(
+            [stack_event('DELETE_IN_PROGRESS'), stack_event('CREATE_COMPLETE', 'nested')],
+            [stack_event('CREATE_FAILED', 'nested')],
+            [stack_event('CREATE_IN_PROGRESS')],
+        )
+        self.assertEqual(result, CREATE_STARTED)
+        self.assertEqual([c.kwargs.get('NextToken') for c in calls], [None, 't0', 't1'])
+
+    def test_a_completed_create_on_a_later_page(self):
+        result, _ = self.never_created([stack_event('DELETE_IN_PROGRESS')], [stack_event('CREATE_COMPLETE')])
+        self.assertIsNone(result)
+
+    def test_a_retried_delete_after_a_failed_one(self):
+        result, _ = self.never_created([
+            stack_event('DELETE_IN_PROGRESS'), stack_event('DELETE_FAILED'), stack_event('DELETE_IN_PROGRESS'),
+            stack_event('ROLLBACK_COMPLETE'), stack_event('CREATE_IN_PROGRESS'),
+        ])
+        self.assertEqual(result, CREATE_STARTED)
+
+    def test_stops_after_the_page_limit(self):
+        pages = [[stack_event('DELETE_IN_PROGRESS')]] * (lambda_function.MAX_EVENT_PAGES + 5)
+        result, calls = self.never_created(*pages)
+        self.assertIsNone(result)
+        self.assertEqual(len(calls), lambda_function.MAX_EVENT_PAGES)
 
 
 class TestPhysicalResourceId(unittest.TestCase):

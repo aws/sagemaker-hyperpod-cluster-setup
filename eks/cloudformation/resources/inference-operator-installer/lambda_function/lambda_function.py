@@ -4,7 +4,6 @@ import cfnresponse
 from botocore.exceptions import ClientError
 import time
 import json
-from version_utils import compare_versions
 
 # Environment variables
 EKS_CLUSTER_NAME = 'EKS_CLUSTER_NAME'
@@ -17,6 +16,10 @@ KEDA_ROLE_ARN = 'KEDA_ROLE_ARN'
 ALB_CONTROLLER_ROLE_ARN = 'ALB_CONTROLLER_ROLE_ARN'
 JUMPSTART_GATED_MODEL_ROLE_ARN = 'JUMPSTART_GATED_MODEL_ROLE_ARN'
 INFERENCE_GATEWAY_ROLE_ARN = 'INFERENCE_GATEWAY_ROLE_ARN'
+DYNAMO_ENABLED = 'DYNAMO_ENABLED'
+# Minimum EKS add-on version whose config schema accepts the `dynamo` key.
+# Keep in sync with DYNAMO_ADDON_VERSION in lib/utils/feature-flags.ts.
+DYNAMO_MIN_ADDON_VERSION = 'v2.1.0-eksbuild.2'
 ADDON_INSTALLATION_TIMEOUT = 'ADDON_INSTALLATION_TIMEOUT'
 
 REQUIRED_ENV_VARS = [
@@ -142,9 +145,86 @@ def wait_for_addon_terminal_state(eks_client, cluster_name, addon_name):
     raise TimeoutError(f"Timeout waiting for addon {addon_name} moving to terminal state")
 
 
-def build_inference_operator_configuration():
+def _addon_version_key(version):
     """
-    Build the configuration JSON for the inference operator addon
+    Parse an EKS add-on version into a comparable tuple including the eksbuild
+    suffix, e.g. 'v2.1.0-eksbuild.2' -> (2, 1, 0, 2). Unlike compare_versions in
+    version_utils (which ignores the suffix), this distinguishes eksbuild.1 from
+    eksbuild.2, which matters because Dynamo support differs at that granularity.
+    """
+    v = (version or '').lstrip('v')
+    main, _, suffix = v.partition('-')
+    parts = []
+    for p in main.split('.'):
+        digits = ''
+        for ch in p:
+            if ch.isdigit():
+                digits += ch
+            else:
+                break
+        parts.append(int(digits) if digits else 0)
+    while len(parts) < 3:
+        parts.append(0)
+    # Trailing integer of the build suffix, e.g. 'eksbuild.2' -> 2
+    build_digits = ''
+    for ch in reversed(suffix):
+        if ch.isdigit():
+            build_digits = ch + build_digits
+        else:
+            break
+    build = int(build_digits) if build_digits else 0
+    return (parts[0], parts[1], parts[2], build)
+
+
+def is_dynamo_supported_version(addon_version):
+    """
+    True only when the resolved add-on version is at or above the minimum
+    Dynamo-capable version. Returns False for an empty/unknown version so we
+    never send the dynamo config to a version that would reject it.
+    """
+    if not addon_version:
+        return False
+    try:
+        return _addon_version_key(addon_version) >= _addon_version_key(DYNAMO_MIN_ADDON_VERSION)
+    except Exception as e:
+        print("Warning: could not parse addon version '{}': {}".format(addon_version, e))
+        return False
+
+
+def resolve_effective_addon_version(eks, cluster_name, addon_name, requested_version, current_version=''):
+    """
+    Determine the add-on version that will actually be installed so the Dynamo
+    gate can be decided against it (no version is pinned for Dynamo):
+      1. an explicit requested version, if provided;
+      2. the existing add-on's current version, if the add-on already exists;
+      3. otherwise the EKS default version for the cluster's Kubernetes version.
+    Returns '' if it cannot be resolved (treated as not Dynamo-capable).
+    """
+    if requested_version and requested_version.strip():
+        return requested_version
+    if current_version and current_version.strip():
+        return current_version
+    try:
+        cluster = eks.describe_cluster(name=cluster_name)['cluster']
+        k8s_version = cluster.get('version', '')
+        response = eks.describe_addon_versions(addonName=addon_name, kubernetesVersion=k8s_version)
+        for addon in response.get('addons', []):
+            for addon_version in addon.get('addonVersions', []):
+                for compatibility in addon_version.get('compatibilities', []):
+                    if compatibility.get('defaultVersion'):
+                        return addon_version.get('addonVersion', '')
+    except Exception as e:
+        print(f"Warning: could not resolve default add-on version: {str(e)}")
+    return ''
+
+
+def build_inference_operator_configuration(effective_addon_version=''):
+    """
+    Build the configuration JSON for the inference operator addon.
+
+    effective_addon_version is the add-on version that will actually be installed
+    (an explicit pin, the existing add-on's version, or the resolved EKS default).
+    The dynamo config is only included when that version supports it.
     """
     execution_role_arn = os.environ.get('EXECUTION_ROLE_ARN', '')
     tls_certificate_s3_bucket = os.environ.get('TLS_CERTIFICATE_S3_BUCKET', '')
@@ -189,7 +269,22 @@ def build_inference_operator_configuration():
         config["inferenceGateway"] = {
             "enabled": False
         }
-    
+
+    # NVIDIA Dynamo serving engine. Gated by TWO conditions:
+    #   1) DYNAMO_FEATURE_ENABLED - the build-time feature flag (gamma-only until GA).
+    #      When off, Dynamo is a no-op even if EnableDynamo=true, so the feature stays
+    #      inert in stages where it has not been released.
+    #   2) the effective add-on version must support the dynamo key (older versions
+    #      have additionalProperties:false and would reject it); no version is pinned.
+    # When both hold, the explicit enabled value is sent (so EnableDynamo=false is
+    # honored rather than falling back to the schema default of on).
+    dynamo_feature_enabled = os.environ.get('DYNAMO_FEATURE_ENABLED', 'false').lower() == 'true'
+    dynamo_enabled = os.environ.get('DYNAMO_ENABLED', 'true').lower() == 'true'
+    if dynamo_feature_enabled and is_dynamo_supported_version(effective_addon_version):
+        config["dynamo"] = {
+            "enabled": dynamo_enabled
+        }
+
     return config
 
 
@@ -312,9 +407,12 @@ def update_addon_version(cluster_name, addon_name, addon_version, current_versio
     Handle version comparison and update logic for existing addons
     """
     if addon_version and addon_version.strip():
-        # Version specified - compare with current version
-        version_comparison = compare_versions(addon_version, current_version)
-        if version_comparison > 0:
+        # Version specified - compare with current version. Use the suffix-aware
+        # key (not compare_versions, which ignores the eksbuild suffix) so an
+        # eksbuild.1 -> eksbuild.2 upgrade is recognized instead of treated as
+        # equal and skipped. Otherwise the new configuration (e.g. dynamo.enabled)
+        # would never be applied to an add-on already installed at the same semver.
+        if _addon_version_key(addon_version) > _addon_version_key(current_version):
             # New version is higher - update
             print(f"Addon {addon_name} already exists with version {current_version}, upgrading to {addon_version}...")
             update_addon(cluster_name, addon_name, addon_version, configuration_values)
@@ -339,14 +437,19 @@ def on_create():
         cluster_name = os.environ[EKS_CLUSTER_NAME]
         addon_name = os.environ.get(ADDON_NAME, 'amazon-sagemaker-hyperpod-inference')
         addon_version = os.environ.get(ADDON_VERSION, '')
-        
-        # Build configuration
-        configuration_values = build_inference_operator_configuration()
-        
+
         eks = boto3.client('eks')
-        
+
         # Check if EKS addon already exists
         addon_arn, _, current_version = get_addon_status(eks, cluster_name, addon_name)
+
+        # Resolve the version that will actually be installed so the Dynamo gate is
+        # decided against the real version (no version is pinned for Dynamo).
+        effective_version = resolve_effective_addon_version(
+            eks, cluster_name, addon_name, addon_version, current_version if addon_arn else ''
+        )
+        configuration_values = build_inference_operator_configuration(effective_version)
+
         if addon_arn:
             # Addon exists - handle version update
             update_addon_version(
@@ -397,14 +500,19 @@ def on_update():
     cluster_name = os.environ[EKS_CLUSTER_NAME]
     addon_name = os.environ.get(ADDON_NAME, 'amazon-sagemaker-hyperpod-inference')
     addon_version = os.environ.get(ADDON_VERSION, '')
-    
-    # Build configuration
-    configuration_values = build_inference_operator_configuration()
-    
+
     eks = boto3.client('eks')
-    
+
     # Check if EKS addon exists
     addon_arn, addon_status, current_version = get_addon_status(eks, cluster_name, addon_name)
+
+    # Resolve the version that will actually be installed so the Dynamo gate is
+    # decided against the real version (no version is pinned for Dynamo).
+    effective_version = resolve_effective_addon_version(
+        eks, cluster_name, addon_name, addon_version, current_version if addon_arn else ''
+    )
+    configuration_values = build_inference_operator_configuration(effective_version)
+
     if addon_arn:
         # Throw error if addon is in unhealthy state
         if addon_status not in ADDON_SUCCESS_STATUSES:

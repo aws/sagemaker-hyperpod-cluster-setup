@@ -47,8 +47,8 @@ Parameters:
       - LZ4
     Description: Data compression type for the FSx file system (NONE, LZ4)
   FileSystemTypeVersion:
-    Type: Number
-    Default: 2.15
+    Type: String
+    Default: '2.15'
     Description: File system type version for the FSx file system
   StorageCapacity:
     Type: Number

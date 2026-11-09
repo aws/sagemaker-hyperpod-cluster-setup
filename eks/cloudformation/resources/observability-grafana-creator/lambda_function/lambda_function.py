@@ -79,6 +79,10 @@ def on_create():
         tags = {
             "SageMaker": "true"
         }
+        # Set by the Slurm observability template, so a workspace can be traced to the stack that created it.
+        stack_tag = os.environ.get('OBSERVABILITY_STACK_TAG')
+        if stack_tag:
+            tags['hyperpod-observability-stack'] = stack_tag
         create_args = {
             'accountAccessType': account_access_type,
             'authenticationProviders': authentication_providers,

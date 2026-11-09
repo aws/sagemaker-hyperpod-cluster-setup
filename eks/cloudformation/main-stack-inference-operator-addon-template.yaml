@@ -336,6 +336,13 @@ Parameters:
       - 'true'
       - 'false'
     Description: Set to "true" to enable the Inference Gateway, "false" to disable it.
+  EnableDynamo:
+    Type: String
+    Default: 'true'
+    AllowedValues:
+      - 'true'
+      - 'false'
+    Description: Set to "true" to enable NVIDIA Dynamo as the managed serving engine, "false" to disable it.
   HyperPodClusterArn:
     Type: String
     Default: ''
@@ -1236,6 +1243,8 @@ Resources:
                 - ''
         EnableInferenceGateway:
           Ref: EnableInferenceGateway
+        EnableDynamo:
+          Ref: EnableDynamo
         CustomResourceS3Bucket:
           Fn::If:
             - CustomBucketCondition

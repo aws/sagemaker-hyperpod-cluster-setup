@@ -110,6 +110,7 @@ Metadata:
           - PerUnitStorageThroughput
           - DataCompressionType
           - FileSystemTypeVersion
+          - EfaEnabled
       - Label:
           default: Inference Operator
         Parameters:
@@ -120,6 +121,7 @@ Metadata:
           - JumpstartGatedModelDownloadRoleArn
           - InferenceGatewayControllerRoleArn
           - EnableInferenceGateway
+          - EnableDynamo
       - Label:
           default: Observability
         Parameters:
@@ -232,6 +234,8 @@ Metadata:
         default: Inference Gateway Controller IAM Role
       EnableInferenceGateway:
         default: Enable Inference Gateway
+      EnableDynamo:
+        default: Enable NVIDIA Dynamo
       CreateVPCStack:
         default: Create New VPC
       VpcId:
@@ -354,6 +358,8 @@ Metadata:
         default: Compression Type
       FileSystemTypeVersion:
         default: Lustre Version
+      EfaEnabled:
+        default: Enable EFA
       CreateHyperPodClusterStack:
         default: Create HyperPod Cluster
       HyperPodClusterName:
@@ -498,6 +504,13 @@ Parameters:
       - 'true'
       - 'false'
     Description: Set to "true" to enable the Inference Gateway, "false" to disable it.
+  EnableDynamo:
+    Type: String
+    Default: 'true'
+    AllowedValues:
+      - 'true'
+      - 'false'
+    Description: Set to "true" to enable NVIDIA Dynamo as the managed serving engine, "false" to disable it.
   ResourceNamePrefix:
     Type: String
     Default: sagemaker-hyperpod-eks
@@ -980,9 +993,16 @@ Parameters:
       - NONE
       - LZ4
     Description: Data compression type for the FSx file system (NONE, LZ4)
+  EfaEnabled:
+    Type: String
+    Default: 'false'
+    AllowedValues:
+      - 'true'
+      - 'false'
+    Description: Whether to enable EFA for the FSx file system
   FileSystemTypeVersion:
-    Type: Number
-    Default: 2.15
+    Type: String
+    Default: '2.15'
     Description: File system type version for the FSx file system
   StorageCapacity:
     Type: Number
@@ -1254,6 +1274,76 @@ Rules:
         AssertDescription: >-
           HostProfiling true needs ObservabilityAddonVersion: an add-on version that accepts profilesProvider (v1.4.0 or
           later).
+  FsxStorageCapacityIsMinimum:
+    RuleCondition:
+      Fn::And:
+        - Fn::Equals:
+            - Ref: CreateFsxStack
+            - 'true'
+        - Fn::Equals:
+            - Ref: FsxFileSystemId
+            - ''
+        - Fn::Not:
+            - Fn::Equals:
+                - Ref: EfaEnabled
+                - 'true'
+    Assertions:
+      - Assert:
+          Fn::Equals:
+            - Ref: StorageCapacity
+            - '1200'
+        AssertDescription: >-
+          HyperPod creates the FSx for Lustre file system at 1.2 TiB (StorageCapacity 1200). Increase storage capacity
+          or throughput from the FSx console after the cluster is created. To update a stack that was created with a
+          larger file system, update it with its current template (UsePreviousTemplate) instead of the latest template
+          URL.
+  FsxEfaStorageCapacityIsMinimum:
+    RuleCondition:
+      Fn::And:
+        - Fn::Equals:
+            - Ref: CreateFsxStack
+            - 'true'
+        - Fn::Equals:
+            - Ref: FsxFileSystemId
+            - ''
+        - Fn::Equals:
+            - Ref: EfaEnabled
+            - 'true'
+    Assertions:
+      - Assert:
+          Fn::Or:
+            - Fn::And:
+                - Fn::Equals:
+                    - Ref: PerUnitStorageThroughput
+                    - '125'
+                - Fn::Equals:
+                    - Ref: StorageCapacity
+                    - '38400'
+            - Fn::And:
+                - Fn::Equals:
+                    - Ref: PerUnitStorageThroughput
+                    - '250'
+                - Fn::Equals:
+                    - Ref: StorageCapacity
+                    - '19200'
+            - Fn::And:
+                - Fn::Equals:
+                    - Ref: PerUnitStorageThroughput
+                    - '500'
+                - Fn::Equals:
+                    - Ref: StorageCapacity
+                    - '9600'
+            - Fn::And:
+                - Fn::Equals:
+                    - Ref: PerUnitStorageThroughput
+                    - '1000'
+                - Fn::Equals:
+                    - Ref: StorageCapacity
+                    - '4800'
+        AssertDescription: >-
+          HyperPod creates an EFA-enabled FSx for Lustre file system at the minimum size for its throughput:
+          StorageCapacity 38400, 19200, 9600 or 4800 for PerUnitStorageThroughput 125, 250, 500 or 1000. Increase
+          storage capacity from the FSx console after the cluster is created.
 Conditions:
   EnableHPInferenceFeatureCondition:
     Fn::Equals:
@@ -2187,6 +2277,8 @@ Resources:
           Ref: StorageCapacity
         FsxFileSystemId:
           Ref: FsxFileSystemId
+        EfaEnabled:
+          Ref: EfaEnabled
     Metadata:
       aws:cdk:path: MainEksBasedCfnTemplate/FsxFilesystemStack
     Condition: CreateFsxStackCondition
@@ -2425,6 +2517,8 @@ Resources:
           Ref: InferenceGatewayControllerRoleArn
         EnableInferenceGateway:
           Ref: EnableInferenceGateway
+        EnableDynamo:
+          Ref: EnableDynamo
     DependsOn:
       - CertManagerStack
       - HyperPodClusterStack
@@ -2977,6 +3071,12 @@ Outputs:
         - HyperPodClusterStack
         - Outputs.HyperPodClusterArn
     Condition: CreateHyperPodClusterStackCondition
+  OutputFsxFileSystemId:
+    Value:
+      Fn::GetAtt:
+        - FsxFilesystemStack
+        - Outputs.FsxFileSystemId
+    Condition: CreateFsxStackCondition
   OutputObservabilityStackId:
     Value:
       Fn::GetAtt:

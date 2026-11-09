@@ -47,6 +47,13 @@ Parameters:
     Type: Number
     Default: 2.15
     Description: File system type version for the FSx file system
+  EfaEnabled:
+    Type: String
+    Default: 'false'
+    AllowedValues:
+      - 'true'
+      - 'false'
+    Description: Whether to enable EFA for the FSx file system
 Conditions:
   UseFsxFileSystemIdCondition:
     Fn::Not:
@@ -61,6 +68,10 @@ Conditions:
     Fn::Equals:
       - Ref: DeploymentType
       - PERSISTENT_2
+  IsEfaEnabledCondition:
+    Fn::Equals:
+      - Ref: EfaEnabled
+      - 'true'
   CreateNewFsxCondition:
     Fn::Not:
       - Condition: UseFsxFileSystemIdCondition
@@ -215,7 +226,7 @@ Resources:
         Ref: FsxAvailabilityZoneId
       PrivateSubnetIds:
         Ref: PrivateSubnetIds
-      Timestamp: '1793817394975'
+      Timestamp: '1794007895288'
     Metadata:
       aws:cdk:path: SlurmFsxCfnTemplate/FsxHelperResource
   FSxLustreFileSystem:
@@ -229,6 +240,11 @@ Resources:
           Ref: DataCompressionType
         DeploymentType:
           Ref: DeploymentType
+        EfaEnabled:
+          Fn::If:
+            - IsEfaEnabledCondition
+            - true
+            - Ref: AWS::NoValue
         MetadataConfiguration:
           Fn::If:
             - IsPersistent2DeploymentTypeCondition

@@ -54,6 +54,7 @@ Metadata:
           - PerUnitStorageThroughput
           - DataCompressionType
           - FileSystemTypeVersion
+          - EfaEnabled
           - CreateOpenZfsStack
           - OpenZfsFileSystemId
           - OpenZfsAvailabilityZoneId
@@ -166,6 +167,8 @@ Metadata:
         default: Compression Type
       FileSystemTypeVersion:
         default: Lustre Version
+      EfaEnabled:
+        default: Enable EFA
       CreateOpenZfsStack:
         default: Create New FSx for OpenZFS File System
       OpenZfsFileSystemId:
@@ -331,11 +334,13 @@ Parameters:
   InstanceGroupExecutionRoleNames:
     Type: String
     Default: ''
+    AllowedPattern: ^$|^[\w+=.@-]+(,[\w+=.@-]+)*$
+    ConstraintDescription: must be comma-separated IAM role names (letters, digits and +=.@_-), without spaces, paths or ARNs.
     Description: >-
       Comma-separated names (without path or ARN) of the execution roles of instance groups that have their own, other
       than SageMakerIAMRoleName, for example team-b-role,team-c-role. The observability policies are attached to them
       too, since nodes send metrics as their instance group's execution role. Empty attaches them to the cluster
-      execution role only.
+      execution role only. Used only with the observability extension.
   S3BucketName:
     Type: String
     Default: bucket
@@ -386,6 +391,13 @@ Parameters:
       - NONE
       - LZ4
     Description: Data compression type for the FSx file system (NONE, LZ4)
+  EfaEnabled:
+    Type: String
+    Default: 'false'
+    AllowedValues:
+      - 'true'
+      - 'false'
+    Description: Whether to enable EFA for the FSx file system
   FileSystemTypeVersion:
     Type: Number
     Default: 2.15
@@ -759,12 +771,24 @@ Conditions:
       - Fn::Equals:
           - Ref: SageMakerIAMRoleNameWithoutPath
           - ''
+  ObservabilitySetupStackCondition:
+    Fn::And:
+      - Condition: InstallObservabilityExtensionCondition
+      - Condition: CreateHyperPodClusterStackCondition
+  NestedObservabilityStackCondition:
+    Fn::And:
+      - Condition: EnableObservabilityCondition
+      - Fn::Not:
+          - Condition: ObservabilitySetupStackCondition
   ClusterExtensionsCondition:
     Fn::And:
       - Condition: CreateHyperPodClusterStackCondition
-      - Fn::Or:
-          - Condition: InstallObservabilityExtensionCondition
-          - Condition: HasClusterExtensionsCondition
+      - Condition: HasClusterExtensionsCondition
+  HasInstanceGroupExecutionRoleNamesCondition:
+    Fn::Not:
+      - Fn::Equals:
+          - Ref: InstanceGroupExecutionRoleNames
+          - ''
 Resources:
   VPCStack:
     Type: AWS::CloudFormation::Stack
@@ -988,6 +1012,8 @@ Resources:
           Ref: StorageCapacity
         FsxFileSystemId:
           Ref: FsxFileSystemId
+        EfaEnabled:
+          Ref: EfaEnabled
     Metadata:
       aws:cdk:path: MainSlurmBasedCfnTemplate/FsxStack
     Condition: CreateFsxStackCondition
@@ -1141,6 +1167,11 @@ Resources:
           Ref: InstanceGroupSettings20
         Tags:
           Ref: Tags
+        SetupStackTag:
+          Fn::If:
+            - ObservabilitySetupStackCondition
+            - pending
+            - ''
         SlurmConfigStrategy:
           Fn::If:
             - SlurmConfigStrategyProvidedCondition
@@ -1193,8 +1224,6 @@ Resources:
         Fn::GetAtt:
           - HyperPodParamClusterStack
           - Outputs.HyperPodClusterTemplateUrlOutput
-    DependsOn:
-      - ObservabilityBeforeCluster
     Metadata:
       aws:cdk:path: MainSlurmBasedCfnTemplate/HyperPodClusterStack
     Condition: CreateHyperPodClusterStackCondition
@@ -1242,8 +1271,7 @@ Resources:
                     - IamRoleStack
                     - Outputs.AmazonSagemakerClusterExecutionRoleName
                 - Ref: SageMakerIAMRoleName
-        InstanceGroupExecutionRoleNames:
-          Ref: InstanceGroupExecutionRoleNames
+        InstanceGroupExecutionRoleNames: ''
         LCSBucketName:
           Fn::If:
             - CreateLifeCycleScriptStackCondition
@@ -1304,15 +1332,7 @@ Resources:
           Ref: HyperPodClusterName
     Metadata:
       aws:cdk:path: MainSlurmBasedCfnTemplate/ObservabilityStack
-    Condition: EnableObservabilityCondition
-  ObservabilityBeforeCluster:
-    Type: AWS::CloudFormation::WaitConditionHandle
-    Metadata:
-      ObservabilityStack:
-        Fn::If:
-          - InstallObservabilityExtensionCondition
-          - Ref: ObservabilityStack
-          - ''
+    Condition: NestedObservabilityStackCondition
   ClusterExtensionsRole:
     Type: AWS::IAM::Role
     Properties:
@@ -1381,25 +1401,9 @@ Resources:
           - Outputs.HyperPodClusterArn
       Extensions:
         Ref: ClusterExtensions
-      InstallObservability:
-        Fn::If:
-          - InstallObservabilityExtensionCondition
-          - 'true'
-          - 'false'
-      GrafanaWorkspaceId:
-        Fn::If:
-          - InstallObservabilityExtensionCondition
-          - Fn::GetAtt:
-              - ObservabilityStack
-              - Outputs.ExtensionGrafanaWorkspaceId
-          - ''
-      RemoteWriteUrl:
-        Fn::If:
-          - InstallObservabilityExtensionCondition
-          - Fn::GetAtt:
-              - ObservabilityStack
-              - Outputs.ExtensionRemoteWriteUrl
-          - ''
+      InstallObservability: 'false'
+      GrafanaWorkspaceId: ''
+      RemoteWriteUrl: ''
       NodeMetricLevel:
         Ref: NodeMetricLevel
       AcceleratedComputeMetricLevel:
@@ -1412,9 +1416,683 @@ Resources:
         Ref: NcclMetricLevel
       JobMetricLevel:
         Ref: JobMetricLevel
+      SkipObservability:
+        Fn::If:
+          - ObservabilitySetupStackCondition
+          - 'true'
+          - Ref: AWS::NoValue
     Metadata:
       aws:cdk:path: MainSlurmBasedCfnTemplate/ClusterExtensionsInstall
     Condition: ClusterExtensionsCondition
+  ObservabilitySetupStackRolePolicies:
+    Type: AWS::IAM::ManagedPolicy
+    Properties:
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Sid: ExecutionRolePolicies
+            Effect: Allow
+            Action:
+              - iam:PutRolePolicy
+              - iam:GetRolePolicy
+              - iam:DeleteRolePolicy
+            Resource:
+              Fn::Split:
+                - ','
+                - Fn::Join:
+                    - ''
+                    - - arn:*:iam::*:role/
+                      - Fn::Join:
+                          - ',arn:*:iam::*:role/'
+                          - Fn::Split:
+                              - ','
+                              - Fn::If:
+                                  - HasInstanceGroupExecutionRoleNamesCondition
+                                  - Fn::Join:
+                                      - ','
+                                      - - Fn::If:
+                                            - HasSageMakerIAMRoleNameWithoutPathCondition
+                                            - Ref: SageMakerIAMRoleNameWithoutPath
+                                            - Fn::If:
+                                                - CreateSageMakerIAMRoleStackCondition
+                                                - Fn::GetAtt:
+                                                    - IamRoleStack
+                                                    - Outputs.AmazonSagemakerClusterExecutionRoleName
+                                                - Ref: SageMakerIAMRoleName
+                                        - Ref: InstanceGroupExecutionRoleNames
+                                  - Fn::If:
+                                      - HasSageMakerIAMRoleNameWithoutPathCondition
+                                      - Ref: SageMakerIAMRoleNameWithoutPath
+                                      - Fn::If:
+                                          - CreateSageMakerIAMRoleStackCondition
+                                          - Fn::GetAtt:
+                                              - IamRoleStack
+                                              - Outputs.AmazonSagemakerClusterExecutionRoleName
+                                          - Ref: SageMakerIAMRoleName
+    Metadata:
+      aws:cdk:path: MainSlurmBasedCfnTemplate/ObservabilitySetupStackRolePolicies
+    Condition: ObservabilitySetupStackCondition
+  ObservabilitySetupStackPathRolePolicies:
+    Type: AWS::IAM::ManagedPolicy
+    Properties:
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Sid: ExecutionRolePoliciesAtPath
+            Effect: Allow
+            Action:
+              - iam:PutRolePolicy
+              - iam:GetRolePolicy
+              - iam:DeleteRolePolicy
+            Resource:
+              Fn::Split:
+                - ','
+                - Fn::Join:
+                    - ''
+                    - - arn:*:iam::*:role/*/
+                      - Fn::Join:
+                          - ',arn:*:iam::*:role/*/'
+                          - Fn::Split:
+                              - ','
+                              - Fn::If:
+                                  - HasInstanceGroupExecutionRoleNamesCondition
+                                  - Fn::Join:
+                                      - ','
+                                      - - Fn::If:
+                                            - HasSageMakerIAMRoleNameWithoutPathCondition
+                                            - Ref: SageMakerIAMRoleNameWithoutPath
+                                            - Fn::If:
+                                                - CreateSageMakerIAMRoleStackCondition
+                                                - Fn::GetAtt:
+                                                    - IamRoleStack
+                                                    - Outputs.AmazonSagemakerClusterExecutionRoleName
+                                                - Ref: SageMakerIAMRoleName
+                                        - Ref: InstanceGroupExecutionRoleNames
+                                  - Fn::If:
+                                      - HasSageMakerIAMRoleNameWithoutPathCondition
+                                      - Ref: SageMakerIAMRoleNameWithoutPath
+                                      - Fn::If:
+                                          - CreateSageMakerIAMRoleStackCondition
+                                          - Fn::GetAtt:
+                                              - IamRoleStack
+                                              - Outputs.AmazonSagemakerClusterExecutionRoleName
+                                          - Ref: SageMakerIAMRoleName
+    Metadata:
+      aws:cdk:path: MainSlurmBasedCfnTemplate/ObservabilitySetupStackPathRolePolicies
+    Condition: ObservabilitySetupStackCondition
+  ObservabilitySetupStackResourcePolicies:
+    Type: AWS::IAM::ManagedPolicy
+    Properties:
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Sid: PrometheusWorkspaceCreate
+            Effect: Allow
+            Action: aps:CreateWorkspace
+            Resource: '*'
+            Condition:
+              StringEquals:
+                aws:RequestTag/SageMaker: 'true'
+          - Sid: PrometheusWorkspace
+            Effect: Allow
+            Action:
+              - aps:ListTagsForResource
+              - aps:DescribeWorkspace
+              - aps:DescribeWorkspaceConfiguration
+              - aps:DescribeLoggingConfiguration
+              - aps:DescribeQueryLoggingConfiguration
+              - aps:DescribeAlertManagerDefinition
+              - aps:CreateAlertManagerDefinition
+              - aps:DeleteAlertManagerDefinition
+              - aps:CreateLoggingConfiguration
+              - aps:DeleteLoggingConfiguration
+              - aps:CreateQueryLoggingConfiguration
+              - aps:DeleteQueryLoggingConfiguration
+              - aps:UpdateWorkspaceConfiguration
+            Resource:
+              - Fn::Sub: arn:${AWS::Partition}:aps:${AWS::Region}:${AWS::AccountId}:/workspaces
+              - Fn::Sub: arn:${AWS::Partition}:aps:${AWS::Region}:${AWS::AccountId}:workspace/*
+          - Sid: PrometheusWorkspaceTags
+            Effect: Allow
+            Action: aps:TagResource
+            Resource:
+              - Fn::Sub: arn:${AWS::Partition}:aps:${AWS::Region}:${AWS::AccountId}:/workspaces
+              - Fn::Sub: arn:${AWS::Partition}:aps:${AWS::Region}:${AWS::AccountId}:workspace/*
+          - Sid: PrometheusWorkspaceDelete
+            Effect: Allow
+            Action: aps:DeleteWorkspace
+            Resource:
+              Fn::Sub: arn:${AWS::Partition}:aps:${AWS::Region}:${AWS::AccountId}:workspace/*
+            Condition:
+              StringEquals:
+                aws:ResourceTag/SageMaker: 'true'
+              StringLike:
+                aws:ResourceTag/aws:cloudformation:stack-name:
+                  Fn::Sub:
+                    - ${SetupStackName}-ObservabilityStack-*
+                    - SetupStackName:
+                        Fn::Join:
+                          - ''
+                          - - hyperpod-
+                            - Fn::Join:
+                                - '-'
+                                - Fn::Split:
+                                    - .
+                                    - Fn::Join:
+                                        - '-'
+                                        - Fn::Split:
+                                            - _
+                                            - Ref: ResourceNamePrefix
+                            - '-observability'
+          - Sid: VpcEndpointCreate
+            Effect: Allow
+            Action:
+              - ec2:CreateVpcEndpoint
+              - vpce:AllowMultiRegion
+            Resource:
+              - Fn::Sub:
+                  - arn:${AWS::Partition}:ec2:${AWS::Region}:${AWS::AccountId}:vpc/${Vpc}
+                  - Vpc:
+                      Fn::If:
+                        - CreateVPCStackCondition
+                        - Fn::GetAtt:
+                            - VPCStack
+                            - Outputs.VpcId
+                        - Ref: VpcId
+              - Fn::Sub: arn:${AWS::Partition}:ec2:${AWS::Region}:${AWS::AccountId}:subnet/*
+              - Fn::Sub: arn:${AWS::Partition}:ec2:${AWS::Region}:${AWS::AccountId}:security-group/*
+              - Fn::Sub: arn:${AWS::Partition}:ec2:${AWS::Region}:${AWS::AccountId}:vpc-endpoint/*
+          - Sid: VpcEndpointTags
+            Effect: Allow
+            Action: ec2:CreateTags
+            Resource:
+              Fn::Sub: arn:${AWS::Partition}:ec2:${AWS::Region}:${AWS::AccountId}:vpc-endpoint/*
+            Condition:
+              StringEquals:
+                ec2:CreateAction: CreateVpcEndpoint
+          - Sid: VpcEndpointDelete
+            Effect: Allow
+            Action: ec2:DeleteVpcEndpoints
+            Resource:
+              Fn::Sub: arn:${AWS::Partition}:ec2:${AWS::Region}:${AWS::AccountId}:vpc-endpoint/*
+            Condition:
+              StringEquals:
+                ec2:VpceServiceName:
+                  - Fn::Sub: com.amazonaws.${AWS::Region}.grafana-workspace
+                  - Fn::Sub: com.amazonaws.${AWS::Region}.aps-workspaces
+          - Sid: VpcEndpointTagDelete
+            Effect: Allow
+            Action: ec2:DeleteTags
+            Resource:
+              Fn::Sub: arn:${AWS::Partition}:ec2:${AWS::Region}:${AWS::AccountId}:vpc-endpoint/*
+            Condition:
+              StringEquals:
+                aws:ResourceTag/Name:
+                  - Fn::Sub: ${ResourceNamePrefix}-gVpce
+                  - Fn::Sub: ${ResourceNamePrefix}-pVpce
+          - Sid: VpcEndpointPrivateDns
+            Effect: Allow
+            Action: route53:AssociateVPCWithHostedZone
+            Resource:
+              Fn::Sub: arn:${AWS::Partition}:route53:::hostedzone/*
+          - Sid: Ec2Describe
+            Effect: Allow
+            Action:
+              - ec2:DescribeVpcEndpoints
+              - ec2:DescribeVpcs
+              - ec2:DescribeSubnets
+              - ec2:DescribeSecurityGroups
+              - ec2:DescribeNetworkInterfaces
+              - ec2:DescribeNetworkAcls
+            Resource: '*'
+          - Sid: TemplatesBucketConfiguration
+            Effect: Allow
+            Action:
+              - s3:GetLifecycleConfiguration
+              - s3:GetEncryptionConfiguration
+              - s3:GetBucketNotification
+              - s3:GetAnalyticsConfiguration
+              - s3:GetBucketWebsite
+              - s3:GetBucketOwnershipControls
+              - s3:GetBucketAbac
+              - s3:ListTagsForResource
+              - s3:GetBucketVersioning
+              - s3:GetReplicationConfiguration
+              - s3:GetBucketMetadataTableConfiguration
+              - s3:GetInventoryConfiguration
+              - s3:GetBucketLogging
+              - s3:GetBucketObjectLockConfiguration
+              - s3:GetAccelerateConfiguration
+              - s3:GetBucketCORS
+              - s3:GetBucketTagging
+              - s3:GetIntelligentTieringConfiguration
+              - s3:GetMetricsConfiguration
+              - s3:GetBucketPublicAccessBlock
+            Resource:
+              Fn::Sub:
+                - arn:${AWS::Partition}:s3:::${Bucket}
+                - Bucket:
+                    Fn::If:
+                      - CustomBucketCondition
+                      - Ref: CustomBucketName
+                      - Fn::Sub: aws-sagemaker-hyperpod-cluster-setup-${AWS::Region}-${Stage}
+          - Sid: LambdaAccountSettings
+            Effect: Allow
+            Action: lambda:GetAccountSettings
+            Resource: '*'
+    Metadata:
+      aws:cdk:path: MainSlurmBasedCfnTemplate/ObservabilitySetupStackResourcePolicies
+    Condition: ObservabilitySetupStackCondition
+  ObservabilitySetupStackRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - Fn::Sub: arn:${AWS::Partition}:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+        - Ref: ObservabilitySetupStackRolePolicies
+        - Ref: ObservabilitySetupStackPathRolePolicies
+        - Ref: ObservabilitySetupStackResourcePolicies
+      Policies:
+        - PolicyName: ObservabilitySetupStack
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Sid: SetupStacks
+                Effect: Allow
+                Action:
+                  - cloudformation:CreateStack
+                  - cloudformation:DescribeStacks
+                  - cloudformation:DeleteStack
+                  - cloudformation:GetStackPolicy
+                  - cloudformation:GetTemplate
+                Resource:
+                  - Fn::Sub:
+                      - arn:${AWS::Partition}:cloudformation:${AWS::Region}:${AWS::AccountId}:stack/${SetupStackName}/*
+                      - SetupStackName:
+                          Fn::Join:
+                            - ''
+                            - - hyperpod-
+                              - Fn::Join:
+                                  - '-'
+                                  - Fn::Split:
+                                      - .
+                                      - Fn::Join:
+                                          - '-'
+                                          - Fn::Split:
+                                              - _
+                                              - Ref: ResourceNamePrefix
+                              - '-observability'
+                  - Fn::Sub:
+                      - >-
+                        arn:${AWS::Partition}:cloudformation:${AWS::Region}:${AWS::AccountId}:stack/${SetupStackName}-ObservabilityStack-*/*
+                      - SetupStackName:
+                          Fn::Join:
+                            - ''
+                            - - hyperpod-
+                              - Fn::Join:
+                                  - '-'
+                                  - Fn::Split:
+                                      - .
+                                      - Fn::Join:
+                                          - '-'
+                                          - Fn::Split:
+                                              - _
+                                              - Ref: ResourceNamePrefix
+                              - '-observability'
+              - Sid: OwnStackTags
+                Effect: Allow
+                Action: cloudformation:DescribeStacks
+                Resource:
+                  Ref: AWS::StackId
+              - Sid: SetupStackTags
+                Effect: Allow
+                Action: cloudformation:TagResource
+                Resource:
+                  - Fn::Sub:
+                      - arn:${AWS::Partition}:cloudformation:${AWS::Region}:${AWS::AccountId}:stack/${SetupStackName}/*
+                      - SetupStackName:
+                          Fn::Join:
+                            - ''
+                            - - hyperpod-
+                              - Fn::Join:
+                                  - '-'
+                                  - Fn::Split:
+                                      - .
+                                      - Fn::Join:
+                                          - '-'
+                                          - Fn::Split:
+                                              - _
+                                              - Ref: ResourceNamePrefix
+                              - '-observability'
+                  - Fn::Sub:
+                      - >-
+                        arn:${AWS::Partition}:cloudformation:${AWS::Region}:${AWS::AccountId}:stack/${SetupStackName}-ObservabilityStack-*/*
+                      - SetupStackName:
+                          Fn::Join:
+                            - ''
+                            - - hyperpod-
+                              - Fn::Join:
+                                  - '-'
+                                  - Fn::Split:
+                                      - .
+                                      - Fn::Join:
+                                          - '-'
+                                          - Fn::Split:
+                                              - _
+                                              - Ref: ResourceNamePrefix
+                              - '-observability'
+                Condition:
+                  StringEquals:
+                    cloudformation:CreateAction: CreateStack
+              - Sid: LanguageExtensionsTransform
+                Effect: Allow
+                Action: cloudformation:CreateChangeSet
+                Resource:
+                  Fn::Sub: arn:${AWS::Partition}:cloudformation:${AWS::Region}:aws:transform/LanguageExtensions
+              - Sid: TemplatesAndFunctionCode
+                Effect: Allow
+                Action:
+                  - s3:GetObject
+                  - s3:GetObjectVersion
+                Resource:
+                  Fn::Sub:
+                    - arn:${AWS::Partition}:s3:::${Bucket}/*
+                    - Bucket:
+                        Fn::If:
+                          - CustomBucketCondition
+                          - Ref: CustomBucketName
+                          - Fn::Sub: aws-sagemaker-hyperpod-cluster-setup-${AWS::Region}-${Stage}
+              - Sid: Roles
+                Effect: Allow
+                Action:
+                  - iam:CreateRole
+                  - iam:DeleteRole
+                  - iam:GetRole
+                  - iam:ListRolePolicies
+                  - iam:ListAttachedRolePolicies
+                  - iam:ListInstanceProfilesForRole
+                  - iam:TagRole
+                  - iam:UntagRole
+                Resource:
+                  - Fn::Sub: arn:${AWS::Partition}:iam::${AWS::AccountId}:role/${ResourceNamePrefix}-AMGWS
+                  - Fn::Sub: arn:${AWS::Partition}:iam::${AWS::AccountId}:role/${ResourceNamePrefix}-SA
+                  - Fn::Sub: arn:${AWS::Partition}:iam::${AWS::AccountId}:role/${ResourceNamePrefix}-AMGCR
+                  - Fn::Sub: arn:${AWS::Partition}:iam::${AWS::AccountId}:role/${ResourceNamePrefix}-ExtRole
+                  - Fn::Sub: arn:${AWS::Partition}:iam::${AWS::AccountId}:role/service-role/${ResourceNamePrefix}-GraAcc
+                  - Fn::Sub: arn:${AWS::Partition}:iam::${AWS::AccountId}:role/${ResourceNamePrefix}-GraAcc
+              - Sid: RoleManagedPolicies
+                Effect: Allow
+                Action:
+                  - iam:AttachRolePolicy
+                  - iam:DetachRolePolicy
+                Resource:
+                  - Fn::Sub: arn:${AWS::Partition}:iam::${AWS::AccountId}:role/${ResourceNamePrefix}-AMGWS
+                  - Fn::Sub: arn:${AWS::Partition}:iam::${AWS::AccountId}:role/${ResourceNamePrefix}-SA
+                  - Fn::Sub: arn:${AWS::Partition}:iam::${AWS::AccountId}:role/${ResourceNamePrefix}-AMGCR
+                  - Fn::Sub: arn:${AWS::Partition}:iam::${AWS::AccountId}:role/${ResourceNamePrefix}-ExtRole
+                  - Fn::Sub: arn:${AWS::Partition}:iam::${AWS::AccountId}:role/service-role/${ResourceNamePrefix}-GraAcc
+                  - Fn::Sub: arn:${AWS::Partition}:iam::${AWS::AccountId}:role/${ResourceNamePrefix}-GraAcc
+                Condition:
+                  ArnEquals:
+                    iam:PolicyARN:
+                      - Fn::Sub: arn:${AWS::Partition}:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+                      - Fn::Sub: arn:${AWS::Partition}:iam::aws:policy/AmazonSageMakerHyperPodObservabilityAdminAccess
+              - Sid: RoleInlinePolicies
+                Effect: Allow
+                Action:
+                  - iam:PutRolePolicy
+                  - iam:GetRolePolicy
+                  - iam:DeleteRolePolicy
+                Resource:
+                  - Fn::Sub: arn:${AWS::Partition}:iam::${AWS::AccountId}:role/${ResourceNamePrefix}-AMGWS
+                  - Fn::Sub: arn:${AWS::Partition}:iam::${AWS::AccountId}:role/${ResourceNamePrefix}-SA
+                  - Fn::Sub: arn:${AWS::Partition}:iam::${AWS::AccountId}:role/${ResourceNamePrefix}-AMGCR
+                  - Fn::Sub: arn:${AWS::Partition}:iam::${AWS::AccountId}:role/${ResourceNamePrefix}-ExtRole
+                  - Fn::Sub: arn:${AWS::Partition}:iam::${AWS::AccountId}:role/service-role/${ResourceNamePrefix}-GraAcc
+                  - Fn::Sub: arn:${AWS::Partition}:iam::${AWS::AccountId}:role/${ResourceNamePrefix}-GraAcc
+              - Sid: PassRolesToFunctions
+                Effect: Allow
+                Action: iam:PassRole
+                Resource:
+                  - Fn::Sub: arn:${AWS::Partition}:iam::${AWS::AccountId}:role/${ResourceNamePrefix}-AMGWS
+                  - Fn::Sub: arn:${AWS::Partition}:iam::${AWS::AccountId}:role/${ResourceNamePrefix}-SA
+                  - Fn::Sub: arn:${AWS::Partition}:iam::${AWS::AccountId}:role/${ResourceNamePrefix}-AMGCR
+                  - Fn::Sub: arn:${AWS::Partition}:iam::${AWS::AccountId}:role/${ResourceNamePrefix}-ExtRole
+                  - Fn::Sub: arn:${AWS::Partition}:iam::${AWS::AccountId}:role/service-role/${ResourceNamePrefix}-GraAcc
+                  - Fn::Sub: arn:${AWS::Partition}:iam::${AWS::AccountId}:role/${ResourceNamePrefix}-GraAcc
+                Condition:
+                  StringEquals:
+                    iam:PassedToService: lambda.amazonaws.com
+              - Sid: Functions
+                Effect: Allow
+                Action:
+                  - lambda:CreateFunction
+                  - lambda:DeleteFunction
+                  - lambda:GetFunction*
+                  - lambda:GetRuntimeManagementConfig
+                  - lambda:InvokeFunction
+                  - lambda:ListTags
+                  - lambda:TagResource
+                  - lambda:AssociateRuntimeAlias
+                  - lambda:PutFunctionConcurrency
+                  - lambda:PutFunctionRecursionConfig
+                  - lambda:PutFunctionScalingConfig
+                  - lambda:PutRuntimeManagementConfig
+                Resource:
+                  - Fn::Sub: >-
+                      arn:${AWS::Partition}:lambda:${AWS::Region}:${AWS::AccountId}:function:${ResourceNamePrefix}-amg-crfn
+                  - Fn::Sub: >-
+                      arn:${AWS::Partition}:lambda:${AWS::Region}:${AWS::AccountId}:function:${ResourceNamePrefix}-SAfunc
+                  - Fn::Sub: >-
+                      arn:${AWS::Partition}:lambda:${AWS::Region}:${AWS::AccountId}:function:${ResourceNamePrefix}-grafunc
+                  - Fn::Sub:
+                      - >-
+                        arn:${AWS::Partition}:lambda:${AWS::Region}:${AWS::AccountId}:function:${FunctionNamePrefix}-ExtFunc
+                      - FunctionNamePrefix:
+                          Fn::Join:
+                            - '-'
+                            - Fn::Split:
+                                - .
+                                - Ref: ResourceNamePrefix
+              - Sid: ClusterTag
+                Effect: Allow
+                Action: sagemaker:AddTags
+                Resource:
+                  Fn::Sub: arn:${AWS::Partition}:sagemaker:${AWS::Region}:${AWS::AccountId}:cluster/*
+                Condition:
+                  ForAllValues:StringEquals:
+                    aws:TagKeys:
+                      - hyperpod-cluster-extensions-stack
+              - Sid: ContinueDelete
+                Effect: Allow
+                Action: lambda:InvokeFunction
+                Resource:
+                  Fn::Sub:
+                    - >-
+                      arn:${AWS::Partition}:lambda:${AWS::Region}:${AWS::AccountId}:function:${FunctionNamePrefix}-ObsSetup
+                    - FunctionNamePrefix:
+                        Fn::Join:
+                          - '-'
+                          - Fn::Split:
+                              - .
+                              - Ref: ResourceNamePrefix
+    Metadata:
+      aws:cdk:path: MainSlurmBasedCfnTemplate/ObservabilitySetupStackRole
+    Condition: ObservabilitySetupStackCondition
+  ObservabilitySetupStackFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName:
+        Fn::Sub:
+          - ${FunctionNamePrefix}-ObsSetup
+          - FunctionNamePrefix:
+              Fn::Join:
+                - '-'
+                - Fn::Split:
+                    - .
+                    - Ref: ResourceNamePrefix
+      Handler: lambda_function.lambda_handler
+      Role:
+        Fn::GetAtt:
+          - ObservabilitySetupStackRole
+          - Arn
+      Runtime: python3.14
+      Timeout: 900
+      MemorySize: 128
+      Environment:
+        Variables:
+          SETUP_TEMPLATE_URL:
+            Fn::If:
+              - CustomBucketCondition
+              - Fn::Sub: >-
+                  https://${CustomBucketName}.s3.${AWS::Region}.amazonaws.com/templates-slurm/slurm-observability-setup-template.yaml
+              - Fn::Sub: >-
+                  https://aws-sagemaker-hyperpod-cluster-setup-${AWS::Region}-${Stage}.s3.${AWS::Region}.amazonaws.com/templates-slurm/slurm-observability-setup-template.yaml
+      Code:
+        S3Bucket:
+          Fn::If:
+            - CustomBucketCondition
+            - Ref: CustomBucketName
+            - Fn::Sub: aws-sagemaker-hyperpod-cluster-setup-${AWS::Region}-${Stage}
+        S3Key:
+          Fn::Sub: resources/artifacts/slurm-observability-launcher-lambda-function.zip
+      Tags:
+        - Key: SageMaker
+          Value: 'true'
+    Metadata:
+      aws:cdk:path: MainSlurmBasedCfnTemplate/ObservabilitySetupStackFunction
+    Condition: ObservabilitySetupStackCondition
+  ObservabilitySetupStack:
+    Type: Custom::SlurmObservabilitySetupStack
+    Properties:
+      ServiceToken:
+        Fn::GetAtt:
+          - ObservabilitySetupStackFunction
+          - Arn
+      ServiceTimeout: 3600
+      StackName:
+        Fn::Join:
+          - ''
+          - - hyperpod-
+            - Fn::Join:
+                - '-'
+                - Fn::Split:
+                    - .
+                    - Fn::Join:
+                        - '-'
+                        - Fn::Split:
+                            - _
+                            - Ref: ResourceNamePrefix
+            - '-observability'
+      ClusterArn:
+        Fn::GetAtt:
+          - HyperPodClusterStack
+          - Outputs.HyperPodClusterArn
+      Parameters:
+        Stage:
+          Ref: Stage
+        ResourceNamePrefix:
+          Ref: ResourceNamePrefix
+        CustomBucketName:
+          Ref: CustomBucketName
+        VpcId:
+          Fn::If:
+            - CreateVPCStackCondition
+            - Fn::GetAtt:
+                - VPCStack
+                - Outputs.VpcId
+            - Ref: VpcId
+        SecurityGroupId:
+          Fn::If:
+            - CreateSecurityGroupStackCondition
+            - Fn::GetAtt:
+                - SecurityGroupStack
+                - Outputs.SlurmSecurityGroupId
+            - Ref: SecurityGroupId
+        PrivateSubnetIds:
+          Fn::If:
+            - CreateVPCStackCondition
+            - Fn::GetAtt:
+                - VPCStack
+                - Outputs.PrivateSubnetIds
+            - Ref: PrivateSubnetIds
+        ExecutionRoleName:
+          Fn::If:
+            - HasSageMakerIAMRoleNameWithoutPathCondition
+            - Ref: SageMakerIAMRoleNameWithoutPath
+            - Fn::If:
+                - CreateSageMakerIAMRoleStackCondition
+                - Fn::GetAtt:
+                    - IamRoleStack
+                    - Outputs.AmazonSagemakerClusterExecutionRoleName
+                - Ref: SageMakerIAMRoleName
+        InstanceGroupExecutionRoleNames:
+          Ref: InstanceGroupExecutionRoleNames
+        LCSBucketName:
+          Fn::If:
+            - CreateLifeCycleScriptStackCondition
+            - Fn::GetAtt:
+                - LifeCycleScriptStack
+                - Outputs.SlurmLifeCycleScriptSourceS3BucketName
+            - Fn::If:
+                - CreateS3BucketOnlyCondition
+                - Fn::GetAtt:
+                    - S3BucketStack
+                    - Outputs.SlurmS3BucketName
+                - Ref: S3BucketName
+        HyperPodClusterName:
+          Ref: HyperPodClusterName
+        HyperPodClusterArn:
+          Fn::GetAtt:
+            - HyperPodClusterStack
+            - Outputs.HyperPodClusterArn
+        ClusterExtensions:
+          Ref: ClusterExtensions
+        MetricsDestination:
+          Ref: MetricsDestination
+        CreatePrometheusWorkspace:
+          Ref: CreatePrometheusWorkspace
+        PrometheusWorkspaceId:
+          Ref: PrometheusWorkspaceId
+        PrometheusWorkspaceArn:
+          Ref: PrometheusWorkspaceArn
+        PrometheusWorkspaceEndpoint:
+          Ref: PrometheusWorkspaceEndpoint
+        CreateGrafanaWorkspace:
+          Ref: CreateGrafanaWorkspace
+        GrafanaWorkspaceId:
+          Ref: GrafanaWorkspaceId
+        GrafanaWorkspaceName:
+          Ref: GrafanaWorkspaceName
+        GrafanaWorkspaceArn:
+          Ref: GrafanaWorkspaceArn
+        CreateGrafanaRole:
+          Ref: CreateGrafanaRole
+        GrafanaRole:
+          Ref: GrafanaRole
+        NodeMetricLevel:
+          Ref: NodeMetricLevel
+        AcceleratedComputeMetricLevel:
+          Ref: AcceleratedComputeMetricLevel
+        NetworkMetricLevel:
+          Ref: NetworkMetricLevel
+        ClusterMetricLevel:
+          Ref: ClusterMetricLevel
+        NcclMetricLevel:
+          Ref: NcclMetricLevel
+        JobMetricLevel:
+          Ref: JobMetricLevel
+    DependsOn:
+      - HyperPodClusterStack
+    Metadata:
+      aws:cdk:path: MainSlurmBasedCfnTemplate/ObservabilitySetupStack
+    Condition: ObservabilitySetupStackCondition
 Rules:
   ClusterExtensionsNeedContinuousProvisioning:
     RuleCondition:
@@ -1441,6 +2119,29 @@ Rules:
         AssertDescription: >-
           MetricsDestination cloudwatch and ClusterExtensions need CreateHyperPodClusterStack true: the stack installs
           cluster extensions only on a cluster it creates.
+  InstanceGroupExecutionRoleNamesNeedObservabilityExtension:
+    RuleCondition:
+      Fn::And:
+        - Fn::Not:
+            - Fn::Equals:
+                - Ref: InstanceGroupExecutionRoleNames
+                - ''
+        - Fn::Equals:
+            - Ref: EnableObservabilityFeature
+            - 'true'
+    Assertions:
+      - Assert:
+          Fn::Or:
+            - Fn::Equals:
+                - Ref: MetricsDestination
+                - cloudwatch
+            - Fn::Not:
+                - Fn::Equals:
+                    - Ref: ClusterExtensions
+                    - ''
+        AssertDescription: >-
+          InstanceGroupExecutionRoleNames is used only with the observability extension (MetricsDestination cloudwatch
+          or ClusterExtensions).
 Outputs:
   ClusterExtensionsInstallStatus:
     Description: 'Each cluster extension: Active, another extension status, or NotInstalled (JSON, by extension name)'

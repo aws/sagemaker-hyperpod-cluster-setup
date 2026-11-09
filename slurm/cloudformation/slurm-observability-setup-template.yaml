@@ -1,0 +1,417 @@
+Description: Observability Stack for Slurm based HyperPod Cluster
+Parameters:
+  Stage:
+    Type: String
+    Default: prod
+    AllowedValues:
+      - gamma
+      - prod
+    Description: Deployment stage (gamma, prod)
+  ResourceNamePrefix:
+    Type: String
+    Default: sagemaker-hyperpod-slurm
+    Description: Prefix to be used for all resources created by this template.
+  CustomBucketName:
+    Type: String
+    Default: ''
+    Description: Custom S3 bucket name to use for templates
+  VpcId:
+    Type: String
+    Description: The cluster's VPC.
+  SecurityGroupId:
+    Type: String
+    Description: The cluster's security group.
+  PrivateSubnetIds:
+    Type: String
+    Description: The cluster's private subnets (comma-separated).
+  ExecutionRoleName:
+    Type: String
+    Description: The cluster's execution role, without its path.
+  InstanceGroupExecutionRoleNames:
+    Type: String
+    Default: ''
+    AllowedPattern: ^$|^[\w+=.@-]+(,[\w+=.@-]+)*$
+    ConstraintDescription: must be comma-separated IAM role names (letters, digits and +=.@_-), without spaces, paths or ARNs.
+    Description: >-
+      Comma-separated names (without path) of the instance groups' own execution roles, which also get the observability
+      policies.
+  LCSBucketName:
+    Type: String
+    Description: The lifecycle script bucket.
+  HyperPodClusterName:
+    Type: String
+    Description: The name of the cluster.
+  HyperPodClusterArn:
+    Type: String
+    Description: The cluster to install the extensions on.
+  ClusterExtensions:
+    Type: String
+    Default: ''
+    Description: >-
+      Cluster extensions to install, as a JSON list of {"ExtensionName", "ConfigurationValues"}. The
+      sagemaker-observability extension is installed either way, with the Prometheus remote-write URL (amp) and the
+      Grafana workspace added to its configuration.
+  MetricsDestination:
+    Type: String
+    Default: cloudwatch
+    AllowedValues:
+      - amp
+      - cloudwatch
+    Description: 'Where metrics go: cloudwatch, or amp (an Amazon Managed Service for Prometheus workspace).'
+  CreatePrometheusWorkspace:
+    Type: String
+    Default: 'false'
+    AllowedValues:
+      - 'true'
+      - 'false'
+    Description: Specify whether to create a new Prometheus workspace.
+  PrometheusWorkspaceId:
+    Type: String
+    Default: ''
+    Description: Existing Prometheus workspace ID.
+  PrometheusWorkspaceArn:
+    Type: String
+    Default: ''
+    Description: Existing Prometheus workspace ARN.
+  PrometheusWorkspaceEndpoint:
+    Type: String
+    Default: ''
+    Description: Existing Prometheus workspace endpoint.
+  CreateGrafanaWorkspace:
+    Type: String
+    Default: 'false'
+    AllowedValues:
+      - 'true'
+      - 'false'
+      - disabled
+    Description: Specify whether to create a new Grafana workspace.
+  GrafanaWorkspaceId:
+    Type: String
+    Default: ''
+    Description: Existing Grafana workspace ID.
+  GrafanaWorkspaceName:
+    Type: String
+    Default: ''
+    Description: Existing Grafana workspace name.
+  GrafanaWorkspaceArn:
+    Type: String
+    Default: ''
+    Description: Existing Grafana workspace ARN.
+  CreateGrafanaRole:
+    Type: String
+    Default: 'false'
+    AllowedValues:
+      - 'true'
+      - 'false'
+    Description: Specify whether to create a new Grafana role.
+  GrafanaRole:
+    Type: String
+    Default: ''
+    Description: Existing Grafana role ARN.
+  NodeMetricLevel:
+    Type: String
+    Default: BASIC
+    AllowedValues:
+      - BASIC
+      - ADVANCED
+      - DISABLED
+    Description: The level of node metrics.
+  AcceleratedComputeMetricLevel:
+    Type: String
+    Default: BASIC
+    AllowedValues:
+      - BASIC
+      - ADVANCED
+      - DISABLED
+    Description: The level of accelerated compute metrics.
+  NetworkMetricLevel:
+    Type: String
+    Default: DISABLED
+    AllowedValues:
+      - BASIC
+      - ADVANCED
+      - DISABLED
+    Description: The level of network metrics.
+  ClusterMetricLevel:
+    Type: String
+    Default: BASIC
+    AllowedValues:
+      - BASIC
+      - DISABLED
+    Description: The level of cluster metrics.
+  NcclMetricLevel:
+    Type: String
+    Default: DISABLED
+    AllowedValues:
+      - BASIC
+      - DISABLED
+    Description: The level of NCCL metrics.
+  JobMetricLevel:
+    Type: String
+    Default: BASIC
+    AllowedValues:
+      - BASIC
+      - DISABLED
+    Description: The level of job metrics.
+Conditions:
+  CustomBucketCondition:
+    Fn::Not:
+      - Fn::Equals:
+          - Ref: CustomBucketName
+          - ''
+Resources:
+  WorkspaceCleanup:
+    Type: Custom::ObservabilityWorkspaceCleanup
+    Properties:
+      ServiceToken:
+        Fn::GetAtt:
+          - ClusterExtensionsFunction
+          - Arn
+      ResourceNamePrefix:
+        Ref: ResourceNamePrefix
+      CreatePrometheusWorkspace:
+        Ref: CreatePrometheusWorkspace
+      CreateGrafanaWorkspace:
+        Ref: CreateGrafanaWorkspace
+    Metadata:
+      aws:cdk:path: SlurmObservabilitySetupCfnTemplate/WorkspaceCleanup
+  ObservabilityStack:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL:
+        Fn::Sub:
+          - https://${Bucket}.s3.${AWS::Region}.amazonaws.com/templates-slurm/slurm-observability-template.yaml
+          - Bucket:
+              Fn::If:
+                - CustomBucketCondition
+                - Ref: CustomBucketName
+                - Fn::Sub: aws-sagemaker-hyperpod-cluster-setup-${AWS::Region}-${Stage}
+      Parameters:
+        ResourceNamePrefix:
+          Ref: ResourceNamePrefix
+        CustomResourceS3Bucket:
+          Fn::If:
+            - CustomBucketCondition
+            - Ref: CustomBucketName
+            - Fn::Sub: aws-sagemaker-hyperpod-cluster-setup-${AWS::Region}-${Stage}
+        VpcId:
+          Ref: VpcId
+        SecurityGroupId:
+          Ref: SecurityGroupId
+        PrivateSubnetIds:
+          Ref: PrivateSubnetIds
+        ExecutionRoleName:
+          Ref: ExecutionRoleName
+        InstanceGroupExecutionRoleNames:
+          Ref: InstanceGroupExecutionRoleNames
+        LCSBucketName:
+          Ref: LCSBucketName
+        CreatePrometheusWorkspace:
+          Ref: CreatePrometheusWorkspace
+        PrometheusWorkspaceId:
+          Ref: PrometheusWorkspaceId
+        PrometheusWorkspaceArn:
+          Ref: PrometheusWorkspaceArn
+        PrometheusWorkspaceEndpoint:
+          Ref: PrometheusWorkspaceEndpoint
+        CreateGrafanaWorkspace:
+          Ref: CreateGrafanaWorkspace
+        GrafanaWorkspaceId:
+          Ref: GrafanaWorkspaceId
+        GrafanaWorkspaceName:
+          Ref: GrafanaWorkspaceName
+        GrafanaWorkspaceArn:
+          Ref: GrafanaWorkspaceArn
+        CreateGrafanaRole:
+          Ref: CreateGrafanaRole
+        GrafanaRole:
+          Ref: GrafanaRole
+        NodeMetricLevel:
+          Ref: NodeMetricLevel
+        AcceleratedComputeMetricLevel:
+          Ref: AcceleratedComputeMetricLevel
+        NetworkMetricLevel:
+          Ref: NetworkMetricLevel
+        ClusterMetricLevel:
+          Ref: ClusterMetricLevel
+        NcclMetricLevel:
+          Ref: NcclMetricLevel
+        JobMetricLevel:
+          Ref: JobMetricLevel
+        MetricsDestination:
+          Ref: MetricsDestination
+        ObservabilityExtension: 'true'
+        HyperPodClusterName:
+          Ref: HyperPodClusterName
+    DependsOn:
+      - WorkspaceCleanup
+    Metadata:
+      aws:cdk:path: SlurmObservabilitySetupCfnTemplate/ObservabilityStack
+  ClusterExtensionsRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName:
+        Fn::Sub: ${ResourceNamePrefix}-ExtRole
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - Fn::Sub: arn:${AWS::Partition}:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        - PolicyName: ClusterExtensions
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action:
+                  - sagemaker:DescribeCluster
+                  - sagemaker:ListClusterExtensions
+                  - sagemaker:CreateClusterExtension
+                  - sagemaker:DescribeClusterExtension
+                  - sagemaker:DeleteClusterExtension
+                  - sagemaker:AddTags
+                Resource:
+                  - Fn::Sub: arn:${AWS::Partition}:sagemaker:${AWS::Region}:${AWS::AccountId}:cluster/*
+                  - Fn::Sub: arn:${AWS::Partition}:sagemaker:${AWS::Region}:${AWS::AccountId}:extension/*
+              - Effect: Allow
+                Action: cloudformation:DescribeStackEvents
+                Resource:
+                  Fn::Sub: arn:${AWS::Partition}:cloudformation:${AWS::Region}:${AWS::AccountId}:stack/${AWS::StackName}/*
+              - Effect: Allow
+                Action:
+                  - aps:ListWorkspaces
+                  - grafana:ListWorkspaces
+                Resource: '*'
+              - Effect: Allow
+                Action: aps:DeleteWorkspace
+                Resource:
+                  Fn::Sub: arn:${AWS::Partition}:aps:${AWS::Region}:${AWS::AccountId}:workspace/*
+                Condition:
+                  StringEquals:
+                    aws:ResourceTag/SageMaker: 'true'
+                  StringLike:
+                    aws:ResourceTag/aws:cloudformation:stack-name:
+                      Fn::Sub: ${AWS::StackName}-ObservabilityStack-*
+              - Effect: Allow
+                Action: grafana:DeleteWorkspace
+                Resource:
+                  Fn::Sub: arn:${AWS::Partition}:grafana:${AWS::Region}:${AWS::AccountId}:/workspaces/*
+                Condition:
+                  StringEquals:
+                    aws:ResourceTag/SageMaker: 'true'
+                  StringLike:
+                    aws:ResourceTag/hyperpod-observability-stack:
+                      Fn::Sub: ${AWS::StackName}-ObservabilityStack-*
+              - Effect: Allow
+                Action:
+                  - sso:DescribeRegisteredRegions
+                  - sso:GetManagedApplicationInstance
+                  - sso:DeleteManagedApplicationInstance
+                Resource: '*'
+              - Effect: Allow
+                Action:
+                  - aps:DescribeWorkspace
+                  - grafana:DescribeWorkspace
+                Resource:
+                  - Fn::Sub: arn:${AWS::Partition}:aps:${AWS::Region}:${AWS::AccountId}:workspace/*
+                  - Fn::Sub: arn:${AWS::Partition}:grafana:${AWS::Region}:${AWS::AccountId}:/workspaces/*
+    Metadata:
+      aws:cdk:path: SlurmObservabilitySetupCfnTemplate/ClusterExtensionsRole
+  ClusterExtensionsFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName:
+        Fn::Sub:
+          - ${FunctionNamePrefix}-ExtFunc
+          - FunctionNamePrefix:
+              Fn::Join:
+                - '-'
+                - Fn::Split:
+                    - .
+                    - Ref: ResourceNamePrefix
+      Handler: lambda_function.lambda_handler
+      Role:
+        Fn::GetAtt:
+          - ClusterExtensionsRole
+          - Arn
+      Runtime: python3.14
+      Timeout: 900
+      MemorySize: 256
+      Code:
+        S3Bucket:
+          Fn::If:
+            - CustomBucketCondition
+            - Ref: CustomBucketName
+            - Fn::Sub: aws-sagemaker-hyperpod-cluster-setup-${AWS::Region}-${Stage}
+        S3Key:
+          Fn::Sub: resources/artifacts/cluster-extensions-lambda-function.zip
+      Tags:
+        - Key: SageMaker
+          Value: 'true'
+    Metadata:
+      aws:cdk:path: SlurmObservabilitySetupCfnTemplate/ClusterExtensionsFunction
+  ClusterExtensionsInstall:
+    Type: Custom::ClusterExtensions
+    Properties:
+      ServiceToken:
+        Fn::GetAtt:
+          - ClusterExtensionsFunction
+          - Arn
+      ClusterArn:
+        Ref: HyperPodClusterArn
+      Extensions:
+        Ref: ClusterExtensions
+      InstallObservability: 'true'
+      GrafanaWorkspaceId:
+        Fn::GetAtt:
+          - ObservabilityStack
+          - Outputs.ExtensionGrafanaWorkspaceId
+      RemoteWriteUrl:
+        Fn::GetAtt:
+          - ObservabilityStack
+          - Outputs.ExtensionRemoteWriteUrl
+      NodeMetricLevel:
+        Ref: NodeMetricLevel
+      AcceleratedComputeMetricLevel:
+        Ref: AcceleratedComputeMetricLevel
+      NetworkMetricLevel:
+        Ref: NetworkMetricLevel
+      ClusterMetricLevel:
+        Ref: ClusterMetricLevel
+      NcclMetricLevel:
+        Ref: NcclMetricLevel
+      JobMetricLevel:
+        Ref: JobMetricLevel
+      FailOnFailedInstall: 'true'
+      ObservabilityOnly: 'true'
+    Metadata:
+      aws:cdk:path: SlurmObservabilitySetupCfnTemplate/ClusterExtensionsInstall
+Outputs:
+  ClusterExtensionsInstallStatus:
+    Description: 'Each cluster extension: Active, another extension status, or NotInstalled (JSON, by extension name)'
+    Value:
+      Fn::GetAtt:
+        - ClusterExtensionsInstall
+        - InstallStatus
+  ClusterExtensionsInstallReason:
+    Description: Why each cluster extension has that status (JSON)
+    Value:
+      Fn::GetAtt:
+        - ClusterExtensionsInstall
+        - InstallReason
+  ExtensionGrafanaWorkspaceId:
+    Description: Grafana workspace ID the observability extension uses, empty without a workspace
+    Value:
+      Fn::GetAtt:
+        - ObservabilityStack
+        - Outputs.ExtensionGrafanaWorkspaceId
+  ExtensionRemoteWriteUrl:
+    Description: Prometheus remote-write URL the observability extension uses, empty for CloudWatch
+    Value:
+      Fn::GetAtt:
+        - ObservabilityStack
+        - Outputs.ExtensionRemoteWriteUrl

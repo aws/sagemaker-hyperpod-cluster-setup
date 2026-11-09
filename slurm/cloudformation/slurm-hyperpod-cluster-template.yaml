@@ -102,6 +102,12 @@ Parameters:
     Type: String
     Default: ''
     Description: Custom tags for managing the SageMaker HyperPod cluster as an AWS resource.
+  SetupStackTag:
+    Type: String
+    Default: ''
+    Description: >-
+      The hyperpod-cluster-extensions-stack tag to create the cluster with, when a separate stack sets up its
+      observability (pending until that stack starts). Empty for none.
   AccountingDatabaseConfig:
     Type: String
     Default: ''
@@ -188,6 +194,12 @@ Parameters:
     Type: String
     Default: '[]'
     Description: JSON array string containing instance group configurations for Slurm cluster.
+Conditions:
+  HasSetupStackTagCondition:
+    Fn::Not:
+      - Fn::Equals:
+          - Ref: SetupStackTag
+          - ''
 Resources:
   HyperPodClusterCustomResourceRole:
     Type: AWS::IAM::Role
@@ -304,6 +316,11 @@ Resources:
             Ref: EnableSourceS3UriOnly
           ACCOUNTING_DATABASE_CONFIG:
             Ref: AccountingDatabaseConfig
+          SETUP_STACK_TAG:
+            Fn::If:
+              - HasSetupStackTagCondition
+              - Ref: SetupStackTag
+              - Ref: AWS::NoValue
           INSTANCE_GROUP_SETTINGS1:
             Ref: InstanceGroupSettings1
           INSTANCE_GROUP_SETTINGS2:

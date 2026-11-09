@@ -45,6 +45,19 @@ class TestOnCreate(unittest.TestCase):
         self.assertEqual(kwargs['workspaceName'], 'test-amgws')
         self.assertEqual(kwargs['permissionType'], 'CUSTOMER_MANAGED')
 
+    def test_tags_the_workspace_only_with_sagemaker_without_a_stack_tag(self):
+        kwargs, _ = self._run(BASE_ENV)
+
+        self.assertEqual(kwargs['tags'], {'SageMaker': 'true'})
+
+    def test_adds_the_stack_tag_when_set(self):
+        kwargs, _ = self._run({**BASE_ENV, 'OBSERVABILITY_STACK_TAG': 'p-observability-ObservabilityStack-ABC'})
+
+        self.assertEqual(
+            kwargs['tags'],
+            {'SageMaker': 'true', 'hyperpod-observability-stack': 'p-observability-ObservabilityStack-ABC'},
+        )
+
 
 class TestFailureReason(unittest.TestCase):
     def failed_reason(self, error):

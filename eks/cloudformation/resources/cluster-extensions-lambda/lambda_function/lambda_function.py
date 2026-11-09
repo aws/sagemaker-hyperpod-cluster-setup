@@ -11,6 +11,17 @@ Extensions are add-ons that the console manages after the cluster is created, so
 stack: rolling back would delete the cluster that was just built. Every outcome is SUCCESS, and the response to
 CloudFormation is retried, since a response that never arrives fails the stack too. Each extension's outcome is
 reported in InstallStatus and InstallReason (JSON objects keyed by extension name) and in the log.
+
+With FailOnFailedInstall 'true' (the observability setup stack, which rolls back on its own without the cluster), the
+observability extension failing to install fails the resource; other extensions are reported as before and never fail
+it. Deleting the resource removes the extensions it tried that failed to install from the cluster, and after a failed
+create also the observability extension in any status but Active or Degraded, so none is left pointing at deleted
+workspaces.
+
+The same function serves Custom::ObservabilityWorkspaceCleanup in that stack, which its nested observability stack
+depends on, so it is deleted last. Its Delete deletes the Prometheus and Grafana workspaces the stack created when the
+stack never completed its create: CloudFormation keeps the Prometheus workspace (DeletionPolicy Retain) and doesn't
+manage the Grafana one. A stack that completed keeps them, with the customer's dashboards.
 """
 import http.client
 import json
@@ -23,10 +34,13 @@ import urllib.error
 import urllib.parse
 import urllib.request
 import uuid
+from datetime import timedelta
 
 import boto3
 from botocore.auth import SigV4Auth
 from botocore.awsrequest import AWSRequest
+from botocore.config import Config
+from botocore.exceptions import ClientError
 
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
@@ -39,6 +53,10 @@ COLLECTION_INTERVAL_SECONDS = 30
 POLL_SECONDS = 15
 # The installs are reported as they are after this long; Creating is still installing on the nodes.
 MAX_WAIT_SECONDS = 300
+# With FailOnFailedInstall, the observability setup stack waits longer for the extension's outcome (within the
+# function's 15 minutes), since a failure rolls that stack back. An extension still Creating after it is not a failure:
+# its outcome isn't known, so the stack is kept, and the console shows the extension's status.
+SETUP_STACK_MAX_WAIT_SECONDS = 660
 # An extension whose status can't be read this many times in a row is reported Unknown.
 MAX_DESCRIBE_FAILURES = 4
 # Stop waiting this long before the Lambda times out, to leave time to respond to CloudFormation.
@@ -58,6 +76,29 @@ MAX_RESPONSE_BYTES = 4000
 MAX_PHYSICAL_ID_BYTES = 1024
 REMOVED_REASON = 'Removed from the cluster after the stack installed it'
 REPLACED_REASON = "Not installed on the replacement cluster; install it from the cluster's Extensions tab"
+# With FailOnFailedInstall: the observability extension's final statuses that fail the resource. CreateFailed is the
+# extension's own failure (the SageMaker API model's ExtensionStatus: Creating, Active, CreateFailed, Updating,
+# Deleting, DeleteFailed, Degraded, UpdateFailed); NotInstalled is a create that raised, or a run that failed as a
+# whole; Unknown is a status that couldn't be read.
+FAILED_INSTALL_STATUSES = ('CreateFailed', 'Unknown', 'NotInstalled')
+# The statuses on the cluster of an extension that failed to install, which deleting the resource removes.
+REMOVED_ON_DELETE_STATUSES = ('CreateFailed',)
+# After a failed create, the observability extension stays only in these.
+KEPT_AFTER_FAILED_CREATE_STATUSES = ('Active', 'Degraded')
+# How long deleting the resource waits for those extensions, or the cleanup for the workspaces, to go.
+MAX_DELETE_WAIT_SECONDS = 300
+# The third part of the physical resource ID after the two lists of extensions, set by a create that failed.
+FAILED_MARKER = 'failed'
+CLEANUP_RESOURCE_TYPE = 'Custom::ObservabilityWorkspaceCleanup'
+# The workspaces' names, as the nested observability stack sets them: the Prometheus alias and the Grafana name.
+PROMETHEUS_ALIAS_SUFFIX = '-ampws'
+GRAFANA_NAME_SUFFIX = '-amgws'
+# The stack's own events are read newest first back to its create; this only bounds a runaway stack.
+MAX_EVENT_PAGES = 20
+# A workspace counts as this stack's when created at or after the stack's create began, less this for clock skew, so
+# one an earlier stack with the same ResourceNamePrefix left behind is never deleted.
+CLOCK_SKEW_SECONDS = 5
+AWS_CLIENT_CONFIG = Config(connect_timeout=5, read_timeout=15, retries={'max_attempts': 3})
 # The role's policy applies a few seconds after the role is created.
 IAM_PROPAGATION_SECONDS = 120
 
@@ -202,19 +243,35 @@ def entry_configuration(entry):
     return configuration
 
 
+def in_scope(properties, name):
+    """Whether this stack installs the listed extension: with ObservabilityOnly 'true' (the observability setup stack),
+    only the observability extension; with SkipObservability 'true' (the main stack, when the setup stack installs
+    it), every other one."""
+    if properties.get('ObservabilityOnly') == 'true':
+        return name == OBSERVABILITY_EXTENSION
+    if properties.get('SkipObservability') == 'true':
+        return name != OBSERVABILITY_EXTENSION
+    return True
+
+
 def listed_extensions(properties):
     """The valid ClusterExtensions entries as (name, configuration), and why each other entry is not valid, by its
-    ExtensionName, or ClusterExtensions[<index>] without one (ClusterExtensions when it isn't a JSON list)."""
+    ExtensionName, or ClusterExtensions[<index>] without one (ClusterExtensions when it isn't a JSON list). Only the
+    entries in this stack's scope."""
     try:
         entries = json.loads(properties.get('Extensions') or '[]')
     except ValueError as e:
-        return [], {'ClusterExtensions': f'Not installed: ClusterExtensions is not JSON: {e}'}
+        invalid = {'ClusterExtensions': f'Not installed: ClusterExtensions is not JSON: {e}'}
+        return [], {k: v for k, v in invalid.items() if in_scope(properties, k)}
     if not isinstance(entries, list):
-        return [], {'ClusterExtensions': 'Not installed: ClusterExtensions is not a JSON list'}
+        invalid = {'ClusterExtensions': 'Not installed: ClusterExtensions is not a JSON list'}
+        return [], {k: v for k, v in invalid.items() if in_scope(properties, k)}
     listed, invalid = [], {}
     for index, entry in enumerate(entries):
         name = entry.get('ExtensionName') if isinstance(entry, dict) else None
         key = name if isinstance(name, str) and name else f'ClusterExtensions[{index}]'
+        if not in_scope(properties, key):
+            continue
         try:
             if not isinstance(entry, dict):
                 raise ValueError('the entry is not a JSON object')
@@ -255,7 +312,7 @@ def requested_names(properties):
     ]
     if properties.get('InstallObservability') == 'true':
         names.append(OBSERVABILITY_EXTENSION)
-    return list(dict.fromkeys(names))
+    return list(dict.fromkeys(name for name in names if in_scope(properties, name)))
 
 
 def skipped_extensions(properties):
@@ -383,8 +440,10 @@ def install(event, context, extensions, statuses, reasons, arns):
             statuses[key] = 'NotInstalled'
             reasons[key] = reason[:MAX_REASON_LENGTH]
     cluster_arn = properties['ClusterArn']
-    # First, so a cluster that can't be described is still tagged.
-    tag_cluster(cluster_arn, event['StackId'], context)
+    # First, so a cluster that can't be described is still tagged. With SkipObservability, the tag names the setup
+    # stack, which installs the observability extension.
+    if properties.get('SkipObservability') != 'true':
+        tag_cluster(cluster_arn, event['StackId'], context)
     wait_for_cluster(cluster_arn, context)
 
     existing = list_extensions(cluster_arn, context)
@@ -400,6 +459,7 @@ def install(event, context, extensions, statuses, reasons, arns):
     # Active is installed. Creating when the wait or the time runs out is still installing on the nodes. Anything else
     # is reported as it is. A status that can't be read keeps the last one read and the error, until it can't be read
     # MAX_DESCRIBE_FAILURES times in a row.
+    max_wait = SETUP_STACK_MAX_WAIT_SECONDS if properties.get('FailOnFailedInstall') == 'true' else MAX_WAIT_SECONDS
     pending = dict(arns)
     failures, read = {}, set()
     started = time.time()
@@ -422,7 +482,7 @@ def install(event, context, extensions, statuses, reasons, arns):
             reasons.pop(name, None)
             if statuses[name] != 'Creating':
                 del pending[name]
-        if pending and (time.time() - started >= MAX_WAIT_SECONDS or not wait(context)):
+        if pending and (time.time() - started >= max_wait or not wait(context)):
             break
     for name, extension_arn in arns.items():
         reasons.setdefault(name, f'{notes[name]}{extension_arn} is {statuses[name]}'[:MAX_REASON_LENGTH])
@@ -432,7 +492,7 @@ def outcome(statuses, reasons):
     return {'InstallStatus': json.dumps(statuses), 'InstallReason': json.dumps(reasons)}
 
 
-def physical_resource_id(cluster_arn, installed, not_installed):
+def physical_resource_id(cluster_arn, installed, not_installed, suffix=''):
     """Records the extensions requested at create, for Update, since CloudFormation sends the ID back unchanged:
     {cluster ARN}/extensions/{installed}/{not installed}, each a comma-separated list. Names that don't fit in
     CloudFormation's limit are left out, the ones not installed first. Names are percent-encoded ('/' and ',' in an
@@ -444,7 +504,7 @@ def physical_resource_id(cluster_arn, installed, not_installed):
         return ','.join(urllib.parse.quote(n, safe='') for n in names)
 
     while True:
-        physical_id = f'{cluster_arn}/extensions/{encoded(installed)}/{encoded(not_installed)}'
+        physical_id = f'{cluster_arn}/extensions/{encoded(installed)}/{encoded(not_installed)}{suffix}'
         if len(physical_id.encode('utf-8')) <= MAX_PHYSICAL_ID_BYTES or not (installed or not_installed):
             break
         left_out.append((not_installed or installed).pop())
@@ -458,6 +518,18 @@ def created_with(physical_id):
     before it recorded them ({cluster ARN}/extensions). Anything after the two lists is ignored."""
     lists = physical_id.partition('/extensions/')[2].split('/') + ['']
     return tuple([urllib.parse.unquote(n) for n in names.split(',') if n] for names in lists[:2])
+
+
+def failed_physical_id(physical_id):
+    """The physical resource ID with FAILED_MARKER, which created_with ignores."""
+    installed, not_installed = created_with(physical_id)
+    return physical_resource_id(
+        physical_id.partition('/extensions')[0], installed, not_installed, suffix=f'/{FAILED_MARKER}'
+    )
+
+
+def create_failed(physical_id):
+    return (physical_id.partition('/extensions/')[2].split('/') + ['', '', ''])[2] == FAILED_MARKER
 
 
 def on_create(event, context):
@@ -515,10 +587,150 @@ def on_update(event, context):
     return outcome(statuses, reasons), physical_id
 
 
-def on_delete(event, context):  # pylint: disable=unused-argument
-    """Removes nothing. Deleting the cluster removes its extensions, and the console manages them after the cluster is
-    created, so the resource going away (the stack's deletion, or an update that drops it) must not remove extensions
-    from a cluster that stays."""
+def remove_failed_installs(event, context):
+    """With FailOnFailedInstall: removes from the cluster the extensions this resource tried that failed to install,
+    and after a failed create the observability extension unless it is Active or Degraded, then waits for them to go,
+    within MAX_DELETE_WAIT_SECONDS. Other Active and Degraded extensions stay."""
+    physical_id = event['PhysicalResourceId']
+    cluster_arn = physical_id.partition('/extensions')[0]
+    tried = created_with(physical_id)[0]
+    after_failed_create = create_failed(physical_id)
+    on_cluster = list_extensions(cluster_arn, context)
+
+    def removed(name):
+        status = on_cluster.get(name, {}).get('Status')
+        if name == OBSERVABILITY_EXTENSION and after_failed_create:
+            return status is not None and status not in KEPT_AFTER_FAILED_CREATE_STATUSES
+        return name in tried and status in REMOVED_ON_DELETE_STATUSES
+
+    removing = {name: e['ExtensionArn'] for name, e in on_cluster.items() if removed(name)}
+    for name, extension_arn in removing.items():
+        if on_cluster[name].get('Status') == 'Deleting':
+            continue
+        logger.info(f'Removing {name} ({on_cluster[name].get("Status")}): {extension_arn}')
+        try:
+            call('DeleteClusterExtension', {'ClusterArn': cluster_arn, 'ExtensionArn': extension_arn}, context)
+        except Exception as e:  # pylint: disable=broad-except
+            logger.warning(f'Could not remove {name}: {e}')
+    started = time.time()
+    while removing:
+        if time.time() - started >= MAX_DELETE_WAIT_SECONDS or not wait(context):
+            logger.warning(f'Still removing {sorted(removing)}')
+            return
+        on_cluster = list_extensions(cluster_arn, context)
+        removing = {name: arn for name, arn in removing.items() if name in on_cluster}
+
+
+def stack_never_created(stack_id):
+    """When the stack never completed its create, the time its create began: reading its own events newest first, past
+    this deletion, the first one is its CREATE_IN_PROGRESS, before any CREATE_COMPLETE, UPDATE_* or IMPORT_*. None
+    when it completed, or when the events don't say within MAX_EVENT_PAGES."""
+    cloudformation = boto3.client('cloudformation', config=AWS_CLIENT_CONFIG)
+    token = None
+    for _ in range(MAX_EVENT_PAGES):
+        page = cloudformation.describe_stack_events(StackName=stack_id, **({'NextToken': token} if token else {}))
+        for stack_event in page['StackEvents']:
+            if stack_event.get('PhysicalResourceId') != stack_id:
+                continue
+            status = stack_event.get('ResourceStatus', '')
+            if status == 'CREATE_IN_PROGRESS':
+                return stack_event['Timestamp']
+            if status == 'CREATE_COMPLETE' or status.startswith(('UPDATE_', 'IMPORT_')):
+                return None
+        token = page.get('NextToken')
+        if not token:
+            return None
+    return None
+
+
+def is_not_found(error):
+    return isinstance(error, ClientError) and error.response.get('Error', {}).get('Code') == 'ResourceNotFoundException'
+
+
+def created_workspaces(properties, create_started):
+    """The workspaces the stack created, as (client, workspace ID): the alias and the name the nested stack sets, the
+    SageMaker tag, and created since the stack's create began. Without CreatePrometheusWorkspace or
+    CreateGrafanaWorkspace they are the customer's."""
+    prefix = properties['ResourceNamePrefix']
+    earliest = create_started - timedelta(seconds=CLOCK_SKEW_SECONDS)
+
+    def ours(workspace, created_key):
+        created = workspace.get(created_key)
+        return (workspace.get('tags') or {}).get('SageMaker') == 'true' and created is not None and created >= earliest
+
+    workspaces = []
+    if properties.get('CreatePrometheusWorkspace') == 'true':
+        alias = f'{prefix}{PROMETHEUS_ALIAS_SUFFIX}'
+        pages = boto3.client('amp', config=AWS_CLIENT_CONFIG).get_paginator('list_workspaces').paginate(alias=alias)
+        workspaces += [
+            ('amp', w['workspaceId']) for page in pages for w in page['workspaces']
+            if w.get('alias') == alias and ours(w, 'createdAt')
+        ]
+    if properties.get('CreateGrafanaWorkspace') == 'true':
+        name = f'{prefix}{GRAFANA_NAME_SUFFIX}'
+        pages = boto3.client('grafana', config=AWS_CLIENT_CONFIG).get_paginator('list_workspaces').paginate()
+        workspaces += [
+            ('grafana', w['id']) for page in pages for w in page['workspaces']
+            if w.get('name') == name and ours(w, 'created')
+        ]
+    return workspaces
+
+
+def delete_workspaces(workspaces, context):
+    """Deletes the workspaces and waits for them to go, within MAX_DELETE_WAIT_SECONDS. Best effort; one already gone
+    is deleted."""
+    pending = []
+    for service, workspace_id in workspaces:
+        try:
+            boto3.client(service, config=AWS_CLIENT_CONFIG).delete_workspace(workspaceId=workspace_id)
+            logger.info(f'Deleting the {service} workspace {workspace_id}, which the create that never completed made')
+            pending.append((service, workspace_id))
+        except Exception as e:  # pylint: disable=broad-except
+            if not is_not_found(e):
+                logger.warning(f'Could not delete the {service} workspace {workspace_id}: {e}')
+    started = time.time()
+    while pending:
+        if time.time() - started >= MAX_DELETE_WAIT_SECONDS or not wait(context):
+            logger.warning(f'Still deleting {pending}')
+            return
+        remaining = []
+        for service, workspace_id in pending:
+            try:
+                boto3.client(service, config=AWS_CLIENT_CONFIG).describe_workspace(workspaceId=workspace_id)
+                remaining.append((service, workspace_id))
+            except Exception as e:  # pylint: disable=broad-except
+                if not is_not_found(e):
+                    logger.warning(f'Could not read the {service} workspace {workspace_id}: {e}')
+        pending = remaining
+
+
+def workspace_cleanup(event, context):
+    """Custom::ObservabilityWorkspaceCleanup: nothing on Create and Update. On Delete, the workspaces the stack created
+    when it never completed its create. Always SUCCESS."""
+    physical_id = event.get('PhysicalResourceId') or f'{event["StackId"]}/workspace-cleanup'
+    if event['RequestType'] == 'Delete':
+        try:
+            create_started = stack_never_created(event['StackId'])
+            if create_started:
+                delete_workspaces(created_workspaces(event['ResourceProperties'], create_started), context)
+            else:
+                logger.info('The stack completed its create: keeping its workspaces')
+        except Exception as e:  # pylint: disable=broad-except
+            logger.warning(f'Could not clean up the workspaces: {e}')
+    respond(event, context, 'SUCCESS', {}, physical_id)
+
+
+def on_delete(event, context):
+    """Removes nothing, unless FailOnFailedInstall is set (see remove_failed_installs).
+    Deleting the cluster removes its extensions, and the console manages them after the cluster is created, so the
+    resource going away (the stack's deletion, or an update that drops it) must not remove extensions from a cluster
+    that stays."""
+    if event['ResourceProperties'].get('FailOnFailedInstall') == 'true':
+        try:
+            remove_failed_installs(event, context)
+        except Exception as e:  # pylint: disable=broad-except
+            logger.warning(f'Could not remove the extensions that failed to install: {e}')
+        return
     logger.info('Leaving the cluster extensions in place: they go with the cluster')
 
 
@@ -578,20 +790,34 @@ def respond(event, context, status, data, physical_id, reason=''):
 
 def lambda_handler(event, context):
     logger.info(f'Received event: {json.dumps({k: v for k, v in event.items() if k != "ResponseURL"})}')
+    if event.get('ResourceType') == CLEANUP_RESOURCE_TYPE:
+        workspace_cleanup(event, context)
+        return
     request_type = event['RequestType']
     # Set at create and stable for the stack's life, so an Update never replaces the resource.
     physical_id = event.get('PhysicalResourceId') or f'{event["ResourceProperties"].get("ClusterArn", "")}/extensions'
-    data = {}
+    fail_on_failed_install = event.get('ResourceProperties', {}).get('FailOnFailedInstall') == 'true'
+    data, status, reason = {}, 'SUCCESS', ''
     try:
         if request_type == 'Create':
             data, physical_id = on_create(event, context)
+            if fail_on_failed_install:
+                observability = json.loads(data['InstallStatus']).get(OBSERVABILITY_EXTENSION)
+                if observability in FAILED_INSTALL_STATUSES:
+                    status = 'FAILED'
+                    reason = f'Cluster extensions failed to install: {OBSERVABILITY_EXTENSION} is {observability}'
+                    physical_id = failed_physical_id(physical_id)
         elif request_type == 'Delete':
             on_delete(event, context)
         else:
             data, physical_id = on_update(event, context)
     except Exception as e:  # pylint: disable=broad-except
         # Anything not caught above, for example a malformed event. Still SUCCESS: a failed extension install must
-        # never roll back the cluster.
+        # never roll back the cluster. With FailOnFailedInstall, a Create fails; a Delete never does.
         logger.error(f'Error: {e}')
         data = outcome({}, {'ClusterExtensions': str(e)[:MAX_REASON_LENGTH]})
-    respond(event, context, 'SUCCESS', data, physical_id)
+        if fail_on_failed_install and request_type == 'Create':
+            # The error can hold ARNs; it is in the log.
+            status, reason = 'FAILED', f'Cluster extensions failed to install: {type(e).__name__}'
+            physical_id = failed_physical_id(physical_id)
+    respond(event, context, status, data, physical_id, reason=reason)

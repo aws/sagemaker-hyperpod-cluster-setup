@@ -40,6 +40,13 @@ Parameters:
       - 'true'
       - 'false'
     Description: Whether the Inference Gateway is enabled ("true"/"false").
+  EnableDynamo:
+    Type: String
+    Default: 'true'
+    AllowedValues:
+      - 'true'
+      - 'false'
+    Description: Whether NVIDIA Dynamo is enabled ("true"/"false").
   CustomResourceS3Bucket:
     Type: String
     Default: aws-sagemaker-hyperpod-cluster-setup-us-east-2-prod
@@ -98,6 +105,10 @@ Resources:
                   - Fn::Sub: arn:aws:eks:${AWS::Region}:${AWS::AccountId}:cluster/${EKSClusterName}
                   - Fn::Sub: >-
                       arn:aws:eks:${AWS::Region}:${AWS::AccountId}:addon/${EKSClusterName}/amazon-sagemaker-hyperpod-inference/*
+              - Effect: Allow
+                Action:
+                  - eks:DescribeAddonVersions
+                Resource: '*'
           PolicyName:
             Fn::Sub: ${ResourceNamePrefix}-InferenceOperator-Addon-Access
     Metadata:
@@ -151,6 +162,9 @@ Resources:
             Ref: InferenceGatewayControllerRoleArn
           INFERENCE_GATEWAY_ENABLED:
             Ref: EnableInferenceGateway
+          DYNAMO_ENABLED:
+            Ref: EnableDynamo
+          DYNAMO_FEATURE_ENABLED: 'false'
       FunctionName:
         Fn::Sub:
           - inf-${ResourceNameShortPrefix}-addon-${UniqueSuffix}

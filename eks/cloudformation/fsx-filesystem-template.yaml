@@ -28,8 +28,8 @@ Parameters:
       - LZ4
     Description: Data compression type for the FSx file system (NONE, LZ4)
   FileSystemTypeVersion:
-    Type: Number
-    Default: 2.15
+    Type: String
+    Default: '2.15'
     Description: File system type version for the FSx file system
   StorageCapacity:
     Type: Number
@@ -39,6 +39,13 @@ Parameters:
     Type: String
     Default: PERSISTENT_2
     Description: Deployment type for the FSx file system
+  EfaEnabled:
+    Type: String
+    Default: 'false'
+    AllowedValues:
+      - 'true'
+      - 'false'
+    Description: Whether to enable EFA for the FSx file system
   FsxFileSystemId:
     Type: String
     Default: ''
@@ -57,6 +64,16 @@ Conditions:
     Fn::Equals:
       - Ref: DeploymentType
       - PERSISTENT_2
+  IsEfaEnabledCondition:
+    Fn::Equals:
+      - Ref: EfaEnabled
+      - 'true'
+  IsPersistentDeploymentTypeCondition:
+    Fn::Or:
+      - Fn::Equals:
+          - Ref: DeploymentType
+          - PERSISTENT_1
+      - Condition: IsPersistent2DeploymentTypeCondition
   CreateNewFsxCondition:
     Fn::Not:
       - Condition: UseFsxFileSystemIdCondition
@@ -211,7 +228,7 @@ Resources:
         Ref: FsxAvailabilityZoneId
       PrivateSubnetIds:
         Ref: PrivateSubnetIds
-      Timestamp: '1793817393412'
+      Timestamp: '1794007893330'
     Metadata:
       aws:cdk:path: FsxFilesystemCfnTemplate/FsxHelperResource
   FSxLustreFileSystem:
@@ -225,13 +242,21 @@ Resources:
           Ref: DataCompressionType
         DeploymentType:
           Ref: DeploymentType
+        EfaEnabled:
+          Fn::If:
+            - IsEfaEnabledCondition
+            - true
+            - Ref: AWS::NoValue
         MetadataConfiguration:
           Fn::If:
             - IsPersistent2DeploymentTypeCondition
             - Mode: AUTOMATIC
             - Ref: AWS::NoValue
         PerUnitStorageThroughput:
-          Ref: PerUnitStorageThroughput
+          Fn::If:
+            - IsPersistentDeploymentTypeCondition
+            - Ref: PerUnitStorageThroughput
+            - Ref: AWS::NoValue
       SecurityGroupIds:
         - Ref: SecurityGroupIds
       StorageCapacity:
