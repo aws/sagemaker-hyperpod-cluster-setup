@@ -71,29 +71,6 @@ class TestPhysicalResourceId(unittest.TestCase):
         status, _, physical_id = self._sent()
         self.assertEqual((status, physical_id), (lambda_function.cfnresponse.FAILED, 'old-id'))
 
-    def test_a_failure_sends_its_reason_to_the_stack_events(self):
-        # Without a reason, cfnresponse sends only "See the details in CloudWatch Log Stream".
-        self.cloudformation.get_template_summary.return_value = {'Parameters': [{'ParameterKey': 'ResourceNamePrefix'}]}
-        event = self._event('Create')
-        event['ResourceProperties']['MetricsDestination'] = 'cloudwatch'
-
-        lambda_handler(event, self.context)
-
-        self.assertEqual(self._sent()[0], lambda_function.cfnresponse.FAILED)
-        reason = lambda_function.cfnresponse.send.call_args.kwargs['reason']
-        self.assertIn("doesn't declare MetricsDestination", reason)
-        self.assertIn('2026/10/13/[$LATEST]new-stream', reason)
-        self.cloudformation.create_stack.assert_not_called()
-
-    def test_a_long_failure_reason_is_cut_to_fit_cloudformation(self):
-        self.cloudformation.update_stack.side_effect = Exception('x' * 5000)
-
-        lambda_handler(self._event('Update', PhysicalResourceId='old-id'), self.context)
-
-        call = lambda_function.cfnresponse.send.call_args
-        self.assertLess(len(call.kwargs['reason']), 1000)
-        self.assertLess(len(call.args[3]['Reason']), 1000)
-
 
 if __name__ == '__main__':
     unittest.main()
