@@ -164,7 +164,6 @@ Resources:
             Ref: CreateDefaultStorageClass
           MODELEXPRESS_REPO_URL: https://github.com/ai-dynamo/modelexpress.git
           MODELEXPRESS_REPO_REVISION: ac6d03a87a550c8188c3ed59f187b90d4f0554f5
-          MODELEXPRESS_CHART_SHA256: 3024f9fc45866fd8808f2c98f94c256ae8b678020ec209970755dbb23abbf3e0
           MODELEXPRESS_NAMESPACE: modelexpress
           MODELEXPRESS_RELEASE: modelexpress
           MODELEXPRESS_PROFILE_NAMESPACE: default

@@ -1,5 +1,4 @@
 import json
-import tempfile
 import unittest
 import os
 import sys
@@ -25,7 +24,6 @@ _BASE_ENV = {
     'CREATE_RIG': 'false',
     'MODELEXPRESS_REPO_URL': 'https://github.com/ai-dynamo/modelexpress.git',
     'MODELEXPRESS_REPO_REVISION': 'def456',
-    'MODELEXPRESS_CHART_SHA256': 'f00d',
     'MODELEXPRESS_NAMESPACE': 'modelexpress',
     'MODELEXPRESS_RELEASE': 'modelexpress',
     'MODELEXPRESS_PROFILE_NAMESPACE': 'default',
@@ -74,11 +72,6 @@ class TestHyperPodChart(unittest.TestCase):
 @patch('lambda_function.subprocess.run')
 class TestModelExpress(unittest.TestCase):
 
-    def setUp(self):
-        patcher = patch('lambda_function.verify_modelexpress_chart')
-        self.mock_verify = patcher.start()
-        self.addCleanup(patcher.stop)
-
     def test_install_disabled_skips_modelexpress(self, mock_run, _exists):
         from lambda_function import install_helm_chart
         with patch.dict(os.environ, _BASE_ENV, clear=True):
@@ -91,7 +84,6 @@ class TestModelExpress(unittest.TestCase):
         with patch.dict(os.environ, _ENABLED_ENV, clear=True):
             install_helm_chart()
         self.assertIn(['git', '-C', '/tmp/modelexpress', 'checkout', 'def456'], _cmds(mock_run))
-        self.mock_verify.assert_called_once_with('/tmp/modelexpress', '/tmp/modelexpress/helm')
         cmds = _modelexpress_installs(mock_run)
         self.assertEqual(len(cmds), 1)
         self.assertEqual(cmds[0][4], '/tmp/modelexpress/helm')
@@ -112,7 +104,6 @@ class TestModelExpress(unittest.TestCase):
         self.assertIn('name: modelexpress-non-gdr', manifest)
         self.assertIn('namespace: default', manifest)
         self.assertIn('MX_SERVER_ADDRESS: modelexpress.modelexpress.svc.cluster.local:8001', manifest)
-        self.assertNotIn('FI_EFA_USE_DEVICE_RDMA', manifest)
 
     def test_delete_uninstalls_existing_modelexpress(self, mock_run, _exists):
         from lambda_function import on_delete
@@ -151,94 +142,6 @@ def _kubectl_reads(*storage_classes):
             return Mock(returncode=0, stdout=json.dumps({'items': list(storage_classes)}))
         return Mock(returncode=0, stdout='')
     return run
-
-
-def _write(path, content):
-    os.makedirs(os.path.dirname(path), exist_ok=True)
-    with open(path, 'wb') as f:
-        f.write(content)
-
-
-class TestModelExpressChartChecksum(unittest.TestCase):
-
-    def setUp(self):
-        tmp = tempfile.TemporaryDirectory()
-        self.addCleanup(tmp.cleanup)
-        self.repo = tmp.name
-        self.chart = os.path.join(self.repo, 'helm')
-        _write(os.path.join(self.chart, 'Chart.yaml'), b'name: modelexpress\n')
-        _write(os.path.join(self.chart, 'templates', 'server.yaml'), b'kind: Deployment\n')
-
-    def _verify(self, head='def456', sha256=None):
-        from lambda_function import modelexpress_chart_sha256, verify_modelexpress_chart
-        env = {**_BASE_ENV, 'MODELEXPRESS_CHART_SHA256': sha256 or modelexpress_chart_sha256(self.chart)}
-        with patch.dict(os.environ, env, clear=True), \
-                patch('lambda_function.subprocess.run', return_value=Mock(stdout=head + '\n')) as mock_run:
-            verify_modelexpress_chart(self.repo, self.chart)
-        return mock_run
-
-    def test_matches_the_documented_shell_command(self):
-        from lambda_function import modelexpress_chart_sha256
-        import hashlib
-        # find . -type f -print0 | LC_ALL=C sort -z | xargs -0 sha256sum | sha256sum
-        listing = ''.join(
-            f'{hashlib.sha256(content).hexdigest()}  {path}\n'
-            for path, content in sorted([
-                ('./Chart.yaml', b'name: modelexpress\n'),
-                ('./templates/server.yaml', b'kind: Deployment\n'),
-            ])
-        )
-        self.assertEqual(modelexpress_chart_sha256(self.chart), hashlib.sha256(listing.encode()).hexdigest())
-
-    def test_passes_for_the_pinned_commit_and_checksum(self):
-        mock_run = self._verify()
-        mock_run.assert_called_once_with(
-            ['git', '-C', self.repo, 'rev-parse', 'HEAD'], check=True, capture_output=True, text=True,
-        )
-
-    def test_rejects_a_modified_file(self):
-        from lambda_function import modelexpress_chart_sha256
-        expected = modelexpress_chart_sha256(self.chart)
-        _write(os.path.join(self.chart, 'templates', 'server.yaml'), b'kind: DaemonSet\n')
-        with self.assertRaisesRegex(ValueError, 'checksum mismatch'):
-            self._verify(sha256=expected)
-
-    def test_rejects_an_added_file(self):
-        from lambda_function import modelexpress_chart_sha256
-        expected = modelexpress_chart_sha256(self.chart)
-        _write(os.path.join(self.chart, 'templates', 'extra.yaml'), b'kind: ClusterRoleBinding\n')
-        with self.assertRaisesRegex(ValueError, 'checksum mismatch'):
-            self._verify(sha256=expected)
-
-    def test_rejects_a_renamed_file(self):
-        from lambda_function import modelexpress_chart_sha256
-        expected = modelexpress_chart_sha256(self.chart)
-        os.rename(os.path.join(self.chart, 'templates', 'server.yaml'), os.path.join(self.chart, 'templates', 'srv.yaml'))
-        with self.assertRaisesRegex(ValueError, 'checksum mismatch'):
-            self._verify(sha256=expected)
-
-    def test_rejects_a_symlink(self):
-        os.symlink('/etc/passwd', os.path.join(self.chart, 'templates', 'link.yaml'))
-        with self.assertRaisesRegex(ValueError, 'symlink'):
-            self._verify(sha256='0' * 64)
-
-    def test_rejects_a_different_commit(self):
-        with self.assertRaisesRegex(ValueError, 'expected def456'):
-            self._verify(head='0123abc')
-
-
-@patch('lambda_function.os.path.exists', return_value=False)
-@patch('lambda_function.subprocess.run')
-class TestModelExpressInstallFailsClosed(unittest.TestCase):
-
-    def test_checksum_mismatch_stops_before_helm_install(self, mock_run, _exists):
-        from lambda_function import install_helm_chart
-        with patch.dict(os.environ, _ENABLED_ENV, clear=True), \
-                patch('lambda_function.verify_modelexpress_chart', side_effect=ValueError('checksum mismatch')):
-            with self.assertRaisesRegex(Exception, 'checksum mismatch'):
-                install_helm_chart()
-        self.assertEqual(_modelexpress_installs(mock_run), [])
-        self.assertEqual([c for c in _cmds(mock_run) if c[0] == 'kubectl'], [])
 
 
 @patch('lambda_function.subprocess.run')

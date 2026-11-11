@@ -195,12 +195,6 @@ Metadata:
           - RigSettings18
           - RigSettings19
           - RigSettings20
-      - Label:
-          default: Usage metrics
-        Parameters:
-          - SendUsageData
-          - TelemetryEndpoint
-          - TelemetryDeploymentId
     ParameterLabels:
       ResourceNamePrefix:
         default: Resource Name Prefix
@@ -1251,26 +1245,6 @@ Parameters:
       - 'true'
       - 'false'
     Description: Boolean to Create FSx for Lustre File System Stack
-  SendUsageData:
-    Type: String
-    Default: 'true'
-    AllowedValues:
-      - 'true'
-      - 'false'
-    Description: >-
-      Send cluster-setup outcome metrics: account ID, stack names, step statuses and timings, a failure category, and
-      the failing resource reason on a nested failure.
-  TelemetryEndpoint:
-    Type: String
-    Default: ''
-    Description: Endpoint that receives the metrics. Empty uses the AWS Solutions metrics endpoint.
-  TelemetryDeploymentId:
-    Type: String
-    Default: ''
-    Description: >-
-      Optional label sent unchanged as deployment_id in every metrics message, to tell deployments apart (e.g. a test
-      run ID). Do not put sensitive data here.
-    MaxLength: 128
 Rules:
   CloudWatchMetricsNeedObservabilityAddonVersion:
     RuleCondition:
@@ -1603,8 +1577,6 @@ Resources:
             - ','
             - - Ref: AvailabilityZoneIds
               - ',,,'
-    DependsOn:
-      - StackTelemetry
     Metadata:
       aws:cdk:path: MainEksBasedCfnTemplate/VPCStack
     Condition: CreateVPCStackCondition
@@ -1648,8 +1620,6 @@ Resources:
                 - VPCStack
                 - Outputs.NatGatewayIds
             - Ref: NatGatewayIds
-    DependsOn:
-      - StackTelemetry
     Metadata:
       aws:cdk:path: MainEksBasedCfnTemplate/PrivateSubnetStack
     Condition: CreatePrivateSubnetStackCondition
@@ -1674,8 +1644,6 @@ Resources:
             - Ref: VpcId
         SecurityGroupId:
           Ref: SecurityGroupId
-    DependsOn:
-      - StackTelemetry
     Metadata:
       aws:cdk:path: MainEksBasedCfnTemplate/SecurityGroupStack
     Condition: CreateSecurityGroupStackCondition
@@ -1716,8 +1684,6 @@ Resources:
                 - SecurityGroupStack
                 - Outputs.SecurityGroupId
             - Ref: SecurityGroupIds
-    DependsOn:
-      - StackTelemetry
     Metadata:
       aws:cdk:path: MainEksBasedCfnTemplate/EKSClusterStack
     Condition: CreateEKSClusterStackCondition
@@ -1733,8 +1699,6 @@ Resources:
       Parameters:
         ResourceNamePrefix:
           Ref: ResourceNamePrefix
-    DependsOn:
-      - StackTelemetry
     Metadata:
       aws:cdk:path: MainEksBasedCfnTemplate/S3BucketStack
     Condition: CreateS3BucketStackCondition
@@ -1771,8 +1735,6 @@ Resources:
             - Ref: EksPrivateRouteTableIds
         ResourceNamePrefix:
           Ref: ResourceNamePrefix
-    DependsOn:
-      - StackTelemetry
     Metadata:
       aws:cdk:path: MainEksBasedCfnTemplate/S3EndpointStack
     Condition: CreateS3EndpointStackCondition
@@ -1811,8 +1773,6 @@ Resources:
           Ref: HasGatedAccess
         ResourceNamePrefix:
           Ref: ResourceNamePrefix
-    DependsOn:
-      - StackTelemetry
     Metadata:
       aws:cdk:path: MainEksBasedCfnTemplate/RigEndpointStack
     Condition: CreateRigCondition
@@ -1835,8 +1795,6 @@ Resources:
                 - S3BucketStack
                 - Outputs.S3BucketName
             - Ref: S3BucketName
-    DependsOn:
-      - StackTelemetry
     Metadata:
       aws:cdk:path: MainEksBasedCfnTemplate/LifeCycleScriptStack
     Condition: CreateLifeCycleScriptStackCondition
@@ -1898,8 +1856,6 @@ Resources:
             - 'false'
         HasGatedAccess:
           Ref: HasGatedAccess
-    DependsOn:
-      - StackTelemetry
     Metadata:
       aws:cdk:path: MainEksBasedCfnTemplate/SageMakerIAMRoleStack
     Condition: CreateSageMakerIAMRoleStackCondition
@@ -1947,8 +1903,6 @@ Resources:
                 - EKSClusterStack
                 - Outputs.EKSClusterName
             - Ref: EKSClusterName
-    DependsOn:
-      - StackTelemetry
     Metadata:
       aws:cdk:path: MainEksBasedCfnTemplate/HelmChartStack
     Condition: CreateHelmChartStackCondition
@@ -2121,8 +2075,6 @@ Resources:
           Ref: TieredStorageConfig
         RestrictedInstanceGroupsConfig:
           Ref: RestrictedInstanceGroupsConfig
-    DependsOn:
-      - StackTelemetry
     Metadata:
       aws:cdk:path: MainEksBasedCfnTemplate/HyperPodParamClusterStack
     Condition: CreateHyperPodClusterStackCondition
@@ -2135,21 +2087,17 @@ Resources:
           - Outputs.HyperPodClusterTemplateUrlOutput
     DependsOn:
       - LifeCycleScriptWaitCondition
-      - StackTelemetry
     Metadata:
       aws:cdk:path: MainEksBasedCfnTemplate/HyperPodClusterStack
     Condition: CreateHyperPodClusterStackCondition
   LifeCycleScriptFallbackWaitHandle:
     Type: AWS::CloudFormation::WaitConditionHandle
-    DependsOn:
-      - StackTelemetry
     Metadata:
       aws:cdk:path: MainEksBasedCfnTemplate/LifeCycleScriptFallbackWaitHandle
   LifeCycleScriptWaitHandle:
     Type: AWS::CloudFormation::WaitConditionHandle
     DependsOn:
       - LifeCycleScriptStack
-      - StackTelemetry
     Metadata:
       aws:cdk:path: MainEksBasedCfnTemplate/LifeCycleScriptWaitHandle
     Condition: CreateLifeCycleScriptStackCondition
@@ -2163,8 +2111,6 @@ Resources:
           - Ref: LifeCycleScriptFallbackWaitHandle
       Timeout: '1'
       Count: 0
-    DependsOn:
-      - StackTelemetry
     Metadata:
       aws:cdk:path: MainEksBasedCfnTemplate/LifeCycleScriptWaitCondition
   CertManagerStack:
@@ -2193,7 +2139,6 @@ Resources:
             - Fn::Sub: aws-sagemaker-hyperpod-cluster-setup-${AWS::Region}-${Stage}
     DependsOn:
       - HyperPodClusterStack
-      - StackTelemetry
     Metadata:
       aws:cdk:path: MainEksBasedCfnTemplate/CertManagerStack
     Condition: InstallCertManagerCondition
@@ -2224,7 +2169,6 @@ Resources:
             - Fn::Sub: aws-sagemaker-hyperpod-cluster-setup-${AWS::Region}-${Stage}
     DependsOn:
       - EKSClusterStack
-      - StackTelemetry
     Metadata:
       aws:cdk:path: MainEksBasedCfnTemplate/TaskGovernanceClusterPolicyLambdaStack
     Condition: EnableTaskGovernanceClusterPolicyLambdaCondition
@@ -2262,7 +2206,6 @@ Resources:
     DependsOn:
       - EKSClusterStack
       - HyperPodClusterStack
-      - StackTelemetry
       - TaskGovernanceCertManagerWaitCondition
       - TaskGovernanceClusterPolicyLambdaStack
     Metadata:
@@ -2272,14 +2215,11 @@ Resources:
     Type: AWS::CloudFormation::WaitConditionHandle
     DependsOn:
       - CertManagerStack
-      - StackTelemetry
     Metadata:
       aws:cdk:path: MainEksBasedCfnTemplate/TaskGovernanceCertManagerWaitHandle
     Condition: InstallCertManagerCondition
   TaskGovernanceNoCertManagerWaitHandle:
     Type: AWS::CloudFormation::WaitConditionHandle
-    DependsOn:
-      - StackTelemetry
     Metadata:
       aws:cdk:path: MainEksBasedCfnTemplate/TaskGovernanceNoCertManagerWaitHandle
   TaskGovernanceCertManagerWaitCondition:
@@ -2292,8 +2232,6 @@ Resources:
           - Ref: TaskGovernanceNoCertManagerWaitHandle
       Timeout: '1'
       Count: 0
-    DependsOn:
-      - StackTelemetry
     Metadata:
       aws:cdk:path: MainEksBasedCfnTemplate/TaskGovernanceCertManagerWaitCondition
     Condition: EnableTaskGovernanceClusterPolicyCondition
@@ -2341,8 +2279,6 @@ Resources:
           Ref: FsxFileSystemId
         EfaEnabled:
           Ref: EfaEnabled
-    DependsOn:
-      - StackTelemetry
     Metadata:
       aws:cdk:path: MainEksBasedCfnTemplate/FsxFilesystemStack
     Condition: CreateFsxStackCondition
@@ -2402,8 +2338,6 @@ Resources:
           Ref: StorageCapacity
         DeploymentType:
           Ref: DeploymentType
-    DependsOn:
-      - StackTelemetry
     Metadata:
       aws:cdk:path: MainEksBasedCfnTemplate/FsxK8sIntegrationStack
     Condition: CreateFsxStackCondition
@@ -2429,8 +2363,6 @@ Resources:
                 - PrivateSubnetStack
                 - Outputs.PrivateSubnetIds
             - Ref: PrivateSubnetIds
-    DependsOn:
-      - StackTelemetry
     Metadata:
       aws:cdk:path: MainEksBasedCfnTemplate/PrivateSubnetTagsStack
     Condition: EnableHPInferenceHelmFeatureCondition
@@ -2504,7 +2436,6 @@ Resources:
     DependsOn:
       - CertManagerStack
       - HyperPodClusterStack
-      - StackTelemetry
     Metadata:
       aws:cdk:path: MainEksBasedCfnTemplate/InferenceOperatorMainStack
     Condition: EnableHPInferenceHelmFeatureCondition
@@ -2591,7 +2522,6 @@ Resources:
     DependsOn:
       - CertManagerStack
       - HyperPodClusterStack
-      - StackTelemetry
     Metadata:
       aws:cdk:path: MainEksBasedCfnTemplate/InferenceOperatorAddonStack
     Condition: EnableHPInferenceAddonFeatureCondition
@@ -2710,8 +2640,6 @@ Resources:
             Fn::Sub: ${ResourceNamePrefix}-CFNStack4
       RoleName:
         Fn::Sub: ${ResourceNamePrefix}-ObsRole
-    DependsOn:
-      - StackTelemetry
     Metadata:
       aws:cdk:path: MainEksBasedCfnTemplate/ObservabilityCustomResourceRole
     Condition: EnableObservabilityFeatureCondition
@@ -2749,7 +2677,6 @@ Resources:
       Timeout: 900
     DependsOn:
       - ObservabilityCustomResourceRole
-      - StackTelemetry
     Metadata:
       aws:cdk:path: MainEksBasedCfnTemplate/ObservabilityCustomResourceFunction
     Condition: EnableObservabilityFeatureCondition
@@ -2871,7 +2798,6 @@ Resources:
     DependsOn:
       - HyperPodClusterStack
       - ObservabilityCustomResourceFunction
-      - StackTelemetry
     Metadata:
       aws:cdk:path: MainEksBasedCfnTemplate/ObservabilityCustomResource
     Condition: EnableObservabilityFeatureCondition
@@ -2948,7 +2874,6 @@ Resources:
             - Fn::Sub: aws-sagemaker-hyperpod-cluster-setup-${AWS::Region}-${Stage}
     DependsOn:
       - HyperPodClusterStack
-      - StackTelemetry
     Metadata:
       aws:cdk:path: MainEksBasedCfnTemplate/DataScientistSetupStack
     Condition: DataScientistSetupCondition
@@ -2978,7 +2903,6 @@ Resources:
     DependsOn:
       - CertManagerStack
       - HyperPodClusterStack
-      - StackTelemetry
     Metadata:
       aws:cdk:path: MainEksBasedCfnTemplate/HPTrainingOperatorMainStack
     Condition: EnableHPTrainingOperatorFeatureCondition
@@ -3025,223 +2949,9 @@ Resources:
     DependsOn:
       - EKSClusterStack
       - HyperPodClusterStack
-      - StackTelemetry
     Metadata:
       aws:cdk:path: MainEksBasedCfnTemplate/TieredStorageUpdateStack
     Condition: TieredKVCacheConfigCondition
-  StackTelemetryRole:
-    Type: AWS::IAM::Role
-    Properties:
-      AssumeRolePolicyDocument:
-        Version: 2012-10-17
-        Statement:
-          - Effect: Allow
-            Principal:
-              Service: lambda.amazonaws.com
-            Action: sts:AssumeRole
-      ManagedPolicyArns:
-        - Fn::Sub: arn:${AWS::Partition}:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
-      Policies:
-        - PolicyName: ReadThisStackEvents
-          PolicyDocument:
-            Version: 2012-10-17
-            Statement:
-              - Effect: Allow
-                Action:
-                  - cloudformation:DescribeStacks
-                  - cloudformation:DescribeStackEvents
-                Resource:
-                  - Fn::Sub: arn:${AWS::Partition}:cloudformation:${AWS::Region}:${AWS::AccountId}:stack/${AWS::StackName}/*
-                  - Fn::Sub: arn:${AWS::Partition}:cloudformation:${AWS::Region}:${AWS::AccountId}:stack/${AWS::StackName}-*/*
-    Metadata:
-      aws:cdk:path: MainEksBasedCfnTemplate/StackTelemetryRole
-  StackTelemetryFunction:
-    Type: AWS::Lambda::Function
-    Properties:
-      Runtime: python3.12
-      Handler: lambda_function.lambda_handler
-      Timeout: 300
-      MemorySize: 256
-      Role:
-        Fn::GetAtt:
-          - StackTelemetryRole
-          - Arn
-      Code:
-        S3Bucket:
-          Fn::If:
-            - CustomBucketCondition
-            - Ref: CustomBucketName
-            - Fn::Sub: aws-sagemaker-hyperpod-cluster-setup-${AWS::Region}-${Stage}
-        S3Key:
-          Fn::Sub: resources/artifacts/stack-telemetry-lambda-function.zip
-      Environment:
-        Variables:
-          TELEMETRY_SOLUTION_ID: SO0380
-          TELEMETRY_SOLUTION_VERSION: latest
-          TELEMETRY_UUID:
-            Fn::Select:
-              - 2
-              - Fn::Split:
-                  - /
-                  - Ref: AWS::StackId
-          TELEMETRY_ACCOUNT_ID:
-            Ref: AWS::AccountId
-          TELEMETRY_ENDPOINT:
-            Ref: TelemetryEndpoint
-          ORCHESTRATOR: EKS
-          TELEMETRY_STACK_PARAMETERS: >-
-            Stage,EnableHPInferenceFeature,EnableHPInferenceAddonFeature,EnableObservabilityFeature,EnableHPTrainingOperatorFeature,HasGatedAccess,EnableInferenceGateway,EnableDynamo,NodeRecovery,NodeProvisioningMode,AutoScalerType,FairShare,IdleResourceSharing,DataCompressionType,EfaEnabled,MetricsDestination,HostProfiling,TrainingMetricLevel,TaskGovernanceMetricLevel,ClusterMetricLevel,NodeMetricLevel,AcceleratedComputeMetricLevel,ScalingMetricLevel,NetworkMetricLevel,RayMetricLevel,Logging,CreateHyperPodObservabilityRole,CreateGrafanaRole,CreatePrometheusWorkspace,CreateGrafanaWorkspace,CreateVPCStack,CreateSecurityGroupStack,CreateEKSClusterStack,CreateS3BucketStack,CreateS3EndpointStack,CreateLifeCycleScriptStack,CreateSageMakerIAMRoleStack,CreateHelmChartStack,CreateHyperPodClusterStack,CreateTaskGovernanceClusterPolicyStack,CreateFsxStack
-          TELEMETRY_DEPLOYMENT_ID:
-            Ref: TelemetryDeploymentId
-          TELEMETRY_ROOT_STACK_KEY: MAIN_STACK
-          TELEMETRY_STACK_KEYS: >-
-            VPCStack=MAIN_STACK_VPC,PrivateSubnetStack=MAIN_STACK_PRIVATE_SUBNET,SecurityGroupStack=MAIN_STACK_SECURITY_GROUP,EKSClusterStack=MAIN_STACK_EKS_CLUSTER,S3BucketStack=MAIN_STACK_S3_BUCKET,S3EndpointStack=MAIN_STACK_S3_ENDPOINT,RigEndpointStack=MAIN_STACK_RIG_ENDPOINT,LifeCycleScriptStack=MAIN_STACK_LIFECYCLE_SCRIPT,SageMakerIAMRoleStack=MAIN_STACK_SAGEMAKER_IAM_ROLE,HelmChartStack=MAIN_STACK_HELM_CHART,HyperPodParamClusterStack=MAIN_STACK_HYPERPOD_PARAM_CLUSTER,HyperPodClusterStack=MAIN_STACK_HYPERPOD_CLUSTER,CertManagerStack=MAIN_STACK_CERT_MANAGER,TaskGovernanceClusterPolicyLambdaStack=MAIN_STACK_TASK_GOVERNANCE_POLICY_LAMBDA,TaskGovernanceClusterPolicyStack=MAIN_STACK_TASK_GOVERNANCE_POLICY,FsxFilesystemStack=MAIN_STACK_FSX_FILESYSTEM,FsxK8sIntegrationStack=MAIN_STACK_FSX_K8S_INTEGRATION,PrivateSubnetTagsStack=MAIN_STACK_PRIVATE_SUBNET_TAGS,InferenceOperatorMainStack=MAIN_STACK_INFERENCE_OPERATOR,InferenceOperatorAddonStack=MAIN_STACK_INFERENCE_OPERATOR_ADDON,DataScientistSetupStack=MAIN_STACK_DATA_SCIENTIST_SETUP,HPTrainingOperatorMainStack=MAIN_STACK_TRAINING_OPERATOR,TieredStorageUpdateStack=MAIN_STACK_TIERED_STORAGE_UPDATE
-    Metadata:
-      aws:cdk:path: MainEksBasedCfnTemplate/StackTelemetryFunction
-  StackTelemetry:
-    Type: Custom::StackTelemetry
-    Properties:
-      ServiceToken:
-        Fn::GetAtt:
-          - StackTelemetryFunction
-          - Arn
-      Phase: Start
-      Enabled:
-        Ref: SendUsageData
-    Metadata:
-      aws:cdk:path: MainEksBasedCfnTemplate/StackTelemetry
-  StackTelemetryEnd:
-    Type: Custom::StackTelemetry
-    Properties:
-      ServiceToken:
-        Fn::GetAtt:
-          - StackTelemetryFunction
-          - Arn
-      Phase: End
-      Enabled:
-        Ref: SendUsageData
-      WaitFor:
-        - Fn::If:
-            - CreateVPCStackCondition
-            - Ref: VPCStack
-            - ''
-        - Fn::If:
-            - CreatePrivateSubnetStackCondition
-            - Ref: PrivateSubnetStack
-            - ''
-        - Fn::If:
-            - CreateSecurityGroupStackCondition
-            - Ref: SecurityGroupStack
-            - ''
-        - Fn::If:
-            - CreateEKSClusterStackCondition
-            - Ref: EKSClusterStack
-            - ''
-        - Fn::If:
-            - CreateS3BucketStackCondition
-            - Ref: S3BucketStack
-            - ''
-        - Fn::If:
-            - CreateS3EndpointStackCondition
-            - Ref: S3EndpointStack
-            - ''
-        - Fn::If:
-            - CreateRigCondition
-            - Ref: RigEndpointStack
-            - ''
-        - Fn::If:
-            - CreateLifeCycleScriptStackCondition
-            - Ref: LifeCycleScriptStack
-            - ''
-        - Fn::If:
-            - CreateSageMakerIAMRoleStackCondition
-            - Ref: SageMakerIAMRoleStack
-            - ''
-        - Fn::If:
-            - CreateHelmChartStackCondition
-            - Ref: HelmChartStack
-            - ''
-        - Fn::If:
-            - CreateHyperPodClusterStackCondition
-            - Ref: HyperPodParamClusterStack
-            - ''
-        - Fn::If:
-            - CreateHyperPodClusterStackCondition
-            - Ref: HyperPodClusterStack
-            - ''
-        - Ref: LifeCycleScriptFallbackWaitHandle
-        - Fn::If:
-            - CreateLifeCycleScriptStackCondition
-            - Ref: LifeCycleScriptWaitHandle
-            - ''
-        - Ref: LifeCycleScriptWaitCondition
-        - Fn::If:
-            - InstallCertManagerCondition
-            - Ref: CertManagerStack
-            - ''
-        - Fn::If:
-            - EnableTaskGovernanceClusterPolicyLambdaCondition
-            - Ref: TaskGovernanceClusterPolicyLambdaStack
-            - ''
-        - Fn::If:
-            - EnableTaskGovernanceClusterPolicyCondition
-            - Ref: TaskGovernanceClusterPolicyStack
-            - ''
-        - Fn::If:
-            - InstallCertManagerCondition
-            - Ref: TaskGovernanceCertManagerWaitHandle
-            - ''
-        - Ref: TaskGovernanceNoCertManagerWaitHandle
-        - Fn::If:
-            - EnableTaskGovernanceClusterPolicyCondition
-            - Ref: TaskGovernanceCertManagerWaitCondition
-            - ''
-        - Fn::If:
-            - CreateFsxStackCondition
-            - Ref: FsxFilesystemStack
-            - ''
-        - Fn::If:
-            - CreateFsxStackCondition
-            - Ref: FsxK8sIntegrationStack
-            - ''
-        - Fn::If:
-            - EnableHPInferenceHelmFeatureCondition
-            - Ref: PrivateSubnetTagsStack
-            - ''
-        - Fn::If:
-            - EnableHPInferenceHelmFeatureCondition
-            - Ref: InferenceOperatorMainStack
-            - ''
-        - Fn::If:
-            - EnableHPInferenceAddonFeatureCondition
-            - Ref: InferenceOperatorAddonStack
-            - ''
-        - Fn::If:
-            - EnableObservabilityFeatureCondition
-            - Ref: ObservabilityCustomResourceRole
-            - ''
-        - Fn::If:
-            - EnableObservabilityFeatureCondition
-            - Ref: ObservabilityCustomResourceFunction
-            - ''
-        - Fn::If:
-            - EnableObservabilityFeatureCondition
-            - Ref: ObservabilityCustomResource
-            - ''
-        - Fn::If:
-            - DataScientistSetupCondition
-            - Ref: DataScientistSetupStack
-            - ''
-        - Fn::If:
-            - EnableHPTrainingOperatorFeatureCondition
-            - Ref: HPTrainingOperatorMainStack
-            - ''
-        - Fn::If:
-            - TieredKVCacheConfigCondition
-            - Ref: TieredStorageUpdateStack
-            - ''
-    Metadata:
-      aws:cdk:path: MainEksBasedCfnTemplate/StackTelemetryEnd
 Outputs:
   TaskGovernanceClusterPolicyLambdaArn:
     Value:
