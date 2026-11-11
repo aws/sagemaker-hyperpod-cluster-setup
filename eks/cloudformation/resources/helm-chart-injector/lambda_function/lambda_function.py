@@ -1,4 +1,5 @@
 import boto3
+import hashlib
 import json
 import os
 import subprocess
@@ -161,7 +162,9 @@ MODELEXPRESS_PROFILE_COMMON = {
     'MX_NIXL_BACKEND': 'LIBFABRIC',
     'MX_RDMA_NIC_PIN': 'auto',
     'FI_PROVIDER': 'efa',
-    'FI_EFA_USE_DEVICE_RDMA': '1',
+    # FI_EFA_USE_DEVICE_RDMA is left unset: libfabric then uses EFA device RDMA when the
+    # instance supports it, and emulates it otherwise. Setting it to 1 aborts the
+    # application on instances without device RDMA (e.g. g5).
     'FI_EFA_ENABLE_SHM_TRANSFER': '0',
     'FI_LOG_LEVEL': 'warn',
     'NIXL_LOG_LEVEL': 'WARN',
@@ -207,6 +210,50 @@ def modelexpress_profiles_manifest(namespace):
     return yaml.dump_all(configmaps, default_flow_style=False)
 
 
+def modelexpress_chart_sha256(chart_dir):
+    """
+    Return the SHA-256 of every file under chart_dir. Matches, run from inside the chart
+    directory:
+        find . -type f -print0 | LC_ALL=C sort -z | xargs -0 sha256sum | sha256sum
+    Symlinks are rejected, since Helm would follow them to content outside the hash.
+    """
+    entries = []
+    for root, dirs, files in os.walk(chart_dir):
+        for name in dirs + files:
+            path = os.path.join(root, name)
+            if os.path.islink(path):
+                raise ValueError(f"ModelExpress chart contains a symlink: {path}")
+        for name in files:
+            path = os.path.join(root, name)
+            with open(path, 'rb') as f:
+                file_digest = hashlib.sha256(f.read()).hexdigest()
+            relative = os.path.relpath(path, chart_dir).replace(os.sep, '/')
+            entries.append((f'./{relative}'.encode(), file_digest))
+    entries.sort()
+    listing = b''.join(f'{digest}  '.encode() + path + b'\n' for path, digest in entries)
+    return hashlib.sha256(listing).hexdigest()
+
+
+def verify_modelexpress_chart(repo_dir, chart_dir):
+    """
+    Fail unless the checkout is the pinned commit and the chart matches the pinned SHA-256.
+    """
+    expected_revision = os.environ['MODELEXPRESS_REPO_REVISION']
+    head = subprocess.run(
+        ['git', '-C', repo_dir, 'rev-parse', 'HEAD'], check=True, capture_output=True, text=True,
+    ).stdout.strip()
+    if head != expected_revision:
+        raise ValueError(f"ModelExpress checkout is at {head}, expected {expected_revision}")
+
+    expected_sha256 = os.environ['MODELEXPRESS_CHART_SHA256']
+    actual_sha256 = modelexpress_chart_sha256(chart_dir)
+    if actual_sha256 != expected_sha256:
+        raise ValueError(
+            f"ModelExpress chart checksum mismatch: got {actual_sha256}, expected {expected_sha256}"
+        )
+    print(f"ModelExpress chart verified: commit {head}, sha256 {actual_sha256}")
+
+
 def install_modelexpress():
     """
     Install or upgrade the ModelExpress server from the upstream ai-dynamo/modelexpress
@@ -218,6 +265,7 @@ def install_modelexpress():
         required_env_vars = [
             'MODELEXPRESS_REPO_URL',
             'MODELEXPRESS_REPO_REVISION',
+            'MODELEXPRESS_CHART_SHA256',
             'MODELEXPRESS_NAMESPACE',
             'MODELEXPRESS_RELEASE',
             'MODELEXPRESS_PROFILE_NAMESPACE',
@@ -231,13 +279,15 @@ def install_modelexpress():
         subprocess.run(['rm', '-rf', repo_dir], check=True)
         subprocess.run(['git', 'clone', os.environ['MODELEXPRESS_REPO_URL'], repo_dir], check=True)
         subprocess.run(['git', '-C', repo_dir, 'checkout', os.environ['MODELEXPRESS_REPO_REVISION']], check=True)
+        chart_dir = f'{repo_dir}/helm'
+        verify_modelexpress_chart(repo_dir, chart_dir)
 
         # Kubernetes metadata backend needs no Redis; the server keeps no state on disk,
         # so the chart's default PVC is not needed.
         subprocess.run([
             'helm', 'upgrade', '--install',
             os.environ['MODELEXPRESS_RELEASE'],
-            f'{repo_dir}/helm',
+            chart_dir,
             '--namespace', os.environ['MODELEXPRESS_NAMESPACE'],
             '--create-namespace',
             '--set', 'env.MX_METADATA_BACKEND=kubernetes',

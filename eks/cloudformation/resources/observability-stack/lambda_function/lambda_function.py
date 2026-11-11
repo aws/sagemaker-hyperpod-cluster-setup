@@ -37,37 +37,78 @@ def lambda_handler(event, context):
 
     except Exception as e:
         print(f"Error: {str(e)}")
+        # The reason goes in both the data and the stack event; the whole response must stay under 4 KB, or
+        # CloudFormation shows only "Response object is too long".
+        reason = failure_reason(e, context)
         cfnresponse.send(
             event,
             context,
             cfnresponse.FAILED,
             {
                 "Status": "FAILED",
-                "Reason": str(e)
+                "Reason": reason
             },
-            event.get('PhysicalResourceId')
+            event.get('PhysicalResourceId'),
+            reason=reason
         )
  
  
+def failure_reason(error, context):
+    """The reason for a FAILED response, shown in the stack events: the error and the log stream, within CloudFormation's limit."""
+    return f"{str(error)[:800]} (log stream: {getattr(context, 'log_stream_name', '-')})"
+
 OPTIONAL_PARAMETERS = ['HyperPodClusterName', 'MetricsDestination', 'ObservabilityAddonVersion', 'HostProfiling']
 
-def optional_parameters(cfn, template_url, props):
+def rolling_back(cfn, event):
+    """Whether this Update is CloudFormation rolling the parent stack back to the previous properties."""
+    try:
+        status = cfn.describe_stacks(StackName=event['StackId'])['Stacks'][0].get('StackStatus', '')
+    except Exception as e:
+        print(f"Could not read the parent stack's status: {str(e)}")
+        return False
+    return status.endswith('ROLLBACK_IN_PROGRESS')
+
+def optional_parameters(cfn, template_url, props, event=None):
     """
     Parameters newer than some observability templates, passed only when the template declares them: CloudFormation
     rejects an undeclared parameter, e.g. when StackTemplateUrl points at an older template in a customer bucket.
     If the template's parameters can't be read, they are left out (without the cluster name, the Grafana Lambda
-    only skips the CloudWatch alert rules; without MetricsDestination, the template's default is AMP; without
-    ObservabilityAddonVersion, EKS installs its default add-on version; without HostProfiling, the template's default
-    leaves host profiling off).
+    only skips the CloudWatch alert rules; without ObservabilityAddonVersion, EKS installs its default add-on version;
+    without HostProfiling, the template's default leaves host profiling off).
+    MetricsDestination cloudwatch is the exception: without it the template's default is AMP, which would create an
+    Amazon Managed Service for Prometheus workspace the customer didn't choose, so the request fails instead. Two
+    Updates are exceptions, where a template that doesn't declare it is used as before: one that keeps both
+    MetricsDestination and the template URL (the nested stack was already deployed from that template without it, so
+    nothing changes), and a rollback (it restores what was deployed; failing it would leave the parent stack in
+    UPDATE_ROLLBACK_FAILED). A template that can't be read always fails: it may declare MetricsDestination, and leaving
+    it out would move a CloudWatch nested stack to AMP.
     """
     keys = [key for key in OPTIONAL_PARAMETERS if props.get(key)]
     if not keys:
         return []
+    cloudwatch = props.get('MetricsDestination') == 'cloudwatch'
     try:
         declared = {p['ParameterKey'] for p in cfn.get_template_summary(TemplateURL=template_url).get('Parameters', [])}
     except Exception as e:
+        if cloudwatch:
+            raise RuntimeError(
+                f"MetricsDestination is cloudwatch, but the observability template's parameters couldn't be read "
+                f"({str(e)}), so the stack can't check that the template accepts it. Retry the stack operation."
+            ) from e
         print(f"Could not read the observability template's parameters: {str(e)}")
         return []
+    if cloudwatch and 'MetricsDestination' not in declared:
+        old_props = (event or {}).get('OldResourceProperties') or {}
+        unchanged = old_props.get('MetricsDestination') == 'cloudwatch' and \
+            old_props.get('StackTemplateUrl') == template_url
+        if not (event and (unchanged or rolling_back(cfn, event))):
+            raise RuntimeError(
+                f"MetricsDestination is cloudwatch, but the observability template at {template_url} doesn't declare "
+                f"MetricsDestination, so it would send metrics to Amazon Managed Service for Prometheus. Use the "
+                f"observability template from this release, or set MetricsDestination to amp."
+            )
+        print(f"The observability template at {template_url} doesn't declare MetricsDestination; it is left out, "
+              f"as in the deployed stack.")
     return [{'ParameterKey': key, 'ParameterValue': props[key]} for key in keys if key in declared]
 
 def on_create(event):
@@ -355,7 +396,7 @@ def on_update(event):
                 'ParameterKey': 'ExecutionRoleName',
                 'ParameterValue': props.get('ExecutionRoleName', '')
                 },
-            ] + optional_parameters(cfn, template_url, props),
+            ] + optional_parameters(cfn, template_url, props, event),
             Capabilities=['CAPABILITY_IAM', 'CAPABILITY_NAMED_IAM', 'CAPABILITY_AUTO_EXPAND'],
         )
         print(f"Stack creation initiated: {response['StackId']}")

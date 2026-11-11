@@ -23,3 +23,4 @@ cd ../observability-stack && ./generate-observability-stack-lambda-zip.sh
 cd ../observability-stack && ./generate-observability-stack-lambda-zip.sh
 cd ../cluster-policy && ./generate-cluster-policy-lambda-zip.sh
 cd ../task-governance-addon-migration && ./generate-task-governance-migration-lambda-zip.sh
+cd ../stack-telemetry && ./generate-stack-telemetry-lambda-zip.sh
