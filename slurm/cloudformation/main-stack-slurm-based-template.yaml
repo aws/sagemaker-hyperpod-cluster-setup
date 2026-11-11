@@ -98,6 +98,12 @@ Metadata:
           - InstanceGroupSettings18
           - InstanceGroupSettings19
           - InstanceGroupSettings20
+      - Label:
+          default: Usage metrics
+        Parameters:
+          - SendUsageData
+          - TelemetryEndpoint
+          - TelemetryDeploymentId
     ParameterLabels:
       ResourceNamePrefix:
         default: Resource Name Prefix
@@ -694,6 +700,26 @@ Parameters:
       configuration. Setting it in an update of an existing stack is not supported: it would install them on the
       existing cluster and remove the node agent's config writer. Install or change extensions from the cluster's
       Extensions tab.
+  SendUsageData:
+    Type: String
+    Default: 'true'
+    AllowedValues:
+      - 'true'
+      - 'false'
+    Description: >-
+      Send cluster-setup outcome metrics: account ID, stack names, step statuses and timings, a failure category, and
+      the failing resource reason on a nested failure.
+  TelemetryEndpoint:
+    Type: String
+    Default: ''
+    Description: Endpoint that receives the metrics. Empty uses the AWS Solutions metrics endpoint.
+  TelemetryDeploymentId:
+    Type: String
+    Default: ''
+    Description: >-
+      Optional label sent unchanged as deployment_id in every metrics message, to tell deployments apart (e.g. a test
+      run ID). Do not put sensitive data here.
+    MaxLength: 128
 Conditions:
   CreateVPCStackCondition:
     Fn::Equals:
@@ -816,6 +842,8 @@ Resources:
                   - ','
                   - Ref: SubnetCIDRs
               - ',,,,'
+    DependsOn:
+      - StackTelemetry
     Metadata:
       aws:cdk:path: MainSlurmBasedCfnTemplate/VPCStack
     Condition: CreateVPCStackCondition
@@ -839,6 +867,8 @@ Resources:
                 - VPCStack
                 - Outputs.VpcId
             - Ref: VpcId
+    DependsOn:
+      - StackTelemetry
     Metadata:
       aws:cdk:path: MainSlurmBasedCfnTemplate/SecurityGroupStack
     Condition: CreateSecurityGroupStackCondition
@@ -895,6 +925,8 @@ Resources:
             - CreateSageMakerIAMRoleStackCondition
             - ''
             - Ref: SageMakerIAMRoleName
+    DependsOn:
+      - StackTelemetry
     Metadata:
       aws:cdk:path: MainSlurmBasedCfnTemplate/AccountingDatabaseStack
     Condition: CreateAccountingDatabaseCondition
@@ -918,6 +950,8 @@ Resources:
             - 'false'
         S3BucketName:
           Ref: S3BucketName
+    DependsOn:
+      - StackTelemetry
     Metadata:
       aws:cdk:path: MainSlurmBasedCfnTemplate/LifeCycleScriptStack
     Condition: CreateLifeCycleScriptStackCondition
@@ -933,6 +967,8 @@ Resources:
       Parameters:
         ResourceNamePrefix:
           Ref: ResourceNamePrefix
+    DependsOn:
+      - StackTelemetry
     Metadata:
       aws:cdk:path: MainSlurmBasedCfnTemplate/S3BucketStack
     Condition: CreateS3BucketOnlyCondition
@@ -967,6 +1003,8 @@ Resources:
                 - AccountingDatabaseStack
                 - Outputs.AccountingDatabaseSecretArn
             - Ref: AccountingDatabaseSecretArn
+    DependsOn:
+      - StackTelemetry
     Metadata:
       aws:cdk:path: MainSlurmBasedCfnTemplate/IamRoleStack
     Condition: CreateSageMakerIAMRoleStackCondition
@@ -1014,6 +1052,8 @@ Resources:
           Ref: FsxFileSystemId
         EfaEnabled:
           Ref: EfaEnabled
+    DependsOn:
+      - StackTelemetry
     Metadata:
       aws:cdk:path: MainSlurmBasedCfnTemplate/FsxStack
     Condition: CreateFsxStackCondition
@@ -1053,6 +1093,8 @@ Resources:
           Ref: OpenZfsStorageCapacity
         OpenZfsThroughputCapacity:
           Ref: OpenZfsThroughputCapacity
+    DependsOn:
+      - StackTelemetry
     Metadata:
       aws:cdk:path: MainSlurmBasedCfnTemplate/OpenZfsStack
     Condition: CreateOpenZfsStackCondition
@@ -1214,6 +1256,8 @@ Resources:
             - ''
         OpenZfsMountPath:
           Ref: OpenZfsMountPath
+    DependsOn:
+      - StackTelemetry
     Metadata:
       aws:cdk:path: MainSlurmBasedCfnTemplate/HyperPodParamClusterStack
     Condition: CreateHyperPodClusterStackCondition
@@ -1224,6 +1268,8 @@ Resources:
         Fn::GetAtt:
           - HyperPodParamClusterStack
           - Outputs.HyperPodClusterTemplateUrlOutput
+    DependsOn:
+      - StackTelemetry
     Metadata:
       aws:cdk:path: MainSlurmBasedCfnTemplate/HyperPodClusterStack
     Condition: CreateHyperPodClusterStackCondition
@@ -1330,6 +1376,8 @@ Resources:
             - 'false'
         HyperPodClusterName:
           Ref: HyperPodClusterName
+    DependsOn:
+      - StackTelemetry
     Metadata:
       aws:cdk:path: MainSlurmBasedCfnTemplate/ObservabilityStack
     Condition: NestedObservabilityStackCondition
@@ -1360,6 +1408,8 @@ Resources:
                 Resource:
                   - Fn::Sub: arn:${AWS::Partition}:sagemaker:${AWS::Region}:${AWS::AccountId}:cluster/*
                   - Fn::Sub: arn:${AWS::Partition}:sagemaker:${AWS::Region}:${AWS::AccountId}:extension/*
+    DependsOn:
+      - StackTelemetry
     Metadata:
       aws:cdk:path: MainSlurmBasedCfnTemplate/ClusterExtensionsRole
     Condition: ClusterExtensionsCondition
@@ -1385,6 +1435,8 @@ Resources:
       Tags:
         - Key: SageMaker
           Value: 'true'
+    DependsOn:
+      - StackTelemetry
     Metadata:
       aws:cdk:path: MainSlurmBasedCfnTemplate/ClusterExtensionsFunction
     Condition: ClusterExtensionsCondition
@@ -1421,6 +1473,8 @@ Resources:
           - ObservabilitySetupStackCondition
           - 'true'
           - Ref: AWS::NoValue
+    DependsOn:
+      - StackTelemetry
     Metadata:
       aws:cdk:path: MainSlurmBasedCfnTemplate/ClusterExtensionsInstall
     Condition: ClusterExtensionsCondition
@@ -1469,6 +1523,8 @@ Resources:
                                               - IamRoleStack
                                               - Outputs.AmazonSagemakerClusterExecutionRoleName
                                           - Ref: SageMakerIAMRoleName
+    DependsOn:
+      - StackTelemetry
     Metadata:
       aws:cdk:path: MainSlurmBasedCfnTemplate/ObservabilitySetupStackRolePolicies
     Condition: ObservabilitySetupStackCondition
@@ -1517,6 +1573,8 @@ Resources:
                                               - IamRoleStack
                                               - Outputs.AmazonSagemakerClusterExecutionRoleName
                                           - Ref: SageMakerIAMRoleName
+    DependsOn:
+      - StackTelemetry
     Metadata:
       aws:cdk:path: MainSlurmBasedCfnTemplate/ObservabilitySetupStackPathRolePolicies
     Condition: ObservabilitySetupStackCondition
@@ -1680,6 +1738,8 @@ Resources:
             Effect: Allow
             Action: lambda:GetAccountSettings
             Resource: '*'
+    DependsOn:
+      - StackTelemetry
     Metadata:
       aws:cdk:path: MainSlurmBasedCfnTemplate/ObservabilitySetupStackResourcePolicies
     Condition: ObservabilitySetupStackCondition
@@ -1922,6 +1982,8 @@ Resources:
                           - Fn::Split:
                               - .
                               - Ref: ResourceNamePrefix
+    DependsOn:
+      - StackTelemetry
     Metadata:
       aws:cdk:path: MainSlurmBasedCfnTemplate/ObservabilitySetupStackRole
     Condition: ObservabilitySetupStackCondition
@@ -1965,6 +2027,8 @@ Resources:
       Tags:
         - Key: SageMaker
           Value: 'true'
+    DependsOn:
+      - StackTelemetry
     Metadata:
       aws:cdk:path: MainSlurmBasedCfnTemplate/ObservabilitySetupStackFunction
     Condition: ObservabilitySetupStackCondition
@@ -2090,9 +2154,184 @@ Resources:
           Ref: JobMetricLevel
     DependsOn:
       - HyperPodClusterStack
+      - StackTelemetry
     Metadata:
       aws:cdk:path: MainSlurmBasedCfnTemplate/ObservabilitySetupStack
     Condition: ObservabilitySetupStackCondition
+  StackTelemetryRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - Fn::Sub: arn:${AWS::Partition}:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        - PolicyName: ReadThisStackEvents
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action:
+                  - cloudformation:DescribeStacks
+                  - cloudformation:DescribeStackEvents
+                Resource:
+                  - Fn::Sub: arn:${AWS::Partition}:cloudformation:${AWS::Region}:${AWS::AccountId}:stack/${AWS::StackName}/*
+                  - Fn::Sub: arn:${AWS::Partition}:cloudformation:${AWS::Region}:${AWS::AccountId}:stack/${AWS::StackName}-*/*
+    Metadata:
+      aws:cdk:path: MainSlurmBasedCfnTemplate/StackTelemetryRole
+  StackTelemetryFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      Runtime: python3.12
+      Handler: lambda_function.lambda_handler
+      Timeout: 300
+      MemorySize: 256
+      Role:
+        Fn::GetAtt:
+          - StackTelemetryRole
+          - Arn
+      Code:
+        S3Bucket:
+          Fn::If:
+            - CustomBucketCondition
+            - Ref: CustomBucketName
+            - Fn::Sub: aws-sagemaker-hyperpod-cluster-setup-${AWS::Region}-${Stage}
+        S3Key:
+          Fn::Sub: resources/artifacts/stack-telemetry-lambda-function.zip
+      Environment:
+        Variables:
+          TELEMETRY_SOLUTION_ID: SO0380
+          TELEMETRY_SOLUTION_VERSION: latest
+          TELEMETRY_UUID:
+            Fn::Select:
+              - 2
+              - Fn::Split:
+                  - /
+                  - Ref: AWS::StackId
+          TELEMETRY_ACCOUNT_ID:
+            Ref: AWS::AccountId
+          TELEMETRY_ENDPOINT:
+            Ref: TelemetryEndpoint
+          ORCHESTRATOR: Slurm
+          TELEMETRY_STACK_PARAMETERS: >-
+            Stage,NodeRecovery,NodeProvisioningMode,SlurmConfigStrategy,CreateAccountingDatabase,EnableSourceS3UriOnly,DataCompressionType,EfaEnabled,CreateVPCStack,CreateLifeCycleScriptStack,CreateS3BucketStack,CreateSecurityGroupStack,CreateSageMakerIAMRoleStack,CreateFsxStack,CreateOpenZfsStack,CreateHyperPodClusterStack,EnableObservabilityFeature,CreatePrometheusWorkspace,CreateGrafanaWorkspace,CreateGrafanaRole,NodeMetricLevel,AcceleratedComputeMetricLevel,NetworkMetricLevel,ClusterMetricLevel,NcclMetricLevel,JobMetricLevel,MetricsDestination
+          TELEMETRY_DEPLOYMENT_ID:
+            Ref: TelemetryDeploymentId
+          TELEMETRY_ROOT_STACK_KEY: SLURM_MAIN_STACK
+          TELEMETRY_STACK_KEYS: >-
+            VPCStack=SLURM_MAIN_STACK_VPC,SecurityGroupStack=SLURM_MAIN_STACK_SECURITY_GROUP,AccountingDatabaseStack=SLURM_MAIN_STACK_ACCOUNTING_DATABASE,LifeCycleScriptStack=SLURM_MAIN_STACK_LIFECYCLE_SCRIPT,S3BucketStack=SLURM_MAIN_STACK_S3_BUCKET,IamRoleStack=SLURM_MAIN_STACK_IAM_ROLE,FsxStack=SLURM_MAIN_STACK_FSX,OpenZfsStack=SLURM_MAIN_STACK_OPEN_ZFS,HyperPodParamClusterStack=SLURM_MAIN_STACK_HYPERPOD_PARAM_CLUSTER,HyperPodClusterStack=SLURM_MAIN_STACK_HYPERPOD_CLUSTER,ObservabilityStack=SLURM_MAIN_STACK_OBSERVABILITY
+    Metadata:
+      aws:cdk:path: MainSlurmBasedCfnTemplate/StackTelemetryFunction
+  StackTelemetry:
+    Type: Custom::StackTelemetry
+    Properties:
+      ServiceToken:
+        Fn::GetAtt:
+          - StackTelemetryFunction
+          - Arn
+      Phase: Start
+      Enabled:
+        Ref: SendUsageData
+    Metadata:
+      aws:cdk:path: MainSlurmBasedCfnTemplate/StackTelemetry
+  StackTelemetryEnd:
+    Type: Custom::StackTelemetry
+    Properties:
+      ServiceToken:
+        Fn::GetAtt:
+          - StackTelemetryFunction
+          - Arn
+      Phase: End
+      Enabled:
+        Ref: SendUsageData
+      WaitFor:
+        - Fn::If:
+            - CreateVPCStackCondition
+            - Ref: VPCStack
+            - ''
+        - Fn::If:
+            - CreateSecurityGroupStackCondition
+            - Ref: SecurityGroupStack
+            - ''
+        - Fn::If:
+            - CreateAccountingDatabaseCondition
+            - Ref: AccountingDatabaseStack
+            - ''
+        - Fn::If:
+            - CreateLifeCycleScriptStackCondition
+            - Ref: LifeCycleScriptStack
+            - ''
+        - Fn::If:
+            - CreateS3BucketOnlyCondition
+            - Ref: S3BucketStack
+            - ''
+        - Fn::If:
+            - CreateSageMakerIAMRoleStackCondition
+            - Ref: IamRoleStack
+            - ''
+        - Fn::If:
+            - CreateFsxStackCondition
+            - Ref: FsxStack
+            - ''
+        - Fn::If:
+            - CreateOpenZfsStackCondition
+            - Ref: OpenZfsStack
+            - ''
+        - Fn::If:
+            - CreateHyperPodClusterStackCondition
+            - Ref: HyperPodParamClusterStack
+            - ''
+        - Fn::If:
+            - CreateHyperPodClusterStackCondition
+            - Ref: HyperPodClusterStack
+            - ''
+        - Fn::If:
+            - NestedObservabilityStackCondition
+            - Ref: ObservabilityStack
+            - ''
+        - Fn::If:
+            - ClusterExtensionsCondition
+            - Ref: ClusterExtensionsRole
+            - ''
+        - Fn::If:
+            - ClusterExtensionsCondition
+            - Ref: ClusterExtensionsFunction
+            - ''
+        - Fn::If:
+            - ClusterExtensionsCondition
+            - Ref: ClusterExtensionsInstall
+            - ''
+        - Fn::If:
+            - ObservabilitySetupStackCondition
+            - Ref: ObservabilitySetupStackRolePolicies
+            - ''
+        - Fn::If:
+            - ObservabilitySetupStackCondition
+            - Ref: ObservabilitySetupStackPathRolePolicies
+            - ''
+        - Fn::If:
+            - ObservabilitySetupStackCondition
+            - Ref: ObservabilitySetupStackResourcePolicies
+            - ''
+        - Fn::If:
+            - ObservabilitySetupStackCondition
+            - Ref: ObservabilitySetupStackRole
+            - ''
+        - Fn::If:
+            - ObservabilitySetupStackCondition
+            - Ref: ObservabilitySetupStackFunction
+            - ''
+        - Fn::If:
+            - ObservabilitySetupStackCondition
+            - Ref: ObservabilitySetupStack
+            - ''
+    Metadata:
+      aws:cdk:path: MainSlurmBasedCfnTemplate/StackTelemetryEnd
 Rules:
   ClusterExtensionsNeedContinuousProvisioning:
     RuleCondition:
