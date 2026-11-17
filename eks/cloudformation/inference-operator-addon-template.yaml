@@ -164,7 +164,7 @@ Resources:
             Ref: EnableInferenceGateway
           DYNAMO_ENABLED:
             Ref: EnableDynamo
-          DYNAMO_FEATURE_ENABLED: 'false'
+          DYNAMO_FEATURE_ENABLED: 'true'
       FunctionName:
         Fn::Sub:
           - inf-${ResourceNameShortPrefix}-addon-${UniqueSuffix}
