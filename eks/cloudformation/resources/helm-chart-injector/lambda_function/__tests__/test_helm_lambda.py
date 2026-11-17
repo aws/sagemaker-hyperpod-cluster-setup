@@ -66,7 +66,8 @@ class TestHyperPodChart(unittest.TestCase):
             install_helm_chart()
         self.assertEqual(
             _set_values(_hyperpod_cmd(mock_run, 'install')),
-            ['health-monitoring-agent.region=us-east-1', _OPERATORS],
+            ['health-monitoring-agent.region=us-east-1',
+             'hyperpod-kubernetes-resource-monitor.region=us-east-1', _OPERATORS],
         )
 
 

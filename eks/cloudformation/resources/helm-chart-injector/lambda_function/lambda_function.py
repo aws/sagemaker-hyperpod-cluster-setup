@@ -509,6 +509,9 @@ def install_helm_chart():
             f"/tmp/helm-charts/{os.environ['CHART_PATH']}",
             '--namespace', os.environ['NAMESPACE'],
             '--set', f'health-monitoring-agent.region={os.environ['AWS_REGION']}',
+            # A new cluster has no nodes yet, so the subchart cannot read the region from a node;
+            # without it the image would come from us-east-1. Unused while the subchart is off.
+            '--set', f'hyperpod-kubernetes-resource-monitor.region={os.environ['AWS_REGION']}',
             '--set', operators
         ]
         
