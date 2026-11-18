@@ -165,6 +165,9 @@ Resources:
           MODELEXPRESS_REPO_URL: https://github.com/ai-dynamo/modelexpress.git
           MODELEXPRESS_REPO_REVISION: ac6d03a87a550c8188c3ed59f187b90d4f0554f5
           MODELEXPRESS_CHART_SHA256: 3024f9fc45866fd8808f2c98f94c256ae8b678020ec209970755dbb23abbf3e0
+          MODELEXPRESS_IMAGE_REPOSITORY: nvcr.io/nvidia/ai-dynamo/modelexpress-server
+          MODELEXPRESS_IMAGE_TAG: 0.7.0
+          MODELEXPRESS_IMAGE_DIGEST: sha256:29fe1379bc614dff26ff78c63f81a63eaa2e5b7e0386a8d8a1a90cac78b565b2
           MODELEXPRESS_NAMESPACE: modelexpress
           MODELEXPRESS_RELEASE: modelexpress
           MODELEXPRESS_PROFILE_NAMESPACE: default

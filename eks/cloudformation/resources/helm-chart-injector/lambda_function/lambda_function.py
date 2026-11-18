@@ -266,6 +266,9 @@ def install_modelexpress():
             'MODELEXPRESS_REPO_URL',
             'MODELEXPRESS_REPO_REVISION',
             'MODELEXPRESS_CHART_SHA256',
+            'MODELEXPRESS_IMAGE_REPOSITORY',
+            'MODELEXPRESS_IMAGE_TAG',
+            'MODELEXPRESS_IMAGE_DIGEST',
             'MODELEXPRESS_NAMESPACE',
             'MODELEXPRESS_RELEASE',
             'MODELEXPRESS_PROFILE_NAMESPACE',
@@ -293,6 +296,9 @@ def install_modelexpress():
             '--set', 'env.MX_METADATA_BACKEND=kubernetes',
             '--set', 'serviceAccount.rbac.enabled=true',
             '--set', 'persistence.enabled=false',
+            # Pull the pinned digest; the tag in front of it is informational only.
+            '--set', f"image.repository={os.environ['MODELEXPRESS_IMAGE_REPOSITORY']}",
+            '--set', f"image.tag={os.environ['MODELEXPRESS_IMAGE_TAG']}@{os.environ['MODELEXPRESS_IMAGE_DIGEST']}",
         ], check=True)
 
         subprocess.run(

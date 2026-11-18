@@ -26,6 +26,9 @@ _BASE_ENV = {
     'MODELEXPRESS_REPO_URL': 'https://github.com/ai-dynamo/modelexpress.git',
     'MODELEXPRESS_REPO_REVISION': 'def456',
     'MODELEXPRESS_CHART_SHA256': 'f00d',
+    'MODELEXPRESS_IMAGE_REPOSITORY': 'nvcr.io/nvidia/ai-dynamo/modelexpress-server',
+    'MODELEXPRESS_IMAGE_TAG': '0.7.0',
+    'MODELEXPRESS_IMAGE_DIGEST': 'sha256:' + 'a' * 64,
     'MODELEXPRESS_NAMESPACE': 'modelexpress',
     'MODELEXPRESS_RELEASE': 'modelexpress',
     'MODELEXPRESS_PROFILE_NAMESPACE': 'default',
@@ -99,7 +102,13 @@ class TestModelExpress(unittest.TestCase):
         self.assertIn('--create-namespace', cmds[0])
         self.assertEqual(
             _set_values(cmds[0]),
-            ['env.MX_METADATA_BACKEND=kubernetes', 'serviceAccount.rbac.enabled=true', 'persistence.enabled=false'],
+            [
+                'env.MX_METADATA_BACKEND=kubernetes',
+                'serviceAccount.rbac.enabled=true',
+                'persistence.enabled=false',
+                'image.repository=nvcr.io/nvidia/ai-dynamo/modelexpress-server',
+                'image.tag=0.7.0@sha256:' + 'a' * 64,
+            ],
         )
 
     def test_install_applies_client_profiles(self, mock_run, _exists):
